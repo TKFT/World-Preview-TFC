@@ -1,0 +1,6 @@
+{
+  "tfc:ocean": {"r": 34, "g": 68, "b": 170, "name": "Ocean"},
+  "tfc:volcanic": {"r": 204, "g": 68, "b": 0, "name": "Volcanic"},
+  "tfc:land": {"r": 68, "g": 170, "b": 68, "name": "Land"},
+  "tfc:uplift": {"r": 136, "g": 102, "b": 170, "name": "Uplift"}
+}
