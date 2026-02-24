@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -133,8 +134,23 @@ public class PreviewTab implements Tab, AutoCloseable, PreviewContainerDataProvi
         {
             return completableFuture.get();
         }
-        catch (ExecutionException | InterruptedException e)
+        catch (InterruptedException e)
         {
+            Thread.currentThread().interrupt();
+            throw new CancellationException("Preview context load interrupted");
+        }
+        catch (ExecutionException e)
+        {
+            Throwable cause = e.getCause();
+            if (cause instanceof CancellationException)
+            {
+                throw (CancellationException) cause;
+            }
+            if (cause instanceof InterruptedException)
+            {
+                Thread.currentThread().interrupt();
+                throw new CancellationException("Preview context load interrupted");
+            }
             throw new RuntimeException(e);
         }
     }
