@@ -42,7 +42,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -647,8 +649,19 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                         }
                         else
                         {
-                            WorldPreview.LOGGER.error("Preview setup failed", e);
-                            this.setupFailed = true;
+                            Throwable cause = unwrapCompletionCause(e);
+                            if (!(cause instanceof CancellationException) && !(cause instanceof InterruptedException))
+                            {
+                                WorldPreview.LOGGER.error("Preview setup failed", e);
+                                this.setupFailed = true;
+                            }
+                            synchronized (this.reloadRevision)
+                            {
+                                if (this.reloadRevision.get() <= revision)
+                                {
+                                    this.isUpdating = false;
+                                }
+                            }
                         }
 
                         return null;
@@ -659,6 +672,21 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 this.inhibitUpdates = false;
             }
         }
+    }
+
+    private static Throwable unwrapCompletionCause(Throwable throwable)
+    {
+        Throwable current = throwable;
+        while (current instanceof CompletionException || current instanceof ExecutionException)
+        {
+            Throwable cause = current.getCause();
+            if (cause == null)
+            {
+                break;
+            }
+            current = cause;
+        }
+        return current;
     }
 
     @SuppressWarnings("resource")
@@ -751,10 +779,20 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             catch (InterruptedException e)
             {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
+                throw new CancellationException("World gen state update interrupted");
             }
             catch (ExecutionException e)
             {
+                Throwable cause = e.getCause();
+                if (cause instanceof CancellationException)
+                {
+                    throw (CancellationException) cause;
+                }
+                if (cause instanceof InterruptedException)
+                {
+                    Thread.currentThread().interrupt();
+                    throw new CancellationException("World gen state update interrupted");
+                }
                 throw new RuntimeException(e);
             }
         }
