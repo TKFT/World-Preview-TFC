@@ -1,6 +1,6 @@
 {
   "required": true,
-  "package": "caeruleustait.world.preview.mixin",
+  "package": "com.rustysnail.world.preview.tfc.mixin",
   "refmap": "world_preview.refmap.json",
   "minVersion": "0.8",
   "compatibilityLevel": "JAVA_21",
@@ -12,7 +12,8 @@
     "NoiseChunkAccessor",
     "ReloadableServerResourcesMixin",
     "StructureTemplatePaletteAccessor",
-    "StructureTemplatePaletteMixin"
+    "StructureTemplatePaletteMixin",
+    "MixinPlacedFeature"
   ],
   "client": [
     "client.CheckboxAccessor",
