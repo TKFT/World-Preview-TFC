@@ -1,20 +1,48 @@
 # World Preview TFC
-Fork of https://www.curseforge.com/minecraft/mc-mods/world-preview
-*World Preview* is a mod for visualizing Minecraft world seeds before they are generated.
-*World Preview TFC* implements the ability to use TFC custom world generation settings and display maps of the tempature, rainfall and rock types.
-Download here [modrinth]() and [CurseForge]()!
+Fork of [World Preview](https://www.curseforge.com/minecraft/mc-mods/world-preview).
+World Preview TFC adds a World Preview tab to the Create World screen and uses TerraFirmaCraft (TFC) world generation to preview seeds.
+It can visualize biomes, temperature, rainfall, land and water, rock types, rock layers, kaolin clay areas and hotspots.
+
+Downloads: Modrinth (https://modrinth.com/mod/world-preview-terrafirmacraft) and CurseForge (https://www.curseforge.com/minecraft/mc-mods/world-preview-tfc).
+Issue tracker: https://github.com/TKFT/World-Preview-TFC/issues
+
+## Requirements
+- Minecraft 1.21.1
+- NeoForge 21.1.213+ (21.1.218 recommended)
+- TerraFirmaCraft (TFC) 4.0.17+
+- Java 21
 
 ## Installation
-
-Just download the latest *World Preview TFC* JAR file for your ***exact*** Minecraft version.
-Make sure you have TFC installed as well as Neoforge
-Then save the downloaded jar to the `mods` folder of your Minecraft instance.
+1. Install NeoForge for Minecraft 1.21.1.
+2. Install TerraFirmaCraft (TFC) 4.0.17+.
+3. Place the World Preview TFC jar in your instance `mods` folder.
 
 ## Usage
+Open `Create New World` and switch to the `World Preview` tab. Drag on the map to move along X and Z. This will load:
+- Biomes
+- Heightmap (if enabled)
+- Rainfall Map
+- Tempature Map
+- Land/Water/River Map
+- Rock Layer Maps
+- Rock Type Map
+- Kaolin Clay Areas Map
+- Hotspot Map
+- Volcano Icons
+
+### TFC Settings Tab
+
+<img alt="tfc-settings" src="images/tfc-settings-tab.png" width="100%"/>
+
+### Map Modes
 
 Biomes Map Mode
 
 <img alt="biomes" src="images/biome-map.png" width="100%"/>
+
+Land and Water Map Mode
+
+<img alt="land-water" src="images/land-water-map.png" width="100%"/>
 
 Temperature Map Mode
 
@@ -32,25 +60,16 @@ Rock Layers Map Mode
 
 <img alt="rock-layer" src="images/rock-layer-map.png" width="100%"/>
 
-##### Moving on the preview
-
-Clicking and dragging on the map-part of the preview tab will move along the x and z axis.
-This will cause the following load sequence:
-- Any biomes that are not yet sampled on the current y-level
-- Structures (if enabled)
-- Height map (if enabled)
-
-##### Other features
-
+## Other Features
 - Persistent seed storage
 - Highlighting specific biomes
 - Highly configurable and extendable
+- Seed Searching
+- Volcano Icons
 
-## Supported version
+## Compatibility
+- Incompatible with the original World Preview Neoforged mod (mod id `world_preview`)
+- No other known incompatibilities; reported to work with Beneath
 
-TFC 4+
-Minecraft 1.21.1
-
-## Mod incompatibilities
-
-None known, it should work with Beneath and TFC Real World
+## TODO
+- Add compatiblity with other worldgen mods like Real World and Eratosthenes
