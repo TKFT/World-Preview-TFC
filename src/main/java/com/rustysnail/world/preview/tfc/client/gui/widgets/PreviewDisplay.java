@@ -519,6 +519,18 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_ROCK_TOP:
                         case TFC_ROCK_MID:
                         case TFC_ROCK_BOT:
+                            {
+                                int quartXCoord = r.dataSection.quartX() + x;
+                                int quartZCoord = r.dataSection.quartZ() + z;
+                                short landWater = this.workManager.previewStorage().getRawData4(
+                                    quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag
+                                );
+                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
+                                {
+                                    color = 0xFF8B0000;  // Ocean - Dark Blue
+                                    break;
+                                }
+                            }
                             if (rawData >= 0 && rawData < TFCSampleUtils.ROCK_COLORS.length)
                             {
                                 this.workingVisibleRocks[rawData]++;
@@ -1298,7 +1310,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             case 2 -> 0xFF0080FF; // Orange
             case 3 -> 0xFF00FFFF; // Yellow
             case 4 -> 0xFF8000FF; // Purple
-            default -> 0xFF8000FF; // Purple
+            default -> 0xFF9900FF;
         };
     }
 

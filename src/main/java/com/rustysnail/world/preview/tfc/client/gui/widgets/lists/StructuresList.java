@@ -79,7 +79,7 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             this.iconHeight = icon.getHeight();
             this.showByDefault = showByDefault;
             this.show = show;
-            this.toggleVisible = new ToggleButton(0, 0, 20, 20, 140, 20, 20, 20, PreviewContainer.BUTTONS_TEXTURE, 400, 60, this::toggleVisible);
+            this.toggleVisible = new ToggleButton(0, 0, 20, 20, 140, 20, 20, 20, PreviewContainer.BUTTONS_TEXTURE, 760, 60, this::toggleVisible);
             this.iconTexture.upload();
             this.toggleVisible.selected = show;
             this.isPrimaryNamespace = resourceLocation.getNamespace().equals("minecraft");

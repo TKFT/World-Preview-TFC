@@ -37,7 +37,7 @@ public class SeedsList extends BaseObjectSelectionList<SeedsList.SeedEntry>
         {
             this.seedsList = seedsList;
             this.seed = seed;
-            this.deleteButton = new OldStyleImageButton(0, 0, 20, 20, 40, 20, 20, PreviewContainer.BUTTONS_TEXTURE, 400, 60, this::deleteEntry);
+            this.deleteButton = new OldStyleImageButton(0, 0, 20, 20, 40, 20, 20, PreviewContainer.BUTTONS_TEXTURE, 760, 60, this::deleteEntry);
             this.deleteButton.active = SeedsList.this.seedCanChange;
         }
 

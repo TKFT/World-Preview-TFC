@@ -500,7 +500,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.moveList(this.rocksList);
     }
 
-    @SuppressWarnings("resource")
     private void onSearchBiomeClick(Button btn)
     {
         if (this.isSearching)
@@ -1151,10 +1150,14 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         switch (type)
         {
             case BIOMES:
+            {
                 this.biomesList.visible = true;
                 this.biomesList.active = true;
-                this.searchBiomeButton.visible = true;
+                boolean isBiomeMode = this.renderSettings.mode == RenderSettings.RenderMode.BIOMES;
+                this.searchBiomeButton.visible = isBiomeMode;
+                this.islandCheckbox.visible = isBiomeMode && this.workManager.isTFCEnabled();
                 break;
+            }
             case STRUCTURES:
                 this.resetDefaultStructureVisibility.visible = true;
                 this.structuresList.visible = true;
@@ -1165,6 +1168,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 this.seedsList.active = true;
         }
 
+        if (this.lastScreenRectangle != null)
+        {
+            this.doLayout(this.lastScreenRectangle);
+        }
         this.moveList(this.biomesList);
         this.moveList(this.structuresList);
         this.moveList(this.seedsList);
@@ -1324,7 +1331,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
     }
 
-    @SuppressWarnings("resource")
     private static NativeImage createFeatureIcon(SearchableFeature feature)
     {
         NativeImage icon = new NativeImage(16, 16, true);
@@ -1703,7 +1709,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         return this.toRender;
     }
 
-    @SuppressWarnings("resource")
     private static NativeImage createWorldSpawnIcon()
     {
         NativeImage icon = new NativeImage(16, 16, true);
@@ -1767,7 +1772,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         int next = switch (current)
         {
             case 1 -> 2;
-            case 2 -> 4;
             case 4 -> 8;
             case 8 -> 16;
             case 16 -> 1;
