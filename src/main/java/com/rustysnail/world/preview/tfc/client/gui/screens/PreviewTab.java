@@ -6,7 +6,9 @@ import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.PreviewContainerDataProvider;
 import com.rustysnail.world.preview.tfc.mixin.client.CreateWorldScreenAccessor;
 import com.rustysnail.world.preview.tfc.mixin.client.TabNavigationBarAccessor;
+
 import net.dries007.tfc.world.ChunkGeneratorExtension;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

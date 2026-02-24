@@ -498,33 +498,33 @@ public class TFCTab extends GridLayoutTab
     }
 
     public record ScaleValue(int value) implements SelectionSlider.SelectionValues
-        {
+    {
 
-            @Override
-            public Component message()
-            {
-                if (value == 0) return Component.literal("0.0 km");
-                return Component.literal(String.format("%+.1f km", value / 1000.0));
-            }
+        @Override
+        public Component message()
+        {
+            if (value == 0) return Component.literal("0.0 km");
+            return Component.literal(String.format("%+.1f km", value / 1000.0));
         }
+    }
 
     public record ConstantValue(float value) implements SelectionSlider.SelectionValues
-        {
+    {
 
-            @Override
-            public Component message()
-            {
-                return Component.literal(String.format("%.1f", value));
-            }
+        @Override
+        public Component message()
+        {
+            return Component.literal(String.format("%.1f", value));
         }
+    }
 
     public record PercentValue(float value) implements SelectionSlider.SelectionValues
-        {
+    {
 
-            @Override
-            public Component message()
-            {
-                return Component.literal(String.format("%.0f%%", value * 100));
-            }
+        @Override
+        public Component message()
+        {
+            return Component.literal(String.format("%.0f%%", value * 100));
         }
+    }
 }

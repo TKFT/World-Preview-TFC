@@ -4,7 +4,7 @@ loaderVersion = "[1,)"
 
 license = "Apache-2.0"
 
-issueTrackerURL="https://github.com/TKFT/World-Preview-TFC/issues"
+issueTrackerURL = "https://github.com/TKFT/World-Preview-TFC/issues"
 
 [[mods]]
 

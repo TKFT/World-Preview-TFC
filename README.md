@@ -22,7 +22,7 @@ Open `Create New World` and switch to the `World Preview` tab. Drag on the map t
 - Biomes
 - Heightmap (if enabled)
 - Rainfall Map
-- Tempature Map
+- Temperature Map
 - Land/Water/River Map
 - Rock Layer Maps
 - Rock Type Map
@@ -72,4 +72,4 @@ Rock Layers Map Mode
 - No other known incompatibilities; reported to work with Beneath
 
 ## TODO
-- Add compatiblity with other worldgen mods like Real World and Eratosthenes
+- Add compatibility with other worldgen mods like Real World and Eratosthenes
