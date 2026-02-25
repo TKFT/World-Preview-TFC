@@ -33,6 +33,8 @@ public interface PreviewDisplayDataProvider
     @Nullable
     SearchableFeature feature4Id(int id);
 
+    int placedFeatureStructureIndex(short featureId);
+
     ItemStack[] structureItems();
 
     void onBiomeVisuallySelected(BiomesList.BiomeEntry entry);

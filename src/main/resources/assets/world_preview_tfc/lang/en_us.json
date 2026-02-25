@@ -171,6 +171,8 @@
   "feature.worldpreview.water_spring": "Water Spring",
   "feature.worldpreview.lava_spring": "Lava Spring",
   "feature.worldpreview.flood_fill_lake": "Lakes",
+  "feature.worldpreview.native_silver_vein": "Native Silver Vein",
+  "feature.worldpreview.native_gold_vein": "Native Gold Vein",
   "world_preview_tfc.search.biome_mode.any": "Any Biome (OR)",
   "world_preview_tfc.search.biome_mode.all": "All Biomes (AND)",
   "world_preview_tfc.search.biome_mode.tooltip": "Toggle between matching ANY selected biome (OR) or ALL selected biomes (AND)."

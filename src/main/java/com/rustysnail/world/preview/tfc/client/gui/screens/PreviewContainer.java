@@ -145,6 +145,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private StructuresList.StructureEntry[] allStructures;
     private NativeImage[] allStructureIcons;
     private NativeImage[] allFeatureIcons;
+    private int[] featureStructureIndexes;
     private NativeImage playerIcon;
     private NativeImage spawnIcon;
     private NativeImage worldSpawnIcon;
@@ -168,6 +169,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.dataProvider = previewContainerDataProvider;
         this.minecraft = Minecraft.getInstance();
         this.allBiomes = new BiomesList.BiomeEntry[0];
+        this.featureStructureIndexes = new int[0];
         this.worldPreview = WorldPreview.get();
         this.cfg = this.worldPreview.cfg();
         this.workManager = this.worldPreview.workManager();
@@ -913,7 +915,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
 
         Registry<Item> itemRegistry = layeredRegistryAccess.compositeAccess().registryOrThrow(Registries.ITEM);
-        this.allStructures = structureRegistry.holders()
+        StructuresList.StructureEntry[] baseStructures = structureRegistry.holders()
             .map(
                 x -> {
                     short id = this.previewData.struct2Id().getShort(x.key().location().toString());
@@ -932,6 +934,39 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             )
             .sorted(Comparator.comparing(StructuresList.StructureEntry::id))
             .toArray(StructuresList.StructureEntry[]::new);
+
+        List<StructuresList.StructureEntry> structureEntries = new ArrayList<>(Arrays.asList(baseStructures));
+        List<NativeImage> structureIcons = new ArrayList<>(Arrays.asList(this.allStructureIcons));
+        this.featureStructureIndexes = new int[FeatureDetectors.getFeatureCount()];
+        Arrays.fill(this.featureStructureIndexes, -1);
+
+        for (short featureId = 0; featureId < FeatureDetectors.getFeatureCount(); featureId++)
+        {
+            SearchableFeature feature = FeatureDetectors.getFeatureById(featureId);
+            if (!FeatureDetectors.showInStructuresList(feature))
+            {
+                continue;
+            }
+
+            short structureId = (short) structureEntries.size();
+            NativeImage icon = createFeatureIcon(feature);
+            structureIcons.add(icon);
+            structureEntries.add(
+                this.structuresList.createEntry(
+                    structureId,
+                    feature.id(),
+                    icon,
+                    null,
+                    feature.name().getString(),
+                    true,
+                    true
+                )
+            );
+            this.featureStructureIndexes[featureId] = structureId;
+        }
+
+        this.allStructures = structureEntries.toArray(StructuresList.StructureEntry[]::new);
+        this.allStructureIcons = structureIcons.toArray(NativeImage[]::new);
         this.structuresList.replaceEntries(new ArrayList<>());
         this.renderSettings.resetCenter();
         PlayerData playerData = this.getPlayerData(this.minecraft.getUser().getProfileId());
@@ -1402,6 +1437,18 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             outlineColor = 0xFFAA4422;
             isCircle = true;
         }
+        else if (featurePath.contains("native_silver"))
+        {
+            color = 0xFFD0D0D0;
+            outlineColor = 0xFF8A8A8A;
+            isCircle = true;
+        }
+        else if (featurePath.contains("native_gold"))
+        {
+            color = 0xFF34C2FF;
+            outlineColor = 0xFF1F8BC0;
+            isCircle = true;
+        }
         else if (featurePath.contains("volcano") || featurePath.contains("caldera"))
         {
             color = 0xFF0000FF;       // Red (ABGR)
@@ -1532,6 +1579,16 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     public SearchableFeature feature4Id(int id)
     {
         return FeatureDetectors.getFeatureById(id);
+    }
+
+    @Override
+    public int placedFeatureStructureIndex(short featureId)
+    {
+        if (featureId < 0 || featureId >= this.featureStructureIndexes.length)
+        {
+            return -1;
+        }
+        return this.featureStructureIndexes[featureId];
     }
 
     @Override

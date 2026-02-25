@@ -8,6 +8,7 @@ import com.rustysnail.world.preview.tfc.backend.search.FeatureDetectors;
 import com.rustysnail.world.preview.tfc.backend.search.FeatureQuery;
 import com.rustysnail.world.preview.tfc.backend.search.FeatureTest;
 import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
+import com.rustysnail.world.preview.tfc.backend.search.VeinLocator;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkResult;
@@ -152,6 +153,21 @@ public class TFCRegionWorkUnit extends WorkUnit
 
             int baseChunkX = this.chunkPos.x;
             int baseChunkZ = this.chunkPos.z;
+            boolean sampleStructures = WorldPreview.get().cfg().sampleStructures;
+
+            ChunkPos minChunk = new ChunkPos(baseChunkX, baseChunkZ);
+            ChunkPos maxChunk = new ChunkPos(baseChunkX + this.numChunks - 1, baseChunkZ + this.numChunks - 1);
+            Map<Long, List<PreviewSection.PreviewFeature>> veinFeaturesByChunk = sampleStructures
+                ? VeinLocator.findVeinsForRegion(
+                this.sampleUtils,
+                this.tfcSampleUtils,
+                this.seed,
+                minChunk,
+                maxChunk,
+                this.detectedFeatureCenters,
+                this::isCanceled
+            )
+                : Map.of();
 
             for (int dx = 0; dx < this.numChunks && !this.isCanceled(); dx++)
             {
@@ -180,6 +196,17 @@ public class TFCRegionWorkUnit extends WorkUnit
                     WorkResult hotspotResult = new WorkResult(this, 0, hotspotSection, new ArrayList<>(16), List.of());
 
                     PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
+                    if (sampleStructures)
+                    {
+                        List<PreviewSection.PreviewFeature> veinFeatures = veinFeaturesByChunk.get(cp.toLong());
+                        if (veinFeatures != null)
+                        {
+                            for (PreviewSection.PreviewFeature feature : veinFeatures)
+                            {
+                                structureSection.addFeature(feature);
+                            }
+                        }
+                    }
 
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
@@ -196,7 +223,10 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                         if (point == null) continue;
 
-                        detectFeatures(point, pos.getX(), pos.getZ(), structureSection);
+                        if (sampleStructures)
+                        {
+                            detectFeatures(point, pos.getX(), pos.getZ(), structureSection);
+                        }
 
                         short landWaterValue = sampleLandWater(pos, gridCache);
                         short rockTopId = -1;

@@ -26,6 +26,9 @@ public final class FeatureDetectors
     private static final Map<ResourceLocation, Short> FEATURE_ID_MAP = new HashMap<>();
     private static final List<SearchableFeature> FEATURE_BY_ID = new ArrayList<>();
 
+    private static final ResourceLocation NATIVE_SILVER_VEIN_ID = ResourceLocation.fromNamespaceAndPath("tfc", "vein/surface_native_silver");
+    private static final ResourceLocation NATIVE_GOLD_VEIN_ID = ResourceLocation.fromNamespaceAndPath("tfc", "vein/normal_native_gold");
+
     public static short getFeatureId(SearchableFeature feature)
     {
         Short id = FEATURE_ID_MAP.get(feature.id());
@@ -191,6 +194,20 @@ public final class FeatureDetectors
 
     private static final FeatureTest LAKE_TEST = q -> q.point() != null && q.point().lake();
 
+    private static final SearchableFeature NATIVE_SILVER_VEIN = new SearchableFeature(
+        NATIVE_SILVER_VEIN_ID,
+        Component.translatable("feature.worldpreview.native_silver_vein"),
+        null,
+        true
+    );
+
+    private static final SearchableFeature NATIVE_GOLD_VEIN = new SearchableFeature(
+        NATIVE_GOLD_VEIN_ID,
+        Component.translatable("feature.worldpreview.native_gold_vein"),
+        null,
+        true
+    );
+
     private static final List<SearchableFeature> MANUAL_FEATURES = List.of(
 
         new SearchableFeature(
@@ -227,6 +244,9 @@ public final class FeatureDetectors
             LAKE_TEST
         ),
 
+        NATIVE_SILVER_VEIN,
+        NATIVE_GOLD_VEIN,
+
         new SearchableFeature(
             ResourceLocation.fromNamespaceAndPath("tfc", "water_spring"),
             Component.translatable("feature.worldpreview.water_spring"),
@@ -256,6 +276,19 @@ public final class FeatureDetectors
     public static List<SearchableFeature> getManualFeatures()
     {
         return MANUAL_FEATURES;
+    }
+
+    public static List<SearchableFeature> getPreviewVeinFeatures()
+    {
+        return List.of(NATIVE_SILVER_VEIN, NATIVE_GOLD_VEIN);
+    }
+
+    public static boolean showInStructuresList(SearchableFeature feature)
+    {
+        return feature != null && (
+            feature.id().equals(NATIVE_SILVER_VEIN_ID) ||
+            feature.id().equals(NATIVE_GOLD_VEIN_ID)
+        );
     }
 
     public static boolean isCompatibleWithBiomeExt(SearchableFeature feature, @Nullable BiomeExtension ext)

@@ -680,7 +680,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private void renderFeatures(List<RenderHelper> renderData, GuiGraphics guiGraphics)
     {
-        if (!this.showFeatures || this.featureIcons == null || this.featureIcons.length == 0)
+        if (this.featureIcons == null || this.featureIcons.length == 0 || this.structureRenderInfoMap == null)
         {
             return;
         }
@@ -706,6 +706,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     continue;
                 }
 
+                int structureIndex = this.dataProvider.placedFeatureStructureIndex(id);
+                boolean mappedToStructure = structureIndex >= 0
+                    && structureIndex < this.workingVisibleStructures.length
+                    && structureIndex < this.structureRenderInfoMap.length;
+
                 TextureCoordinate texCenter = this.blockToTexture(feature.center());
                 IconData iconData = this.featureIcons[id];
                 NativeImage icon = iconData.img;
@@ -718,6 +723,20 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
                 if (texCenter.x >= xMin && texCenter.z >= zMin && texCenter.x <= xMax && texCenter.z <= zMax)
                 {
+                    if (mappedToStructure)
+                    {
+                        this.workingVisibleStructures[structureIndex]++;
+                    }
+
+                    boolean renderAsStructure = mappedToStructure
+                        && !this.renderSettings.hideAllStructures
+                        && this.structureRenderInfoMap[structureIndex].show();
+                    boolean renderAsFeature = !mappedToStructure && this.showFeatures;
+                    if (!renderAsStructure && !renderAsFeature)
+                    {
+                        continue;
+                    }
+
                     int texStartX = texCenter.x - icon.getWidth() / 2;
                     int texStartZ = texCenter.z - icon.getHeight() / 2;
                     int rXMin = (int) (texStartX + this.getX() * guiScale);
@@ -729,7 +748,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
                     PreviewSection.PreviewStruct pseudoStruct = new PreviewSection.PreviewStruct(
                         feature.center(),
-                        (short) -(id + 1),
+                        mappedToStructure ? (short) structureIndex : (short) -(id + 1),
                         new BoundingBox(
                             feature.center().getX() - 8, 0, feature.center().getZ() - 8,
                             feature.center().getX() + 8, 0, feature.center().getZ() + 8
