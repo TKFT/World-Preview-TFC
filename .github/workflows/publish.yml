@@ -4,18 +4,48 @@ on:
   release:
     types: [published]
 
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag / version (example: v0.1.0)"
+        required: true
+        type: string
+      name:
+        description: "Release title"
+        required: true
+        type: string
+      changelog:
+        description: "Release changelog (markdown supported)"
+        required: true
+        type: string
+      version_type:
+        description: "Release channel"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
 
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.name || github.event.release.name }}
+      RELEASE_CHANGELOG: ${{ github.event_name == 'workflow_dispatch' && inputs.changelog || github.event.release.body }}
+      RELEASE_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_type || 'release' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,15 +58,30 @@ jobs:
       - name: Build mod
         run: ./gradlew build
 
+      - name: List built files
+        run: ls -lah build/libs
+
+      - name: Create or update GitHub release and attach jar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body: ${{ env.RELEASE_CHANGELOG }}
+          files: |
+            build/libs/!(*-sources|*-javadoc).jar
+          draft: false
+          prerelease: ${{ env.RELEASE_TYPE != 'release' }}
+          generate_release_notes: false
+
       - name: Publish to Modrinth and CurseForge
         uses: Kir-Antipov/mc-publish@v3.3
         with:
           files: |
             build/libs/!(*-sources|*-javadoc).jar
 
-          name: ${{ github.event.release.name }}
-          version: ${{ github.event.release.tag_name }}
-          changelog: ${{ github.event.release.body }}
+          name: ${{ env.RELEASE_NAME }}
+          version: ${{ env.RELEASE_TAG }}
+          changelog: ${{ env.RELEASE_CHANGELOG }}
 
           loaders: |
             neoforge
@@ -44,7 +89,7 @@ jobs:
           game-versions: |
             1.21.1
 
-          version-type: release
+          version-type: ${{ env.RELEASE_TYPE }}
 
           modrinth-id: ${{ vars.MODRINTH_ID }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
