@@ -10,12 +10,19 @@ public record SearchCriteria(
     Set<ResourceKey<Biome>> requiredBiomes,
     BiomeMatchMode biomeMatchMode,
     Set<SearchableFeature> requiredFeatures,
+    FeatureMatchMode featureMatchMode,
     BlockPos searchCenter,
     int searchRadius,
     int maxSeeds
 )
 {
     public enum BiomeMatchMode
+    {
+        ANY,
+        ALL
+    }
+
+    public enum FeatureMatchMode
     {
         ANY,
         ALL

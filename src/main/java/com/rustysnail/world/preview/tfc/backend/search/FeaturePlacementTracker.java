@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.ChunkPos;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,6 +13,7 @@ public final class FeaturePlacementTracker
 {
 
     private static final ThreadLocal<Boolean> RECORDING = ThreadLocal.withInitial(() -> false);
+    private static final ThreadLocal<ResourceLocation> CURRENT_PLACED_FEATURE = new ThreadLocal<>();
 
     private static final Map<ResourceLocation, Map<Long, Map<ResourceLocation, List<BlockPos>>>> DATA = new ConcurrentHashMap<>();
 
@@ -28,6 +30,27 @@ public final class FeaturePlacementTracker
     public static void setRecording(boolean recording)
     {
         RECORDING.set(recording);
+        if (!recording)
+        {
+            CURRENT_PLACED_FEATURE.remove();
+        }
+    }
+
+    public static void setCurrentPlacedFeature(ResourceLocation id)
+    {
+        if (id == null)
+        {
+            CURRENT_PLACED_FEATURE.remove();
+        }
+        else
+        {
+            CURRENT_PLACED_FEATURE.set(id);
+        }
+    }
+
+    public static @Nullable ResourceLocation getCurrentPlacedFeature()
+    {
+        return CURRENT_PLACED_FEATURE.get();
     }
 
     public static void clearAll()

@@ -57,6 +57,7 @@ public class SeedSearchContainer implements AutoCloseable
     private final EditBox maxSeedsEdit;
     private final Button tfcSettingsButton;
     private final Button biomeMatchModeButton;
+    private final Button featureMatchModeButton;
     private final Button clearButton;
     private final BiomeCheckboxList biomeCheckboxList;
     private final TerrainFeatureList terrainFeatureList;
@@ -73,6 +74,7 @@ public class SeedSearchContainer implements AutoCloseable
     private int searchAreaIndex = 1;
     private int maxSeeds = SearchCriteria.DEFAULT_MAX_SEEDS;
     private SearchCriteria.BiomeMatchMode biomeMatchMode = SearchCriteria.BiomeMatchMode.ANY;
+    private SearchCriteria.FeatureMatchMode featureMatchMode = SearchCriteria.FeatureMatchMode.ANY;
     @Nullable private SeedSearchEngine engine;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile SearchState state = SearchState.IDLE;
@@ -125,6 +127,13 @@ public class SeedSearchContainer implements AutoCloseable
         ).size(60, 18).build();
         this.biomeMatchModeButton.setTooltip(Tooltip.create(WorldPreviewComponents.SEARCH_BIOME_MODE_TOOLTIP));
         this.allWidgets.add(this.biomeMatchModeButton);
+
+        this.featureMatchModeButton = Button.builder(
+            Component.translatable("world_preview_tfc.search.feature_mode." + this.featureMatchMode.name().toLowerCase()),
+            btn -> this.cycleFeatureMatchMode()
+        ).size(60, 18).build();
+        this.featureMatchModeButton.setTooltip(Tooltip.create(WorldPreviewComponents.SEARCH_FEATURE_MODE_TOOLTIP));
+        this.allWidgets.add(this.featureMatchModeButton);
 
         this.clearButton = Button.builder(
             Component.literal("Clear"),
@@ -253,7 +262,7 @@ public class SeedSearchContainer implements AutoCloseable
         if (isTFC)
         {
             List<TerrainFeatureList.Entry> featureEntries = new ArrayList<>();
-            for (SearchableFeature manual : FeatureDetectors.getManualFeatures())
+            for (SearchableFeature manual : FeatureDetectors.getSeedSearchFeatures())
             {
                 featureEntries.add(this.terrainFeatureList.createEntry(manual));
             }
@@ -287,6 +296,16 @@ public class SeedSearchContainer implements AutoCloseable
             : SearchCriteria.BiomeMatchMode.ANY;
         this.biomeMatchModeButton.setMessage(
             Component.translatable("world_preview_tfc.search.biome_mode." + this.biomeMatchMode.name().toLowerCase())
+        );
+    }
+
+    private void cycleFeatureMatchMode()
+    {
+        this.featureMatchMode = (this.featureMatchMode == SearchCriteria.FeatureMatchMode.ANY)
+            ? SearchCriteria.FeatureMatchMode.ALL
+            : SearchCriteria.FeatureMatchMode.ANY;
+        this.featureMatchModeButton.setMessage(
+            Component.translatable("world_preview_tfc.search.feature_mode." + this.featureMatchMode.name().toLowerCase())
         );
     }
 
@@ -398,7 +417,7 @@ public class SeedSearchContainer implements AutoCloseable
         }
 
         int radius = SEARCH_RADII[this.searchAreaIndex];
-        SearchCriteria criteria = new SearchCriteria(biomes, this.biomeMatchMode, features, center, radius, this.maxSeeds);
+        SearchCriteria criteria = new SearchCriteria(biomes, this.biomeMatchMode, features, this.featureMatchMode, center, radius, this.maxSeeds);
 
         ChunkGenerator generator = this.workManager.chunkGenerator();
         var sampleUtils = this.workManager.sampleUtils();
@@ -546,6 +565,7 @@ public class SeedSearchContainer implements AutoCloseable
         this.terrainFeatureList.active = idle && this.workManager.isTFCEnabled();
         this.tfcSettingsButton.active = idle && this.workManager.isTFCEnabled();
         this.biomeMatchModeButton.active = idle;
+        this.featureMatchModeButton.active = idle;
         this.clearButton.active = idle;
         this.searchAreaButton.active = idle;
         this.maxSeedsEdit.active = idle;
@@ -610,7 +630,7 @@ public class SeedSearchContainer implements AutoCloseable
         this.tfcSettingsButton.setWidth(tfcSettingsW);
 
         int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
-        int rightClusterW = modeW + gap + clearW + gap + startW;
+        int rightClusterW = modeW + gap + modeW + gap + clearW + gap + startW;
         boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
 
         int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
@@ -620,12 +640,15 @@ public class SeedSearchContainer implements AutoCloseable
         this.biomeMatchModeButton.setPosition(rightControlsX, rightControlsY);
         this.biomeMatchModeButton.setWidth(modeW);
 
-        this.clearButton.setPosition(rightControlsX + modeW + gap, rightControlsY);
+        this.featureMatchModeButton.setPosition(rightControlsX + modeW + gap, rightControlsY);
+        this.featureMatchModeButton.setWidth(modeW);
+
+        this.clearButton.setPosition(rightControlsX + modeW + gap + modeW + gap, rightControlsY);
         this.clearButton.setWidth(clearW);
 
-        this.startButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.startButton.setPosition(rightControlsX + modeW + gap + modeW + gap + clearW + gap, rightControlsY);
         this.startButton.setWidth(startW);
-        this.stopButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.stopButton.setPosition(rightControlsX + modeW + gap + modeW + gap + clearW + gap, rightControlsY);
         this.stopButton.setWidth(startW);
 
         y += wrapControls ? 44 : 22;

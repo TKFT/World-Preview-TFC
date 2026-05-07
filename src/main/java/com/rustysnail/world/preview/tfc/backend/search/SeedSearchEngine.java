@@ -1,24 +1,31 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
 import com.rustysnail.world.preview.tfc.WorldPreview;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 
 import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.Seed;
 import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.feature.vein.IVeinConfig;
+import net.dries007.tfc.world.feature.vein.PipeVeinFeature;
+import net.dries007.tfc.world.feature.vein.VeinFeature;
 import net.dries007.tfc.world.layer.TFCLayers;
 import net.dries007.tfc.world.layer.framework.AreaFactory;
 import net.dries007.tfc.world.layer.framework.ConcurrentArea;
 import net.dries007.tfc.world.region.Region;
 import net.dries007.tfc.world.region.RegionGenerator;
 import net.dries007.tfc.world.region.Units;
+import net.dries007.tfc.world.settings.RockSettings;
 import net.dries007.tfc.world.settings.Settings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
+import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
@@ -27,6 +34,8 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
+import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -173,6 +182,7 @@ public class SeedSearchEngine implements Runnable
         BlockPos searchCenter = this.criteria.searchCenter();
         int radius = this.criteria.searchRadius();
         Set<SearchableFeature> requiredFeatures = this.criteria.requiredFeatures();
+        boolean anyFeatureMode = this.criteria.featureMatchMode() == SearchCriteria.FeatureMatchMode.ANY;
         Set<ResourceKey<Biome>> requiredBiomes = this.criteria.requiredBiomes();
 
         final ChunkGenerator seededGen = generatorForSeed(seedLong);
@@ -194,13 +204,17 @@ public class SeedSearchEngine implements Runnable
             biomeLookup = biomeLayer::get;
         }
 
-        if (!requiredFeatures.isEmpty())
+        Set<SearchableFeature> manualRequired = new HashSet<>();
+        for (SearchableFeature feature : requiredFeatures)
         {
-            if (regionGen == null)
+            if (feature.test() != null)
             {
-                return null;
+                manualRequired.add(feature);
             }
+        }
 
+        if (!manualRequired.isEmpty() && regionGen != null)
+        {
             HeightSampler heights = null;
             if (this.registryAccess != null && this.heightAccessor != null)
             {
@@ -224,7 +238,7 @@ public class SeedSearchEngine implements Runnable
                 );
             }
 
-            Set<SearchableFeature> remaining = new HashSet<>(requiredFeatures);
+            Set<SearchableFeature> remaining = new HashSet<>(manualRequired);
 
             int minGridX = Units.blockToGrid(searchCenter.getX() - radius);
             int maxGridX = Units.blockToGrid(searchCenter.getX() + radius);
@@ -270,20 +284,17 @@ public class SeedSearchEngine implements Runnable
                     }
                 }
             }
-
-            for (SearchableFeature f : remaining)
-            {
-                if (f.test() != null)
-                {
-                    return null;
-                }
-            }
+        }
+        else if (!manualRequired.isEmpty() && !anyFeatureMode)
+        {
+            return null;
         }
 
         Set<SearchableFeature> probeRequired = FeatureDetectors.getProbeRequiredFeatures(requiredFeatures);
-        if (!probeRequired.isEmpty() && this.isTFC && this.registryAccess != null)
+        if (!probeRequired.isEmpty() && this.isTFC && this.registryAccess != null && (!anyFeatureMode || foundFeatures.isEmpty()))
         {
             Set<ResourceLocation> probeIds = FeatureDetectors.getProbeFeatureIds(probeRequired);
+            Map<Long, Region.Point> pointCache = new HashMap<>();
 
             try
             {
@@ -294,31 +305,89 @@ public class SeedSearchEngine implements Runnable
 
                 int probeRadiusChunks = featureLocation != null ? KNOWN_LOCATION_PROBE_RADIUS : Math.max(1, radius / 256);
 
-                Map<ResourceLocation, List<BlockPos>> placements = probe.probeRegion(
+                Map<ResourceLocation, List<BlockPos>> placements = new HashMap<>(probe.probeRegion(
                     seedLong,
                     centerChunk,
                     probeRadiusChunks,
                     probeIds
-                );
+                ));
+
+                Set<ResourceLocation> missingProbeIds = findMissingProbeIds(probeIds, placements);
+                if (!missingProbeIds.isEmpty())
+                {
+                    Map<ResourceLocation, List<BlockPos>> fallbackPlacements = findFallbackVeinPlacements(
+                        seedLong,
+                        centerChunk,
+                        probeRadiusChunks,
+                        missingProbeIds,
+                        seededGen
+                    );
+                    mergePlacements(placements, fallbackPlacements);
+                }
 
                 for (SearchableFeature feature : probeRequired)
                 {
-                    ResourceLocation featureId = feature.getPlacedFeatureId();
-                    List<BlockPos> positions = placements.get(featureId);
-                    if (positions == null || positions.isEmpty())
+                    BlockPos matchedPosition = null;
+                    for (ResourceLocation configuredId : FeatureDetectors.getConfiguredVeinIds(feature))
                     {
-                        return null;
+                        List<BlockPos> positions = placements.get(configuredId);
+                        if (positions == null || positions.isEmpty())
+                        {
+                            continue;
+                        }
+
+                        BlockPos validPosition = findFirstValidProbePosition(configuredId, positions, regionGen, pointCache);
+                        if (validPosition != null)
+                        {
+                            matchedPosition = validPosition;
+                            break;
+                        }
                     }
 
-                    if (featureLocation == null)
+                    if (anyFeatureMode)
                     {
-                        featureLocation = positions.getFirst();
+                        if (matchedPosition != null)
+                        {
+                            foundFeatures.add(feature);
+                            if (featureLocation == null)
+                            {
+                                featureLocation = matchedPosition;
+                            }
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        if (matchedPosition == null)
+                        {
+                            return null;
+                        }
+                        foundFeatures.add(feature);
+                        if (featureLocation == null)
+                        {
+                            featureLocation = matchedPosition;
+                        }
                     }
                 }
             }
             catch (Exception e)
             {
                 WorldPreview.LOGGER.debug("Feature probe failed for seed {}: {}", seedLong, e.getMessage());
+                return null;
+            }
+        }
+
+        if (!requiredFeatures.isEmpty())
+        {
+            if (anyFeatureMode)
+            {
+                if (foundFeatures.isEmpty())
+                {
+                    return null;
+                }
+            }
+            else if (!foundFeatures.containsAll(manualRequired))
+            {
                 return null;
             }
         }
@@ -486,6 +555,291 @@ public class SeedSearchEngine implements Runnable
             .orElse(null);
 
         return biomeKey == null ? null : biomeKey.location().toString();
+    }
+
+    @Nullable
+    private BlockPos findFirstValidProbePosition(
+        ResourceLocation configuredId,
+        List<BlockPos> positions,
+        @Nullable RegionGenerator regionGen,
+        Map<Long, Region.Point> pointCache
+    )
+    {
+        if (!OrePlacementRules.hasExtraConstraints(configuredId))
+        {
+            return positions.getFirst();
+        }
+        if (regionGen == null)
+        {
+            return null;
+        }
+
+        for (BlockPos pos : positions)
+        {
+            Region.Point point = getPointCached(regionGen, pos.getX(), pos.getZ(), pointCache);
+            if (OrePlacementRules.matchesConfiguredPlacement(configuredId, pos, regionGen, point))
+            {
+                return pos;
+            }
+        }
+
+        return null;
+    }
+
+    @Nullable
+    private Region.Point getPointCached(
+        RegionGenerator regionGen,
+        int blockX,
+        int blockZ,
+        Map<Long, Region.Point> pointCache
+    )
+    {
+        int gridX = Units.blockToGrid(blockX);
+        int gridZ = Units.blockToGrid(blockZ);
+        long key = (((long) gridX) << 32) ^ (gridZ & 0xffffffffL);
+
+        Region.Point point = pointCache.get(key);
+        if (point != null)
+        {
+            return point;
+        }
+
+        point = OrePlacementRules.samplePoint(regionGen, blockX, blockZ);
+        if (point != null)
+        {
+            pointCache.put(key, point);
+        }
+        return point;
+    }
+
+    private static Set<ResourceLocation> findMissingProbeIds(
+        Set<ResourceLocation> requested,
+        Map<ResourceLocation, List<BlockPos>> placements
+    )
+    {
+        Set<ResourceLocation> missing = new HashSet<>();
+        for (ResourceLocation id : requested)
+        {
+            List<BlockPos> positions = placements.get(id);
+            if (positions == null || positions.isEmpty())
+            {
+                missing.add(id);
+            }
+        }
+        return missing;
+    }
+
+    private static void mergePlacements(
+        Map<ResourceLocation, List<BlockPos>> target,
+        Map<ResourceLocation, List<BlockPos>> additions
+    )
+    {
+        for (Map.Entry<ResourceLocation, List<BlockPos>> entry : additions.entrySet())
+        {
+            if (entry.getValue().isEmpty())
+            {
+                continue;
+            }
+            target.computeIfAbsent(entry.getKey(), ignored -> new ArrayList<>()).addAll(entry.getValue());
+        }
+    }
+
+    private Map<ResourceLocation, List<BlockPos>> findFallbackVeinPlacements(
+        long seed,
+        ChunkPos centerChunk,
+        int radiusChunks,
+        Set<ResourceLocation> targetIds,
+        ChunkGenerator seededGen
+    )
+    {
+        if (targetIds.isEmpty() || this.registryAccess == null)
+        {
+            return Map.of();
+        }
+
+        TFCSampleUtils tfcSampleUtils = TFCSampleUtils.create(seededGen, seed);
+        if (tfcSampleUtils == null)
+        {
+            return Map.of();
+        }
+
+        List<FallbackVeinTarget> targets = resolveFallbackVeinTargets(this.registryAccess, targetIds);
+        if (targets.isEmpty())
+        {
+            return Map.of();
+        }
+
+        Set<ResourceLocation> remaining = new HashSet<>();
+        for (FallbackVeinTarget target : targets)
+        {
+            remaining.add(target.configuredFeatureId());
+        }
+
+        int minChunkX = centerChunk.x - radiusChunks;
+        int maxChunkX = centerChunk.x + radiusChunks;
+        int minChunkZ = centerChunk.z - radiusChunks;
+        int maxChunkZ = centerChunk.z + radiusChunks;
+
+        Map<ResourceLocation, List<BlockPos>> result = new HashMap<>();
+
+        for (int chunkX = minChunkX; chunkX <= maxChunkX && !remaining.isEmpty(); chunkX++)
+        {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ && !remaining.isEmpty(); chunkZ++)
+            {
+                if (this.cancelled)
+                {
+                    return result;
+                }
+
+                for (FallbackVeinTarget target : targets)
+                {
+                    if (!remaining.contains(target.configuredFeatureId()))
+                    {
+                        continue;
+                    }
+
+                    BlockPos center = sampleFallbackCandidateCenter(seed, chunkX, chunkZ, target);
+                    if (center == null)
+                    {
+                        continue;
+                    }
+
+                    Region.Point point = OrePlacementRules.samplePoint(tfcSampleUtils.regionGenerator(), center.getX(), center.getZ());
+                    if (point == null)
+                    {
+                        continue;
+                    }
+                    if (!matchesFallbackReplaceableRock(point, target, tfcSampleUtils))
+                    {
+                        continue;
+                    }
+                    if (!OrePlacementRules.matchesConfiguredPlacement(
+                        target.configuredFeatureId(),
+                        center,
+                        tfcSampleUtils.regionGenerator(),
+                        point
+                    ))
+                    {
+                        continue;
+                    }
+
+                    result.computeIfAbsent(target.configuredFeatureId(), ignored -> new ArrayList<>()).add(center);
+                    remaining.remove(target.configuredFeatureId());
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static List<FallbackVeinTarget> resolveFallbackVeinTargets(
+        RegistryAccess registryAccess,
+        Set<ResourceLocation> targetIds
+    )
+    {
+        Registry<ConfiguredFeature<?, ?>> configuredFeatures = registryAccess.registryOrThrow(Registries.CONFIGURED_FEATURE);
+        List<FallbackVeinTarget> targets = new ArrayList<>();
+
+        for (ResourceLocation configuredFeatureId : targetIds)
+        {
+            ResourceKey<ConfiguredFeature<?, ?>> key = ResourceKey.create(Registries.CONFIGURED_FEATURE, configuredFeatureId);
+            ConfiguredFeature<?, ?> configured = configuredFeatures.get(key);
+            if (configured == null)
+            {
+                continue;
+            }
+            if (!(configured.feature() instanceof VeinFeature<?, ?> veinFeature))
+            {
+                continue;
+            }
+            if (!(configured.config() instanceof IVeinConfig veinConfig))
+            {
+                continue;
+            }
+            if (veinConfig.config().states().isEmpty())
+            {
+                continue;
+            }
+
+            targets.add(new FallbackVeinTarget(
+                configuredFeatureId,
+                veinConfig,
+                veinConfig.config().states().keySet(),
+                veinFeature instanceof PipeVeinFeature
+            ));
+        }
+
+        return targets;
+    }
+
+    private static @Nullable BlockPos sampleFallbackCandidateCenter(
+        long worldSeed,
+        int chunkX,
+        int chunkZ,
+        FallbackVeinTarget target
+    )
+    {
+        int rarity = target.config().config().rarity();
+        if (rarity <= 0)
+        {
+            return null;
+        }
+
+        RandomSource random = new XoroshiroRandomSource(
+            worldSeed ^ chunkX * 61728364132L,
+            target.config().config().seed() ^ chunkZ * 16298364123L
+        );
+
+        if (random.nextInt(rarity) != 0)
+        {
+            return null;
+        }
+
+        if (target.consumeAngleBeforeCenter())
+        {
+            random.nextFloat();
+        }
+
+        int blockX = (chunkX << 4) + random.nextInt(16);
+        int blockY = sampleFallbackVeinY(random, target.config().verticalRadius(), target.config().minY(), target.config().maxY());
+        int blockZ = (chunkZ << 4) + random.nextInt(16);
+        return new BlockPos(blockX, blockY, blockZ);
+    }
+
+    private static int sampleFallbackVeinY(RandomSource random, int verticalRadius, int minY, int maxY)
+    {
+        int range = maxY - minY - 2 * verticalRadius;
+        if (range > 0)
+        {
+            return minY + verticalRadius + random.nextInt(range);
+        }
+        return (minY + maxY) / 2;
+    }
+
+    private static boolean matchesFallbackReplaceableRock(
+        Region.Point point,
+        FallbackVeinTarget target,
+        TFCSampleUtils tfcSampleUtils
+    )
+    {
+        for (int layer = 0; layer < 3; layer++)
+        {
+            RockSettings rock = tfcSampleUtils.sampleRockAtLayer(point.rock, layer);
+            if (rock != null && target.replaceableBlocks().contains(rock.raw()))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private record FallbackVeinTarget(
+        ResourceLocation configuredFeatureId,
+        IVeinConfig config,
+        Set<net.minecraft.world.level.block.Block> replaceableBlocks,
+        boolean consumeAngleBeforeCenter
+    )
+    {
     }
 
 }

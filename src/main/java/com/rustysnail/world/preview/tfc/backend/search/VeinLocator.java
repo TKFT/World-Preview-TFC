@@ -71,7 +71,25 @@ public final class VeinLocator
                         continue;
                     }
 
-                    if (!matchesReplaceableRock(center, target, tfcSampleUtils))
+                    Region.Point point = samplePoint(center, tfcSampleUtils);
+                    if (point == null)
+                    {
+                        continue;
+                    }
+
+                    if (!matchesReplaceableRock(point, target, tfcSampleUtils))
+                    {
+                        continue;
+                    }
+
+                    center = adjustReportedCenter(center, target, sampleUtils);
+
+                    if (!OrePlacementRules.matchesConfiguredPlacement(
+                        target.configuredFeatureId,
+                        center,
+                        tfcSampleUtils.regionGenerator(),
+                        point
+                    ))
                     {
                         continue;
                     }
@@ -108,32 +126,37 @@ public final class VeinLocator
                 continue;
             }
 
-            ResourceLocation configuredFeatureId = feature.getPlacedFeatureId();
-            ResourceKey<ConfiguredFeature<?, ?>> key = ResourceKey.create(Registries.CONFIGURED_FEATURE, configuredFeatureId);
-            ConfiguredFeature<?, ?> configured = configuredFeatures.get(key);
-            if (configured == null)
+            for (ResourceLocation configuredFeatureId : FeatureDetectors.getConfiguredVeinIds(feature))
             {
-                continue;
-            }
-            if (!(configured.feature() instanceof VeinFeature<?, ?> veinFeature))
-            {
-                continue;
-            }
-            if (!(configured.config() instanceof IVeinConfig veinConfig))
-            {
-                continue;
-            }
-            if (veinConfig.config().states().isEmpty())
-            {
-                continue;
-            }
+                ResourceKey<ConfiguredFeature<?, ?>> key = ResourceKey.create(Registries.CONFIGURED_FEATURE, configuredFeatureId);
+                ConfiguredFeature<?, ?> configured = configuredFeatures.get(key);
+                if (configured == null)
+                {
+                    continue;
+                }
+                if (!(configured.feature() instanceof VeinFeature<?, ?> veinFeature))
+                {
+                    continue;
+                }
+                if (!(configured.config() instanceof IVeinConfig veinConfig))
+                {
+                    continue;
+                }
+                if (veinConfig.config().states().isEmpty())
+                {
+                    continue;
+                }
 
-            targets.add(new TargetVein(
-                featureId,
-                veinConfig,
-                veinConfig.config().states().keySet(),
-                veinFeature instanceof PipeVeinFeature
-            ));
+                targets.add(new TargetVein(
+                    featureId,
+                    configuredFeatureId,
+                    veinConfig,
+                    veinConfig.config().states().keySet(),
+                    veinFeature instanceof PipeVeinFeature,
+                    veinConfig.config().projectToSurface(),
+                    veinConfig.config().projectOffset()
+                ));
+            }
         }
 
         return targets;
@@ -168,6 +191,44 @@ public final class VeinLocator
         return new BlockPos(blockX, blockY, blockZ);
     }
 
+    private static BlockPos adjustReportedCenter(BlockPos center, TargetVein target, SampleUtils sampleUtils)
+    {
+        int y = center.getY();
+
+        if (!target.projectToSurface)
+        {
+            return clampReportedDepth(target.configuredFeatureId, center.getX(), y, center.getZ());
+        }
+
+        int offsetX = 0;
+        int offsetZ = 0;
+        if (target.projectOffset)
+        {
+            int hash = net.dries007.tfc.util.Helpers.hash(182739412341L, center);
+            RandomSource projectionRandom = new XoroshiroRandomSource(hash);
+            offsetX = projectionRandom.nextInt(16) - projectionRandom.nextInt(16);
+            offsetZ = projectionRandom.nextInt(16) - projectionRandom.nextInt(16);
+        }
+
+        int surfaceY = sampleUtils.doHeightSlow(new BlockPos(center.getX() + offsetX, 0, center.getZ() + offsetZ));
+        y += surfaceY;
+        return clampReportedDepth(target.configuredFeatureId, center.getX(), y, center.getZ());
+    }
+
+    private static BlockPos clampReportedDepth(ResourceLocation configuredFeatureId, int x, int y, int z)
+    {
+        String path = configuredFeatureId.getPath();
+        if ("vein/ruby".equals(path) && y > -10)
+        {
+            y = -11;
+        }
+        else if ("vein/lapis_lazuli".equals(path))
+        {
+            y = Math.max(-20, Math.min(80, y));
+        }
+        return new BlockPos(x, y, z);
+    }
+
     private static int sampleVeinY(RandomSource random, int verticalRadius, int minY, int maxY)
     {
         int range = maxY - minY - 2 * verticalRadius;
@@ -178,23 +239,8 @@ public final class VeinLocator
         return (minY + maxY) / 2;
     }
 
-    private static boolean matchesReplaceableRock(BlockPos center, TargetVein target, TFCSampleUtils tfcSampleUtils)
+    private static boolean matchesReplaceableRock(Region.Point point, TargetVein target, TFCSampleUtils tfcSampleUtils)
     {
-        Region.Point point;
-        try
-        {
-            point = tfcSampleUtils.samplePoint(center.getX(), center.getZ());
-        }
-        catch (Exception ignored)
-        {
-            return false;
-        }
-
-        if (point == null)
-        {
-            return false;
-        }
-
         for (int layer = 0; layer < 3; layer++)
         {
             RockSettings rock = tfcSampleUtils.sampleRockAtLayer(point.rock, layer);
@@ -206,6 +252,18 @@ public final class VeinLocator
         return false;
     }
 
+    private static Region.Point samplePoint(BlockPos center, TFCSampleUtils tfcSampleUtils)
+    {
+        try
+        {
+            return tfcSampleUtils.samplePoint(center.getX(), center.getZ());
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
     private static long packBlockKey(int blockX, int blockZ)
     {
         return (((long) blockX) << 32) ^ (blockZ & 0xffffffffL);
@@ -213,9 +271,12 @@ public final class VeinLocator
 
     private record TargetVein(
         short featureId,
+        ResourceLocation configuredFeatureId,
         IVeinConfig config,
         Set<Block> replaceableBlocks,
-        boolean consumeAngleBeforeCenter
+        boolean consumeAngleBeforeCenter,
+        boolean projectToSurface,
+        boolean projectOffset
     )
     {
     }

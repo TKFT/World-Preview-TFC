@@ -106,6 +106,7 @@ public class WorldPreviewComponents
     public static final Component SEARCH_TFC_SETTINGS = Component.translatable("world_preview_tfc.search.tfc_settings");
     public static final Component SEARCH_TFC_SETTINGS_TOOLTIP = Component.translatable("world_preview_tfc.search.tfc_settings.tooltip");
     public static final Component SEARCH_BIOME_MODE_TOOLTIP = Component.translatable("world_preview_tfc.search.biome_mode.tooltip");
+    public static final Component SEARCH_FEATURE_MODE_TOOLTIP = Component.translatable("world_preview_tfc.search.feature_mode.tooltip");
     public static final Component SEARCH_START = Component.translatable("world_preview_tfc.search.start");
     public static final Component SEARCH_STOP = Component.translatable("world_preview_tfc.search.stop");
     public static final Component SEARCH_PREVIEW = Component.translatable("world_preview_tfc.search.preview");

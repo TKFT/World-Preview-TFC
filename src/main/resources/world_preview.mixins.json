@@ -13,6 +13,7 @@
     "ReloadableServerResourcesMixin",
     "StructureTemplatePaletteAccessor",
     "StructureTemplatePaletteMixin",
+    "MixinConfiguredFeature",
     "MixinPlacedFeature"
   ],
   "client": [

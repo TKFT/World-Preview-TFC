@@ -906,7 +906,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             SearchableFeature feature = FeatureDetectors.getFeatureById(i);
             if (feature != null)
             {
-                this.allFeatureIcons[i] = createFeatureIcon(feature);
+                this.allFeatureIcons[i] = createFeatureIcon(feature, builtinResourceManager, this.workManager.sampleResourceManager());
             }
             else
             {
@@ -949,7 +949,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             }
 
             short structureId = (short) structureEntries.size();
-            NativeImage icon = createFeatureIcon(feature);
+            NativeImage icon = createFeatureIcon(feature, builtinResourceManager, this.workManager.sampleResourceManager());
             structureIcons.add(icon);
             structureEntries.add(
                 this.structuresList.createEntry(
@@ -958,8 +958,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                     icon,
                     null,
                     feature.name().getString(),
-                    true,
-                    true
+                    false,
+                    false
                 )
             );
             this.featureStructureIndexes[featureId] = structureId;
@@ -1404,7 +1404,38 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
     }
 
-    private static NativeImage createFeatureIcon(SearchableFeature feature)
+    private static NativeImage createFeatureIcon(SearchableFeature feature, ResourceManager builtinResourceManager, @Nullable ResourceManager sampleResourceManager)
+    {
+        ResourceLocation iconOverride = FeatureDetectors.getIconOverride(feature);
+        if (iconOverride != null)
+        {
+            Optional<Resource> resource = builtinResourceManager.getResource(iconOverride);
+            if (resource.isEmpty() && sampleResourceManager != null)
+            {
+                resource = sampleResourceManager.getResource(iconOverride);
+            }
+
+            if (resource.isPresent())
+            {
+                try (InputStream in = resource.get().open())
+                {
+                    return NativeImage.read(in);
+                }
+                catch (IOException e)
+                {
+                    WorldPreview.LOGGER.error("Failed to load feature icon texture '{}'", iconOverride, e);
+                }
+            }
+            else
+            {
+                WorldPreview.LOGGER.warn("Missing feature icon texture '{}'", iconOverride);
+            }
+        }
+
+        return createFallbackFeatureIcon(feature);
+    }
+
+    private static NativeImage createFallbackFeatureIcon(SearchableFeature feature)
     {
         NativeImage icon = new NativeImage(16, 16, true);
         String featurePath = feature.id().getPath();
@@ -1441,6 +1472,18 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         {
             color = 0xFFD0D0D0;
             outlineColor = 0xFF8A8A8A;
+            isCircle = true;
+        }
+        else if (featurePath.contains("native_copper"))
+        {
+            color = 0xFF3A78C6;
+            outlineColor = 0xFF24508C;
+            isCircle = true;
+        }
+        else if (featurePath.contains("hematite"))
+        {
+            color = 0xFF5555C0;
+            outlineColor = 0xFF33338C;
             isCircle = true;
         }
         else if (featurePath.contains("native_gold"))
