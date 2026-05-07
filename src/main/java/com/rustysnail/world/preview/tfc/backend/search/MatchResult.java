@@ -13,7 +13,20 @@ public record MatchResult(
     Set<ResourceKey<Biome>> foundBiomes,
     Set<SearchableFeature> foundFeatures,
     @Nullable BlockPos featureLocation,
-    @Nullable BlockPos center
+    @Nullable BlockPos center,
+    @Nullable String detailText
 )
 {
+    /** Compatibility constructor for existing callers that do not supply detailText. */
+    public MatchResult(
+        String seedString,
+        long seedLong,
+        Set<ResourceKey<Biome>> foundBiomes,
+        Set<SearchableFeature> foundFeatures,
+        @Nullable BlockPos featureLocation,
+        @Nullable BlockPos center
+    )
+    {
+        this(seedString, seedLong, foundBiomes, foundFeatures, featureLocation, center, null);
+    }
 }

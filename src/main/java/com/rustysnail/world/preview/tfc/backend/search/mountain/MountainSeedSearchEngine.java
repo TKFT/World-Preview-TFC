@@ -27,6 +27,11 @@ public class MountainSeedSearchEngine implements Runnable
     @Nullable private volatile MountainPeakScanner activeScanner;
     private final List<MountainSearchResult> topResults = new ArrayList<>();
 
+    // Progress throttle state — only accessed from the single engine thread
+    private long lastProgressNanos = 0L;
+    private String lastProgressPhase = "";
+    @Nullable private MountainSearchResult globalBest = null;
+
     public MountainSeedSearchEngine(ChunkGenerator activeGenerator, MountainSeedSearchConfig config, Callback callback)
     {
         this.activeGenerator = activeGenerator;
@@ -48,13 +53,13 @@ public class MountainSeedSearchEngine implements Runnable
         {
             SplittableRandom rng = new SplittableRandom(config.randomSalt());
             int maxSeeds = config.maxSeeds();
-            int globalBestHeight = Integer.MIN_VALUE;
+            int testedSeeds = 0;
 
             for (int i = 0; i < maxSeeds; i++)
             {
                 if (cancelled)
                 {
-                    callback.onCancelled(List.copyOf(topResults), i);
+                    callback.onCancelled(List.copyOf(topResults), testedSeeds);
                     return;
                 }
 
@@ -73,7 +78,12 @@ public class MountainSeedSearchEngine implements Runnable
                             @Override
                             public void onProgress(long sc, int bh, int bx, int bz, String phase)
                             {
-                                callback.onProgress(seedNum, maxSeeds, seed, phase, bh, bx, bz);
+                                if (shouldForwardProgress(phase, bh))
+                                {
+                                    lastProgressNanos = System.nanoTime();
+                                    lastProgressPhase = phase;
+                                    callback.onProgress(seedNum, maxSeeds, seed, phase, bh, bx, bz);
+                                }
                             }
 
                             @Override
@@ -97,12 +107,18 @@ public class MountainSeedSearchEngine implements Runnable
                     );
 
                     activeScanner = scanner;
-                    scanner.run();
-                    activeScanner = null;
+                    try
+                    {
+                        scanner.run();
+                    }
+                    finally
+                    {
+                        activeScanner = null;
+                    }
 
                     if (innerCancelled[0] || cancelled)
                     {
-                        callback.onCancelled(List.copyOf(topResults), i);
+                        callback.onCancelled(List.copyOf(topResults), testedSeeds);
                         return;
                     }
 
@@ -116,34 +132,41 @@ public class MountainSeedSearchEngine implements Runnable
                     if (result == null) continue;
 
                     addToTopResults(result);
+                    testedSeeds++;
 
-                    if (result.height() > globalBestHeight)
+                    if (globalBest == null || result.height() > globalBest.height())
                     {
-                        globalBestHeight = result.height();
+                        globalBest = result;
                         WorldPreview.LOGGER.info("New mountain seed best: seed={}, y={}, x={}, z={}, tested={}/{}",
-                            seed, result.height(), result.x(), result.z(), seedNum, maxSeeds);
+                            seed, result.height(), result.x(), result.z(), testedSeeds, maxSeeds);
                     }
 
-                    MountainSearchResult best = topResults.get(0);
-                    callback.onSeedComplete(seedNum, maxSeeds, result, best);
+                    callback.onSeedComplete(testedSeeds, maxSeeds, result, topResults.get(0));
                 }
                 catch (Throwable t)
                 {
                     if (cancelled)
                     {
-                        callback.onCancelled(List.copyOf(topResults), i);
+                        callback.onCancelled(List.copyOf(topResults), testedSeeds);
                         return;
                     }
                     WorldPreview.LOGGER.warn("Failed to process seed {}: skipping", seed, t);
                 }
             }
 
-            callback.onComplete(List.copyOf(topResults), maxSeeds);
+            callback.onComplete(List.copyOf(topResults), testedSeeds);
         }
         catch (Throwable t)
         {
             callback.onError(t);
         }
+    }
+
+    private boolean shouldForwardProgress(String phase, int height)
+    {
+        if (!phase.equals(lastProgressPhase)) return true;
+        if (globalBest != null && height > globalBest.height()) return true;
+        return System.nanoTime() - lastProgressNanos >= 250_000_000L;
     }
 
     private void addToTopResults(MountainSearchResult result)

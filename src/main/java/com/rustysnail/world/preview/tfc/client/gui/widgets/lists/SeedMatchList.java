@@ -53,6 +53,20 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
         }
     }
 
+    public void selectAndScrollToResult(MatchResult target)
+    {
+        for (int i = 0; i < getItemCount(); i++)
+        {
+            Entry e = getEntry(i);
+            if (e.result() == target || e.result().equals(target))
+            {
+                setSelected(e);
+                centerScrollOn(e);
+                return;
+            }
+        }
+    }
+
     public class Entry extends BaseObjectSelectionList.Entry<Entry>
     {
         private final MatchResult result;
@@ -79,12 +93,24 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
                 .map(f -> f.name().getString())
                 .collect(Collectors.joining(", "));
 
-            this.detailsLine = Stream.of(biomeNames, featureNames)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.joining(" | "));
+            String dt = result.detailText();
+            if (dt != null && !dt.isBlank())
+            {
+                this.detailsLine = dt;
+            }
+            else
+            {
+                this.detailsLine = Stream.of(biomeNames, featureNames)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.joining(" | "));
+            }
 
             StringBuilder tipBuilder = new StringBuilder();
             tipBuilder.append("Seed: ").append(result.seedString());
+            if (dt != null && !dt.isBlank())
+            {
+                tipBuilder.append("\n").append(dt);
+            }
             if (!result.foundBiomes().isEmpty())
             {
                 tipBuilder.append("\n\nBiomes: ").append(biomeNames);

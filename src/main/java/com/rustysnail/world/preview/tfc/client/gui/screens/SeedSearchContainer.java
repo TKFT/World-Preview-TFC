@@ -570,17 +570,10 @@ public class SeedSearchContainer implements AutoCloseable
                 minecraft.execute(() -> {
                     setStatusText(result.summary());
                     debugBiomeLabel.setText(Component.literal("Tallest terrain found for current seed"));
-                    MatchResult matchResult = new MatchResult(
-                        Long.toString(result.seed()),
-                        result.seed(),
-                        Set.of(),
-                        Set.of(),
-                        result.pos(),
-                        result.pos()
-                    );
+                    MatchResult matchResult = toMountainMatchResult(result, 1);
                     allMatches.add(matchResult);
                     matchList.replaceEntries(allMatches.stream().map(matchList::createEntry).toList());
-                    matchList.selectAndScrollToLast();
+                    matchList.selectAndScrollToResult(matchResult);
                     mountainScanner = null;
                     setState(SearchState.IDLE);
                 });
@@ -772,40 +765,43 @@ public class SeedSearchContainer implements AutoCloseable
 
         int radius = SEARCH_RADII[this.searchAreaIndex];
         int maxSeedsCount = Math.max(1, Math.min(100000, this.maxSeeds));
-        MountainSeedSearchConfig config = MountainSeedSearchConfig.randomSearch(center, radius, maxSeedsCount, this.workManager.worldSeed());
+        final MountainSeedSearchConfig config = MountainSeedSearchConfig.randomSearch(center, radius, maxSeedsCount, this.workManager.worldSeed());
+
+        WorldPreview.LOGGER.info("Starting mountain seed search: maxSeeds={}, radius={}, randomSalt={}",
+            maxSeedsCount, radius, config.randomSalt());
 
         final Path outputDir = this.minecraft.gameDirectory.toPath().resolve("world_preview_tfc").resolve("mountain_search");
 
         MountainSeedSearchEngine.Callback callback = new MountainSeedSearchEngine.Callback()
         {
             @Override
-            public void onProgress(int testedSeeds, int maxSeeds, long currentSeed, String phase, int bestHeight, int bestX, int bestZ)
+            public void onProgress(int tested, int maxSeeds, long currentSeed, String phase, int bestHeight, int bestX, int bestZ)
             {
                 minecraft.execute(() ->
-                    setStatusText("Peak seed search " + testedSeeds + "/" + maxSeeds
+                    setStatusText("Peak seed search " + tested + "/" + maxSeeds
                         + " seed=" + currentSeed + " " + phase
                         + " best Y=" + bestHeight + " at X=" + bestX + " Z=" + bestZ));
             }
 
             @Override
-            public void onSeedComplete(int testedSeeds, int maxSeeds, MountainSearchResult seedResult, MountainSearchResult currentBest)
+            public void onSeedComplete(int tested, int maxSeeds, MountainSearchResult seedResult, MountainSearchResult currentBest)
             {
                 minecraft.execute(() -> {
-                    setStatusText("Peak seeds " + testedSeeds + "/" + maxSeeds
-                        + ", current best Y=" + currentBest.height() + " seed=" + currentBest.seed());
+                    setStatusText("Peak seeds " + tested + "/" + maxSeeds
+                        + ", best Y=" + currentBest.height() + " seed=" + currentBest.seed());
                     debugBiomeLabel.setText(Component.literal(
                         "Last seed Y=" + seedResult.height() + ", global best Y=" + currentBest.height()));
                 });
             }
 
             @Override
-            public void onComplete(List<MountainSearchResult> results, int testedSeeds)
+            public void onComplete(List<MountainSearchResult> results, int tested)
             {
-                Path csvPath = writeCsvQuietly(outputDir, results);
+                Path outPath = writeMountainResultsQuietly(outputDir, results, config, tested);
                 minecraft.execute(() -> {
                     addResultsToMatchList(results);
                     String best = results.isEmpty() ? "?" : "Y=" + results.get(0).height() + " seed=" + results.get(0).seed();
-                    setStatusText("Peak seed search complete. Best " + best + (csvPath != null ? ". CSV written." : "."));
+                    setStatusText("Peak seed search complete. Best " + best + (outPath != null ? ". Results written." : "."));
                     debugBiomeLabel.setText(Component.literal("Top " + results.size() + " tallest terrain seeds added to results."));
                     mountainSeedSearchEngine = null;
                     setState(SearchState.IDLE);
@@ -813,12 +809,12 @@ public class SeedSearchContainer implements AutoCloseable
             }
 
             @Override
-            public void onCancelled(List<MountainSearchResult> results, int testedSeeds)
+            public void onCancelled(List<MountainSearchResult> results, int tested)
             {
-                if (!results.isEmpty()) writeCsvQuietly(outputDir, results);
+                if (!results.isEmpty()) writeMountainResultsQuietly(outputDir, results, config, tested);
                 minecraft.execute(() -> {
                     if (!results.isEmpty()) addResultsToMatchList(results);
-                    setStatusText("Peak seed search cancelled. Tested " + testedSeeds + " seeds.");
+                    setStatusText("Peak seed search cancelled. Tested " + tested + " seeds.");
                     mountainSeedSearchEngine = null;
                     setState(SearchState.IDLE);
                 });
@@ -838,40 +834,51 @@ public class SeedSearchContainer implements AutoCloseable
 
         this.mountainSeedSearchEngine = new MountainSeedSearchEngine(this.workManager.chunkGenerator(), config, callback);
         setState(SearchState.SEARCHING);
+        setStatusText("Peak seed search started. Salt=" + config.randomSalt());
         this.executor.submit(this.mountainSeedSearchEngine);
     }
 
+    private static MatchResult toMountainMatchResult(MountainSearchResult r, int rank)
+    {
+        String detail = "#" + rank + " Peak Y=" + r.height() + " X=" + r.x() + " Z=" + r.z();
+        return new MatchResult(
+            Long.toString(r.seed()),
+            r.seed(),
+            Set.of(),
+            Set.of(),
+            r.pos(),
+            r.pos(),
+            detail
+        );
+    }
+
     @Nullable
-    private static Path writeCsvQuietly(Path dir, List<MountainSearchResult> results)
+    private static Path writeMountainResultsQuietly(Path dir, List<MountainSearchResult> results,
+                                                    MountainSeedSearchConfig config, int testedSeeds)
     {
         try
         {
-            Path p = MountainSearchCsvWriter.write(dir, results);
+            Path p = MountainSearchCsvWriter.write(dir, results, config, testedSeeds);
             WorldPreview.LOGGER.info("Mountain seed search results written to {}", p);
             return p;
         }
         catch (IOException e)
         {
-            WorldPreview.LOGGER.error("Failed to write mountain search CSV", e);
+            WorldPreview.LOGGER.error("Failed to write mountain search results", e);
             return null;
         }
     }
 
     private void addResultsToMatchList(List<MountainSearchResult> results)
     {
-        for (MountainSearchResult r : results)
+        List<MatchResult> newMatches = new ArrayList<>();
+        for (int i = 0; i < results.size(); i++)
         {
-            allMatches.add(new MatchResult(
-                Long.toString(r.seed()),
-                r.seed(),
-                Set.of(),
-                Set.of(),
-                r.pos(),
-                r.pos()
-            ));
+            newMatches.add(toMountainMatchResult(results.get(i), i + 1));
         }
+        allMatches.addAll(newMatches);
         matchList.replaceEntries(allMatches.stream().map(matchList::createEntry).toList());
-        if (!results.isEmpty()) matchList.selectAndScrollToLast();
+        if (!newMatches.isEmpty()) matchList.selectAndScrollToResult(newMatches.get(0));
     }
 
     private void onSkipMatch()
