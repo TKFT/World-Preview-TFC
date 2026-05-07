@@ -2,6 +2,7 @@ package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
 import com.rustysnail.world.preview.tfc.backend.search.MatchResult;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
@@ -78,8 +79,7 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
         {
             this.result = result;
 
-            String seed = result.seedString();
-            this.seedDisplay = seed.length() > 20 ? seed.substring(0, 17) + "..." : seed;
+            this.seedDisplay = result.seedString();
 
             String biomeNames = result.foundBiomes().stream()
                 .map(ResourceKey::location)
@@ -146,25 +146,32 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
             return Component.translatable("narrator.select", this.result.seedString());
         }
 
+        private String trimToWidth(String text, int maxWidth)
+        {
+            if (maxWidth <= 0) return "";
+            Font f = SeedMatchList.this.minecraft.font;
+            if (f.width(text) <= maxWidth) return text;
+            String ellipsis = "...";
+            int ellipsisW = f.width(ellipsis);
+            if (maxWidth <= ellipsisW) return "";
+            return f.plainSubstrByWidth(text, maxWidth - ellipsisW) + ellipsis;
+        }
+
         @Override
         public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
                            int mouseX, int mouseY, boolean hovered, float partialTick)
         {
-            gg.drawString(SeedMatchList.this.minecraft.font, this.seedDisplay, left + 4, top + 2, 0xFFFFFF);
+            int maxWidth = Math.max(0, width - 10);
+            String seedLine = trimToWidth(this.seedDisplay, maxWidth);
+            gg.drawString(SeedMatchList.this.minecraft.font, seedLine, left + 4, top + 2, 0xFFFFFF);
 
             if (!this.detailsLine.isEmpty())
             {
-                String details = this.detailsLine;
-                int maxWidth = width - 10;
-                if (SeedMatchList.this.minecraft.font.width(details) > maxWidth)
+                String detailLine = trimToWidth(this.detailsLine, maxWidth);
+                if (!detailLine.isEmpty())
                 {
-                    while (SeedMatchList.this.minecraft.font.width(details + "...") > maxWidth && !details.isEmpty())
-                    {
-                        details = details.substring(0, details.length() - 1);
-                    }
-                    details = details + "...";
+                    gg.drawString(SeedMatchList.this.minecraft.font, detailLine, left + 4, top + 14, 0xAAAAAA);
                 }
-                gg.drawString(SeedMatchList.this.minecraft.font, details, left + 4, top + 14, 0xAAAAAA);
             }
         }
 

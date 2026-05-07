@@ -13,6 +13,7 @@ public class WGLabel extends AbstractWidget
     private Component component;
     private final int color;
     private final TextAlignment alignment;
+    private String displayText;
     private int startX;
     private int startY;
 
@@ -28,7 +29,8 @@ public class WGLabel extends AbstractWidget
 
     public void update()
     {
-        int textWidth = this.font.width(this.component.getVisualOrderText());
+        this.displayText = trimToWidth(this.component.getString());
+        int textWidth = this.font.width(this.displayText);
         this.startY = this.getY() + this.height / 2 - 9 / 2;
 
         this.startX = switch (this.alignment)
@@ -37,6 +39,17 @@ public class WGLabel extends AbstractWidget
             case CENTER -> this.getX() + this.width / 2 - textWidth / 2;
             case RIGHT -> this.getX() + this.width - textWidth;
         };
+    }
+
+    private String trimToWidth(String text)
+    {
+        int maxWidth = Math.max(0, this.width);
+        if (this.font.width(text) <= maxWidth) return text;
+        String ellipsis = "...";
+        int ellipsisWidth = this.font.width(ellipsis);
+        if (maxWidth <= ellipsisWidth) return "";
+        String trimmed = this.font.plainSubstrByWidth(text, maxWidth - ellipsisWidth);
+        return trimmed + ellipsis;
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button)
@@ -65,12 +78,13 @@ public class WGLabel extends AbstractWidget
     public void setText(Component _component)
     {
         this.component = _component;
+        super.setMessage(_component);
         this.update();
     }
 
     public void renderWidget(GuiGraphics guiGraphics, int i, int j, float f)
     {
-        guiGraphics.drawString(this.font, this.component, this.startX, this.startY, this.color);
+        guiGraphics.drawString(this.font, this.displayText, this.startX, this.startY, this.color);
     }
 
     protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)

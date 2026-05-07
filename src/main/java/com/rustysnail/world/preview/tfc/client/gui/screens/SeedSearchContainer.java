@@ -790,7 +790,7 @@ public class SeedSearchContainer implements AutoCloseable
                     setStatusText("Peak seeds " + tested + "/" + maxSeeds
                         + ", best Y=" + currentBest.height() + " seed=" + currentBest.seed());
                     debugBiomeLabel.setText(Component.literal(
-                        "Last seed Y=" + seedResult.height() + ", global best Y=" + currentBest.height()));
+                         "Global best Y=" + currentBest.height() + ", Last seed Y=" + seedResult.height()));
                 });
             }
 
@@ -1011,34 +1011,58 @@ public class SeedSearchContainer implements AutoCloseable
         this.tfcSettingsButton.setWidth(tfcSettingsW);
 
         int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
-        int rightClusterW = modeW + gap + clearW + gap + startW + gap + mountainW + gap + validateW + gap + peakSeedsW;
-        boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
 
-        int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
-        if (rightControlsX < biomeLeft) rightControlsX = biomeLeft;
-        int rightControlsY = wrapControls ? y + 22 : y;
+        // Basic controls: mode / clear / start-stop
+        int basicRightClusterW = modeW + gap + clearW + gap + startW;
+        // Mountain controls: Find Peak / Validate / Search Peaks
+        int mountainClusterW = mountainW + gap + validateW + gap + peakSeedsW;
 
-        this.biomeMatchModeButton.setPosition(rightControlsX, rightControlsY);
+        // Put mountain controls on their own row when the combined total is too wide
+        boolean mountainOnOwnRow = leftClusterW + gap + basicRightClusterW + gap + mountainClusterW > controlRowWidth;
+        // Wrap basic controls to row 2 only when even they overflow with the left cluster
+        boolean wrapRow1 = leftClusterW + gap + basicRightClusterW > controlRowWidth;
+
+        int basicY = wrapRow1 ? y + 22 : y;
+
+        int basicRightX, mountainX, mountainY;
+        if (mountainOnOwnRow)
+        {
+            basicRightX = biomeLeft + controlRowWidth - basicRightClusterW;
+            mountainY    = basicY + 22;
+            mountainX    = biomeLeft + controlRowWidth - mountainClusterW;
+        }
+        else
+        {
+            // Both clusters fit on one row: right-align the combined group
+            int fullClusterW = basicRightClusterW + gap + mountainClusterW;
+            basicRightX = biomeLeft + controlRowWidth - fullClusterW;
+            mountainY   = basicY;
+            mountainX   = basicRightX + basicRightClusterW + gap;
+        }
+        if (basicRightX < biomeLeft) basicRightX = biomeLeft;
+        if (mountainX  < biomeLeft) mountainX   = biomeLeft;
+
+        this.biomeMatchModeButton.setPosition(basicRightX, basicY);
         this.biomeMatchModeButton.setWidth(modeW);
 
-        this.clearButton.setPosition(rightControlsX + modeW + gap, rightControlsY);
+        this.clearButton.setPosition(basicRightX + modeW + gap, basicY);
         this.clearButton.setWidth(clearW);
 
-        this.startButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.startButton.setPosition(basicRightX + modeW + gap + clearW + gap, basicY);
         this.startButton.setWidth(startW);
-        this.stopButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.stopButton.setPosition(basicRightX + modeW + gap + clearW + gap, basicY);
         this.stopButton.setWidth(startW);
 
-        this.mountainButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap, rightControlsY);
+        this.mountainButton.setPosition(mountainX, mountainY);
         this.mountainButton.setWidth(mountainW);
 
-        this.validateButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap + mountainW + gap, rightControlsY);
+        this.validateButton.setPosition(mountainX + mountainW + gap, mountainY);
         this.validateButton.setWidth(validateW);
 
-        this.mountainSeedSearchButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap + mountainW + gap + validateW + gap, rightControlsY);
+        this.mountainSeedSearchButton.setPosition(mountainX + mountainW + gap + validateW + gap, mountainY);
         this.mountainSeedSearchButton.setWidth(peakSeedsW);
 
-        y += wrapControls ? 44 : 22;
+        y = mountainY + 22;
 
         int listTop = y;
         int listHeight = bottom - listTop;
