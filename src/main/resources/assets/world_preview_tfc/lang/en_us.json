@@ -163,6 +163,8 @@
   "world_preview_tfc.search.complete": "Search complete. Tested %s seeds, found %s matches.",
   "world_preview_tfc.search.cancelled_detail": "Search cancelled.",
   "world_preview_tfc.search.error_detail": "Search failed. Check log for details.",
+  "world_preview_tfc.search.find_peak": "Find Peak",
+  "world_preview_tfc.search.find_peak.tooltip": "Find the highest terrain point in the selected search area for the current seed.",
   "feature.worldpreview.tuff_ring": "Tuff Rings",
   "feature.worldpreview.tuya": "Tuyas",
   "feature.worldpreview.cinder_cone": "Cinder Cones",

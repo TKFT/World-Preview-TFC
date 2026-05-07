@@ -679,4 +679,14 @@ public class WorkManager
         return this.chunkGenerator;
     }
 
+    public long worldSeed()
+    {
+        return this.worldOptions == null ? 0L : this.worldOptions.seed();
+    }
+
+    public boolean hasSampleUtils()
+    {
+        return this.sampleUtils != null;
+    }
+
 }

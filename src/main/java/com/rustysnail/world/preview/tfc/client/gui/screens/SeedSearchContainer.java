@@ -4,6 +4,9 @@ import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
 import com.rustysnail.world.preview.tfc.backend.search.*;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.CurrentSeedMountainScanner;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.MountainSearchConfig;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.MountainSearchResult;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomeCheckboxList;
@@ -62,6 +65,7 @@ public class SeedSearchContainer implements AutoCloseable
     private final TerrainFeatureList terrainFeatureList;
     private final Button startButton;
     private final Button stopButton;
+    private final Button mountainButton;
 
     private final WGLabel statusLabel;
     private final WGLabel debugBiomeLabel;
@@ -74,6 +78,7 @@ public class SeedSearchContainer implements AutoCloseable
     private int maxSeeds = SearchCriteria.DEFAULT_MAX_SEEDS;
     private SearchCriteria.BiomeMatchMode biomeMatchMode = SearchCriteria.BiomeMatchMode.ANY;
     @Nullable private SeedSearchEngine engine;
+    @Nullable private CurrentSeedMountainScanner mountainScanner;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile SearchState state = SearchState.IDLE;
     private final List<MatchResult> allMatches = new ArrayList<>();
@@ -151,6 +156,13 @@ public class SeedSearchContainer implements AutoCloseable
         ).size(60, 18).build();
         this.stopButton.visible = false;
         this.allWidgets.add(this.stopButton);
+
+        this.mountainButton = Button.builder(
+            WorldPreviewComponents.SEARCH_FIND_PEAK,
+            btn -> this.onFindPeak()
+        ).size(60, 18).build();
+        this.mountainButton.setTooltip(Tooltip.create(WorldPreviewComponents.SEARCH_FIND_PEAK_TOOLTIP));
+        this.allWidgets.add(this.mountainButton);
 
         this.statusLabel = new WGLabel(font, 0, 0, 200, 14,
             WGLabel.TextAlignment.LEFT, Component.empty(), 0xAAAAAA);
@@ -487,6 +499,90 @@ public class SeedSearchContainer implements AutoCloseable
         {
             this.engine.cancel();
         }
+        if (this.mountainScanner != null)
+        {
+            this.mountainScanner.cancel();
+        }
+    }
+
+    private void onFindPeak()
+    {
+        if (!this.workManager.isSetup()) return;
+        var sampleUtils = this.workManager.sampleUtils();
+        if (sampleUtils == null) return;
+
+        BlockPos center = BlockPos.ZERO;
+        if (this.workManager.isTFCEnabled())
+        {
+            var tfcUtils = this.workManager.tfcSampleUtils();
+            if (tfcUtils != null)
+            {
+                var settings = tfcUtils.settings();
+                center = new BlockPos(settings.spawnCenterX(), 64, settings.spawnCenterZ());
+            }
+        }
+
+        int radius = SEARCH_RADII[this.searchAreaIndex];
+        MountainSearchConfig config = MountainSearchConfig.forCurrentSeed(center, radius);
+
+        CurrentSeedMountainScanner.Callback callback = new CurrentSeedMountainScanner.Callback()
+        {
+            @Override
+            public void onProgress(long samplesChecked, int bestHeight, int bestX, int bestZ, String phase)
+            {
+                minecraft.execute(() ->
+                    setStatusText("Peak scan " + phase + ": best Y=" + bestHeight + " at X=" + bestX + " Z=" + bestZ));
+            }
+
+            @Override
+            public void onComplete(MountainSearchResult result)
+            {
+                minecraft.execute(() -> {
+                    setStatusText(result.summary());
+                    debugBiomeLabel.setText(Component.literal("Tallest terrain found for current seed"));
+                    MatchResult matchResult = new MatchResult(
+                        Long.toString(result.seed()),
+                        result.seed(),
+                        Set.of(),
+                        Set.of(),
+                        result.pos(),
+                        result.pos()
+                    );
+                    allMatches.add(matchResult);
+                    matchList.replaceEntries(allMatches.stream().map(matchList::createEntry).toList());
+                    matchList.selectAndScrollToLast();
+                    mountainScanner = null;
+                    setState(SearchState.IDLE);
+                });
+            }
+
+            @Override
+            public void onCancelled()
+            {
+                minecraft.execute(() -> {
+                    setStatusText("Peak scan cancelled.");
+                    mountainScanner = null;
+                    setState(SearchState.IDLE);
+                });
+            }
+
+            @Override
+            public void onError(Throwable t)
+            {
+                minecraft.execute(() -> {
+                    WorldPreview.LOGGER.error("Mountain peak scan failed", t);
+                    setStatusText("Peak scan failed. Check log.");
+                    mountainScanner = null;
+                    setState(SearchState.IDLE);
+                });
+            }
+        };
+
+        this.mountainScanner = new CurrentSeedMountainScanner(
+            this.workManager.worldSeed(), sampleUtils, config, callback
+        );
+        setState(SearchState.SEARCHING);
+        this.executor.submit(this.mountainScanner::run);
     }
 
     private void onSkipMatch()
@@ -541,6 +637,8 @@ public class SeedSearchContainer implements AutoCloseable
         this.stopButton.active = searching || paused;
         this.skipButton.visible = paused;
         this.skipButton.active = paused;
+        this.mountainButton.visible = idle;
+        this.mountainButton.active = idle && this.workManager.isSetup() && this.workManager.sampleUtils() != null;
 
         this.biomeCheckboxList.active = idle;
         this.terrainFeatureList.active = idle && this.workManager.isTFCEnabled();
@@ -597,6 +695,7 @@ public class SeedSearchContainer implements AutoCloseable
         int startW = 60;
         int modeW = 60;
         int clearW = 40;
+        int mountainW = 60;
 
         this.searchAreaButton.setPosition(biomeLeft, y);
         this.searchAreaButton.setWidth(searchAreaW);
@@ -610,7 +709,7 @@ public class SeedSearchContainer implements AutoCloseable
         this.tfcSettingsButton.setWidth(tfcSettingsW);
 
         int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
-        int rightClusterW = modeW + gap + clearW + gap + startW;
+        int rightClusterW = modeW + gap + clearW + gap + startW + gap + mountainW;
         boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
 
         int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
@@ -627,6 +726,9 @@ public class SeedSearchContainer implements AutoCloseable
         this.startButton.setWidth(startW);
         this.stopButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
         this.stopButton.setWidth(startW);
+
+        this.mountainButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap, rightControlsY);
+        this.mountainButton.setWidth(mountainW);
 
         y += wrapControls ? 44 : 22;
 
@@ -684,6 +786,10 @@ public class SeedSearchContainer implements AutoCloseable
         if (this.engine != null)
         {
             this.engine.cancel();
+        }
+        if (this.mountainScanner != null)
+        {
+            this.mountainScanner.cancel();
         }
         this.executor.shutdownNow();
     }
