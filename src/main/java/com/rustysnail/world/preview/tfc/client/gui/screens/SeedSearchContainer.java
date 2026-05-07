@@ -4,9 +4,12 @@ import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
 import com.rustysnail.world.preview.tfc.backend.search.*;
-import com.rustysnail.world.preview.tfc.backend.search.mountain.CurrentSeedMountainScanner;
+import com.rustysnail.world.preview.tfc.backend.search.HeightSampler;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.MountainPeakScanner;
 import com.rustysnail.world.preview.tfc.backend.search.mountain.MountainSearchConfig;
 import com.rustysnail.world.preview.tfc.backend.search.mountain.MountainSearchResult;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.TFCSeededHeightSampler;
+import com.rustysnail.world.preview.tfc.backend.search.mountain.TFCSeededHeightSamplerFactory;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomeCheckboxList;
@@ -66,6 +69,7 @@ public class SeedSearchContainer implements AutoCloseable
     private final Button startButton;
     private final Button stopButton;
     private final Button mountainButton;
+    private final Button validateButton;
 
     private final WGLabel statusLabel;
     private final WGLabel debugBiomeLabel;
@@ -78,7 +82,7 @@ public class SeedSearchContainer implements AutoCloseable
     private int maxSeeds = SearchCriteria.DEFAULT_MAX_SEEDS;
     private SearchCriteria.BiomeMatchMode biomeMatchMode = SearchCriteria.BiomeMatchMode.ANY;
     @Nullable private SeedSearchEngine engine;
-    @Nullable private CurrentSeedMountainScanner mountainScanner;
+    @Nullable private MountainPeakScanner mountainScanner;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile SearchState state = SearchState.IDLE;
     private final List<MatchResult> allMatches = new ArrayList<>();
@@ -163,6 +167,13 @@ public class SeedSearchContainer implements AutoCloseable
         ).size(60, 18).build();
         this.mountainButton.setTooltip(Tooltip.create(WorldPreviewComponents.SEARCH_FIND_PEAK_TOOLTIP));
         this.allWidgets.add(this.mountainButton);
+
+        this.validateButton = Button.builder(
+            WorldPreviewComponents.SEARCH_VALIDATE_PEAK,
+            btn -> this.onValidatePeak()
+        ).size(60, 18).build();
+        this.validateButton.setTooltip(Tooltip.create(WorldPreviewComponents.SEARCH_VALIDATE_PEAK_TOOLTIP));
+        this.allWidgets.add(this.validateButton);
 
         this.statusLabel = new WGLabel(font, 0, 0, 200, 14,
             WGLabel.TextAlignment.LEFT, Component.empty(), 0xAAAAAA);
@@ -524,8 +535,9 @@ public class SeedSearchContainer implements AutoCloseable
 
         int radius = SEARCH_RADII[this.searchAreaIndex];
         MountainSearchConfig config = MountainSearchConfig.forCurrentSeed(center, radius);
+        HeightSampler currentSampler = (x, z) -> sampleUtils.doHeightSlow(new BlockPos(x, 0, z));
 
-        CurrentSeedMountainScanner.Callback callback = new CurrentSeedMountainScanner.Callback()
+        MountainPeakScanner.Callback callback = new MountainPeakScanner.Callback()
         {
             @Override
             public void onProgress(long samplesChecked, int bestHeight, int bestX, int bestZ, String phase)
@@ -578,11 +590,152 @@ public class SeedSearchContainer implements AutoCloseable
             }
         };
 
-        this.mountainScanner = new CurrentSeedMountainScanner(
-            this.workManager.worldSeed(), sampleUtils, config, callback
+        this.mountainScanner = new MountainPeakScanner(
+            this.workManager.worldSeed(), currentSampler, config, callback
         );
         setState(SearchState.SEARCHING);
         this.executor.submit(this.mountainScanner::run);
+    }
+
+    private void onValidatePeak()
+    {
+        if (!this.workManager.isSetup()) return;
+        if (!this.workManager.isTFCEnabled()) return;
+        var sampleUtils = this.workManager.sampleUtils();
+        if (sampleUtils == null) return;
+
+        BlockPos center = BlockPos.ZERO;
+        var tfcUtils = this.workManager.tfcSampleUtils();
+        if (tfcUtils != null)
+        {
+            var settings = tfcUtils.settings();
+            center = new BlockPos(settings.spawnCenterX(), 64, settings.spawnCenterZ());
+        }
+
+        int validationRadius = Math.min(SEARCH_RADII[this.searchAreaIndex], 2000);
+        MountainSearchConfig config = MountainSearchConfig.forCurrentSeed(center, validationRadius);
+        final long worldSeed = this.workManager.worldSeed();
+        HeightSampler currentSampler = (x, z) -> sampleUtils.doHeightSlow(new BlockPos(x, 0, z));
+
+        // Holds scan-1 result between the two async phases; accessed only on the main thread.
+        final MountainSearchResult[] result1Holder = {null};
+
+        MountainPeakScanner.Callback callback1 = new MountainPeakScanner.Callback()
+        {
+            @Override
+            public void onProgress(long samplesChecked, int bestHeight, int bestX, int bestZ, String phase)
+            {
+                minecraft.execute(() -> setStatusText("Validation scan 1 " + phase + ": best Y=" + bestHeight));
+            }
+
+            @Override
+            public void onComplete(MountainSearchResult result)
+            {
+                minecraft.execute(() -> {
+                    if (state != SearchState.SEARCHING) return; // stopped between phases
+                    result1Holder[0] = result;
+                    setStatusText("Scan 1 done: Y=" + result.height() + ". Running seeded scan...");
+
+                    TFCSeededHeightSampler seeded;
+                    try
+                    {
+                        seeded = TFCSeededHeightSamplerFactory.create(workManager.chunkGenerator(), worldSeed);
+                    }
+                    catch (Throwable t)
+                    {
+                        WorldPreview.LOGGER.error("Failed to create seeded TFC height sampler", t);
+                        setStatusText("Validation failed. Check log.");
+                        mountainScanner = null;
+                        setState(SearchState.IDLE);
+                        return;
+                    }
+
+                    MountainPeakScanner.Callback callback2 = new MountainPeakScanner.Callback()
+                    {
+                        @Override
+                        public void onProgress(long samplesChecked, int bestHeight, int bestX, int bestZ, String phase)
+                        {
+                            minecraft.execute(() -> setStatusText("Validation scan 2 " + phase + ": best Y=" + bestHeight));
+                        }
+
+                        @Override
+                        public void onComplete(MountainSearchResult result2)
+                        {
+                            seeded.close();
+                            minecraft.execute(() -> {
+                                MountainSearchResult r1 = result1Holder[0];
+                                if (r1.height() == result2.height() && r1.x() == result2.x() && r1.z() == result2.z())
+                                {
+                                    setStatusText("Seeded sampler validated: Y=" + r1.height() + " at X=" + r1.x() + " Z=" + r1.z());
+                                    debugBiomeLabel.setText(Component.literal("Seeded TFC height sampler matches current preview seed."));
+                                }
+                                else
+                                {
+                                    WorldPreview.LOGGER.warn("Mountain validation mismatch — current: {} | seeded: {}", r1.summary(), result2.summary());
+                                    setStatusText("Seeded sampler mismatch. Check log.");
+                                    debugBiomeLabel.setText(Component.literal("Validation mismatch — see log."));
+                                }
+                                mountainScanner = null;
+                                setState(SearchState.IDLE);
+                            });
+                        }
+
+                        @Override
+                        public void onCancelled()
+                        {
+                            seeded.close();
+                            minecraft.execute(() -> {
+                                setStatusText("Validation cancelled.");
+                                mountainScanner = null;
+                                setState(SearchState.IDLE);
+                            });
+                        }
+
+                        @Override
+                        public void onError(Throwable t)
+                        {
+                            seeded.close();
+                            minecraft.execute(() -> {
+                                WorldPreview.LOGGER.error("Validation seeded scan failed", t);
+                                setStatusText("Validation seeded scan failed. Check log.");
+                                mountainScanner = null;
+                                setState(SearchState.IDLE);
+                            });
+                        }
+                    };
+
+                    MountainPeakScanner scanner2 = new MountainPeakScanner(worldSeed, seeded, config, callback2);
+                    mountainScanner = scanner2;
+                    executor.submit(scanner2::run);
+                });
+            }
+
+            @Override
+            public void onCancelled()
+            {
+                minecraft.execute(() -> {
+                    setStatusText("Validation cancelled.");
+                    mountainScanner = null;
+                    setState(SearchState.IDLE);
+                });
+            }
+
+            @Override
+            public void onError(Throwable t)
+            {
+                minecraft.execute(() -> {
+                    WorldPreview.LOGGER.error("Validation current-seed scan failed", t);
+                    setStatusText("Validation scan 1 failed. Check log.");
+                    mountainScanner = null;
+                    setState(SearchState.IDLE);
+                });
+            }
+        };
+
+        MountainPeakScanner scanner1 = new MountainPeakScanner(worldSeed, currentSampler, config, callback1);
+        this.mountainScanner = scanner1;
+        setState(SearchState.SEARCHING);
+        this.executor.submit(scanner1::run);
     }
 
     private void onSkipMatch()
@@ -639,6 +792,8 @@ public class SeedSearchContainer implements AutoCloseable
         this.skipButton.active = paused;
         this.mountainButton.visible = idle;
         this.mountainButton.active = idle && this.workManager.isSetup() && this.workManager.sampleUtils() != null;
+        this.validateButton.visible = idle;
+        this.validateButton.active = idle && this.workManager.isSetup() && this.workManager.isTFCEnabled() && this.workManager.sampleUtils() != null;
 
         this.biomeCheckboxList.active = idle;
         this.terrainFeatureList.active = idle && this.workManager.isTFCEnabled();
@@ -696,6 +851,7 @@ public class SeedSearchContainer implements AutoCloseable
         int modeW = 60;
         int clearW = 40;
         int mountainW = 60;
+        int validateW = 60;
 
         this.searchAreaButton.setPosition(biomeLeft, y);
         this.searchAreaButton.setWidth(searchAreaW);
@@ -709,7 +865,7 @@ public class SeedSearchContainer implements AutoCloseable
         this.tfcSettingsButton.setWidth(tfcSettingsW);
 
         int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
-        int rightClusterW = modeW + gap + clearW + gap + startW + gap + mountainW;
+        int rightClusterW = modeW + gap + clearW + gap + startW + gap + mountainW + gap + validateW;
         boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
 
         int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
@@ -729,6 +885,9 @@ public class SeedSearchContainer implements AutoCloseable
 
         this.mountainButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap, rightControlsY);
         this.mountainButton.setWidth(mountainW);
+
+        this.validateButton.setPosition(rightControlsX + modeW + gap + clearW + gap + startW + gap + mountainW + gap, rightControlsY);
+        this.validateButton.setWidth(validateW);
 
         y += wrapControls ? 44 : 22;
 

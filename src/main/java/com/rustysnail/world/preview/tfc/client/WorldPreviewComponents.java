@@ -116,6 +116,8 @@ public class WorldPreviewComponents
     public static final Component SEARCH_ERROR_DETAIL = Component.translatable("world_preview_tfc.search.error_detail");
     public static final Component SEARCH_FIND_PEAK = Component.translatable("world_preview_tfc.search.find_peak");
     public static final Component SEARCH_FIND_PEAK_TOOLTIP = Component.translatable("world_preview_tfc.search.find_peak.tooltip");
+    public static final Component SEARCH_VALIDATE_PEAK = Component.translatable("world_preview_tfc.search.validate_peak");
+    public static final Component SEARCH_VALIDATE_PEAK_TOOLTIP = Component.translatable("world_preview_tfc.search.validate_peak.tooltip");
     // TFC settings tab
     public static final Component TFC_SETTINGS_TITLE = Component.translatable("world_preview_tfc.tfc.settings.title");
     public static final Component TFC_SETTINGS_HEAD = Component.translatable("world_preview_tfc.tfc.settings.head");

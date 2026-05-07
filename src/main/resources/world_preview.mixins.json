@@ -13,7 +13,8 @@
     "ReloadableServerResourcesMixin",
     "StructureTemplatePaletteAccessor",
     "StructureTemplatePaletteMixin",
-    "MixinPlacedFeature"
+    "MixinPlacedFeature",
+    "TFCChunkGeneratorAccessor"
   ],
   "client": [
     "client.CheckboxAccessor",

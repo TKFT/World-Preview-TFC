@@ -165,6 +165,8 @@
   "world_preview_tfc.search.error_detail": "Search failed. Check log for details.",
   "world_preview_tfc.search.find_peak": "Find Peak",
   "world_preview_tfc.search.find_peak.tooltip": "Find the highest terrain point in the selected search area for the current seed.",
+  "world_preview_tfc.search.validate_peak": "Validate Peak",
+  "world_preview_tfc.search.validate_peak.tooltip": "Compare active current-seed height sampling against the seeded TFC height sampler.",
   "feature.worldpreview.tuff_ring": "Tuff Rings",
   "feature.worldpreview.tuya": "Tuyas",
   "feature.worldpreview.cinder_cone": "Cinder Cones",
