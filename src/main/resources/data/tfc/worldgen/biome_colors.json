@@ -107,5 +107,21 @@
   "tfc:knob_and_kettle": {"r": 100, "g": 145, "b": 80},
   "tfc:patterned_ground": {"r": 145, "g": 155, "b": 140},
   "tfc:inverted_patterned_ground": {"r": 140, "g": 150, "b": 135},
-  "tfc:stone_circles": {"r": 155, "g": 160, "b": 150}
+  "tfc:stone_circles": {"r": 155, "g": 160, "b": 150},
+  "tfc:oceanic_volcanic_arc": {"r": 45, "g": 95, "b": 135},
+  "tfc:ocean_atolls": {"r": 55, "g": 145, "b": 165},
+  "tfc:deep_ocean_atolls": {"r": 25, "g": 70, "b": 115},
+  "tfc:ocean_ridge": {"r": 50, "g": 85, "b": 120},
+  "tfc:rift_valley": {"r": 135, "g": 150, "b": 80},
+  "tfc:rift_lake": {"r": 65, "g": 135, "b": 175},
+  "tfc:collisional_mountains": {"r": 115, "g": 115, "b": 120},
+  "tfc:river_valley": {"r": 105, "g": 175, "b": 95},
+  "tfc:volcanic_mountain_islands": {"r": 85, "g": 65, "b": 70},
+  "tfc:volcanic_island": {"r": 95, "g": 75, "b": 65},
+  "tfc:ice_sheet_volcanic_mountains": {"r": 195, "g": 205, "b": 220},
+  "tfc:ice_sheet_volcanic_oceanic_mountains": {"r": 185, "g": 200, "b": 220},
+  "tfc:glaciated_volcanic_mountains": {"r": 170, "g": 185, "b": 200},
+  "tfc:glaciated_volcanic_oceanic_mountains": {"r": 160, "g": 180, "b": 200},
+  "tfc:glacially_carved_volcanic_mountains": {"r": 125, "g": 130, "b": 135},
+  "tfc:glacially_carved_volcanic_oceanic_mountains": {"r": 115, "g": 125, "b": 140}
 }

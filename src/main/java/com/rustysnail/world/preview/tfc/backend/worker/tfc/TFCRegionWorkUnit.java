@@ -394,25 +394,27 @@ public class TFCRegionWorkUnit extends WorkUnit
                 null
             );
 
-            if (test.matches(query))
+            BlockPos center = test.findCenter(query);
+            if (center == null)
             {
-                BlockPos center = test.findCenter(query);
-                if (center == null)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                long key = ((long) center.getX() << 32) | (center.getZ() & 0xFFFFFFFFL);
-                synchronized (this.detectedFeatureCenters)
+            short id = FeatureDetectors.getFeatureId(feature);
+            if (id < 0)
+            {
+                continue;
+            }
+
+            long key = (((long) id & 0xFFFFL) << 48)
+                ^ (((long) center.getX() & 0xFFFFFFL) << 24)
+                ^ ((long) center.getZ() & 0xFFFFFFL);
+
+            synchronized (this.detectedFeatureCenters)
+            {
+                if (this.detectedFeatureCenters.add(key))
                 {
-                    if (this.detectedFeatureCenters.add(key))
-                    {
-                        short id = FeatureDetectors.getFeatureId(feature);
-                        if (id >= 0)
-                        {
-                            structureSection.addFeature(new PreviewSection.PreviewFeature(id, center));
-                        }
-                    }
+                    structureSection.addFeature(new PreviewSection.PreviewFeature(id, center));
                 }
             }
         }
