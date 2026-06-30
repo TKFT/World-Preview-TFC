@@ -16,7 +16,11 @@ import net.dries007.tfc.world.region.Units;
 import net.dries007.tfc.world.settings.RockLayerSettings;
 import net.dries007.tfc.world.settings.RockSettings;
 import net.dries007.tfc.world.settings.Settings;
+import net.dries007.tfc.world.chunkdata.ChunkData;
+import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
+import net.dries007.tfc.world.chunkdata.ForestType;
 
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,20 +30,21 @@ public class TFCSampleUtils
     private final RegionGenerator regionGenerator;
     private final Settings settings;
     private final RockLayerSettings rockLayerSettings;
+    private final ChunkDataGenerator chunkDataGenerator;
 
     @Nullable
     public static TFCSampleUtils create(ChunkGenerator generator, long seed)
     {
         if (generator instanceof ChunkGeneratorExtension ext)
         {
-            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), seed);
+            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), seed);
         }
         return null;
     }
 
     private final ConcurrentArea<BiomeExtension> biomeLayer;
 
-    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, long seed)
+    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, long seed)
     {
         this.settings = settings;
         this.rockLayerSettings = rockLayerSettings;
@@ -48,6 +53,7 @@ public class TFCSampleUtils
 
         AreaFactory biomeFactory = TFCLayers.createRegionBiomeLayer(this.regionGenerator, tfcSeed);
         this.biomeLayer = new ConcurrentArea<>(biomeFactory, TFCLayers::getFromLayerId);
+        this.chunkDataGenerator = chunkDataGenerator;
     }
 
     public Settings settings()
@@ -242,5 +248,93 @@ public class TFCSampleUtils
             }
         }
         return ROCK_COLORS[rockId];
+    }
+
+    public static String getForestTypeName(short forestId)
+    {
+        if (forestId < 0 || forestId >= ForestType.values().length)
+        {
+            return "Unknown";
+        }
+
+        String name = ForestType.valueOf(forestId).getSerializedName().replace('_', ' ');
+        StringBuilder result = new StringBuilder(name.length());
+
+        boolean capitalize = true;
+        for (int i = 0; i < name.length(); i++)
+        {
+            char c = name.charAt(i);
+            if (capitalize && Character.isLetter(c))
+            {
+                result.append(Character.toUpperCase(c));
+                capitalize = false;
+            }
+            else
+            {
+                result.append(c);
+            }
+
+            if (c == ' ')
+            {
+                capitalize = true;
+            }
+        }
+
+        return result.toString();
+    }
+
+    public static int getForestTypeColor(short forestId)
+    {
+        if (forestId < 0 || forestId >= ForestType.values().length)
+        {
+            return 0xFF222222;
+        }
+
+        ForestType type = ForestType.valueOf(forestId);
+
+        if (type == ForestType.GRASSLAND)
+        {
+            return 0xFFB6C96A;
+        }
+        if (type == ForestType.CLEARING)
+        {
+            return 0xFFD0D884;
+        }
+        if (type == ForestType.SHRUBLAND)
+        {
+            return 0xFF8EA35A;
+        }
+        if (type == ForestType.SPARSE)
+        {
+            return 0xFF789A58;
+        }
+        if (type.isSavanna())
+        {
+            return 0xFFC8A94F;
+        }
+        if (type.isPrimary())
+        {
+            return 0xFF1F5E2E;
+        }
+        if (type.isSecondary())
+        {
+            return 0xFF3D7A3A;
+        }
+        if (type.isEdge())
+        {
+            return 0xFF6F9442;
+        }
+        if (type.isDead())
+        {
+            return 0xFF6F6256;
+        }
+
+        return 0xFF777777;
+    }
+
+    public ChunkData sampleChunkData(ChunkPos chunkPos)
+    {
+        ChunkData data = new ChunkData(this.chunkDataGenerator, chunkPos);
+        return this.chunkDataGenerator.generate(data);
     }
 }

@@ -581,6 +581,12 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 };
                             }
                             break;
+                        case TFC_FOREST_TYPE:
+                            if (rawData >= 0)
+                            {
+                                color = TFCSampleUtils.getForestTypeColor(rawData);
+                            }
+                            break;
                         case TFC_HOTSPOT:
                             if (rawData > -32768)
                             {

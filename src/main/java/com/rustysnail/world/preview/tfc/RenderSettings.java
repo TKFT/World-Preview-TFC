@@ -91,7 +91,9 @@ public class RenderSettings
         TFC_ROCK_BOT(10L, false),    // Bottom rock layer
         TFC_ROCK_TYPE(11L, false),   // Rock type category (Ocean/Volcanic/Land/Uplift)
         TFC_KAOLINITE(12L, false),   // Kaolin Clay Spawning Areas
-        TFC_HOTSPOT(14L, false);     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
+        TFC_FOREST_TYPE(13L, false), //TFC forest type/density
+        TFC_HOTSPOT(14L, false),     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
+        TFC_TREE_SPECIES(15L, false);
 
         public final long flag;
         public final boolean useY;

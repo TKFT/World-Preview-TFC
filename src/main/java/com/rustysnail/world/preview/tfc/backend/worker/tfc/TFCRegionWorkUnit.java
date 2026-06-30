@@ -14,6 +14,7 @@ import com.rustysnail.world.preview.tfc.backend.worker.WorkResult;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 
 import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.region.Region;
 import net.dries007.tfc.world.region.RegionGenerator;
 import net.dries007.tfc.world.region.RiverEdge;
@@ -167,6 +168,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     PreviewSection rockBotSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_BOT.flag);
                     PreviewSection rockTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
                     PreviewSection kaolinSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_KAOLINITE.flag);
+                    PreviewSection forestTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
                     PreviewSection hotspotSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
 
                     WorkResult tempResult = new WorkResult(this, 0, tempSection, new ArrayList<>(16), List.of());
@@ -178,8 +180,23 @@ public class TFCRegionWorkUnit extends WorkUnit
                     WorkResult rockTypeResult = new WorkResult(this, 0, rockTypeSection, new ArrayList<>(16), List.of());
                     WorkResult kaolinResult = new WorkResult(this, 0, kaolinSection, new ArrayList<>(16), List.of());
                     WorkResult hotspotResult = new WorkResult(this, 0, hotspotSection, new ArrayList<>(16), List.of());
+                    WorkResult forestTypeResult = new WorkResult(this, 0, forestTypeSection, new ArrayList<>(16), List.of());
 
                     PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
+
+                    short forestTypeId = -1;
+                    if (this.tfcSampleUtils != null)
+                    {
+                        try
+                        {
+                            ChunkData chunkData = this.tfcSampleUtils.sampleChunkData(cp);
+                            forestTypeId = (short) chunkData.getForestType().ordinal();
+                        }
+                        catch (Exception e)
+                        {
+                            WorldPreview.LOGGER.debug("TFC forest type sampling failed for chunk {}: {}", cp, e.getMessage());
+                        }
+                    }
 
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
@@ -267,6 +284,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
+                        this.sampler.expandRaw(pos, forestTypeId, forestTypeResult);
 
                     }
 
@@ -278,6 +296,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     allResults.add(rockBotResult);
                     allResults.add(rockTypeResult);
                     allResults.add(kaolinResult);
+                    allResults.add(forestTypeResult);
                     allResults.add(hotspotResult);
                 }
             }

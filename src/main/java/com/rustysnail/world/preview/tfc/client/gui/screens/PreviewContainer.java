@@ -128,6 +128,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final ToggleButton toggleTFCRockBot;
     private final ToggleButton toggleTFCRockType;
     private final ToggleButton toggleKaolinClay;
+    private final ToggleButton toggleTFCForestType;
     private final ToggleButton toggleTFCHotspot;
     private final Button cycleResolutionButton;
     private final Button resetDefaultStructureVisibility;
@@ -343,6 +344,16 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleKaolinClay.active = false;
         this.toggleKaolinClay.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_KAOLINITE));
         this.toRender.add(this.toggleKaolinClay);
+
+        this.toggleTFCForestType = new ToggleButton(
+            0, 0, 20, 20, 700, 20, 20, 20, BUTTONS_TEXTURE, 760, 60,
+            x -> this.selectViewMode(RenderSettings.RenderMode.TFC_FOREST_TYPE)
+        );
+        this.toggleTFCForestType.visible = false;
+        this.toggleTFCForestType.active = false;
+        this.toggleTFCForestType.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_FOREST_TYPE));
+        this.toRender.add(this.toggleTFCForestType);
+
         this.toggleTFCHotspot = new ToggleButton(0, 0, 20, 20, 720, 20, 20, 20, BUTTONS_TEXTURE, 760, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_HOTSPOT));
         this.toggleTFCHotspot.visible = false;
         this.toggleTFCHotspot.active = false;
@@ -367,6 +378,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCRockBot.visible = expanded && isTFC;
             this.toggleTFCRockType.visible = expanded && isTFC;
             this.toggleKaolinClay.visible = expanded && isTFC;
+            this.toggleTFCForestType.visible = expanded && isTFC;
             this.toggleTFCHotspot.visible = expanded && isTFC;
             this.doLayout(this.lastScreenRectangle);
         });
@@ -423,6 +435,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleTFCRockBot.selected = false;
         this.toggleTFCRockType.selected = false;
         this.toggleKaolinClay.selected = false;
+        this.toggleTFCForestType.selected = false;
         this.toggleTFCHotspot.selected = false;
         synchronized (this.renderSettings)
         {
@@ -457,6 +470,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                     break;
                 case TFC_KAOLINITE:
                     this.toggleKaolinClay.selected = true;
+                    break;
+                case TFC_FOREST_TYPE:
+                    this.toggleTFCForestType.selected = true;
                     break;
                 case TFC_HOTSPOT:
                     this.toggleTFCHotspot.selected = true;
@@ -998,6 +1014,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleKaolinClay.active = true;
             this.toggleKaolinClay.visible = expanded;
             this.toggleKaolinClay.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_KAOLINITE));
+            this.toggleTFCForestType.active = true;
+            this.toggleTFCForestType.visible = expanded;
+            this.toggleTFCForestType.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_FOREST_TYPE));
             this.toggleTFCHotspot.active = true;
             this.toggleTFCHotspot.visible = expanded;
             this.toggleTFCHotspot.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_HOTSPOT));
@@ -1020,6 +1039,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCRockType.visible = false;
             this.toggleKaolinClay.active = false;
             this.toggleKaolinClay.visible = false;
+            this.toggleTFCForestType.active = false;
+            this.toggleTFCForestType.visible = false;
             this.toggleTFCHotspot.active = false;
             this.toggleTFCHotspot.visible = false;
             if (this.renderSettings.mode.isTFC())
