@@ -31,7 +31,7 @@ modId = "neoforge"
 
 type = "required"
 
-versionRange = "[21.1.213,)"
+versionRange = "${neo_version_range}"
 
 ordering = "NONE"
 
@@ -55,7 +55,7 @@ modId = "tfc"
 
 type = "required"
 
-versionRange = "[4.0.17,)"
+versionRange = "${tfc_version_range}"
 
 ordering = "AFTER"
 

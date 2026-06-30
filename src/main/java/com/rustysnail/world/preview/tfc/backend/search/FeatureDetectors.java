@@ -48,6 +48,7 @@ public final class FeatureDetectors
     private static final CenteredFeatureNoiseSampler[] cachedTuffSamplers = new CenteredFeatureNoiseSampler[NOISE_CACHE_SIZE];
     private static final CenteredFeatureNoiseSampler[] cachedTuyaSamplers = new CenteredFeatureNoiseSampler[NOISE_CACHE_SIZE];
     private static final CenteredFeatureNoiseSampler[] cachedCinderSamplers = new CenteredFeatureNoiseSampler[NOISE_CACHE_SIZE];
+    private static final CenteredFeatureNoiseSampler[] cachedStratovolcanoSamplers = new CenteredFeatureNoiseSampler[NOISE_CACHE_SIZE];
     private static int cacheIndex = 0;
 
     static
@@ -70,6 +71,7 @@ public final class FeatureDetectors
         cachedTuffSamplers[idx] = CenteredFeatureNoise.tuffRing(Seed.of(seed));
         cachedTuyaSamplers[idx] = CenteredFeatureNoise.tuya(Seed.of(seed));
         cachedCinderSamplers[idx] = CenteredFeatureNoise.cinder(Seed.of(seed));
+        cachedStratovolcanoSamplers[idx] = CenteredFeatureNoise.stratovolcano(Seed.of(seed));
         return cachedTuffSamplers[idx];
     }
 
@@ -111,6 +113,29 @@ public final class FeatureDetectors
             }
         }
         return CenteredFeatureNoise.cinder(Seed.of(seed));
+    }
+
+    private static CenteredFeatureNoiseSampler getStratovolcanoSampler(long seed)
+    {
+        for (int i = 0; i < NOISE_CACHE_SIZE; i++)
+        {
+            if (cachedSeeds[i] == seed && cachedStratovolcanoSamplers[i] != null)
+            {
+                return cachedStratovolcanoSamplers[i];
+            }
+        }
+
+        getTuffRingSampler(seed);
+
+        for (int i = 0; i < NOISE_CACHE_SIZE; i++)
+        {
+            if (cachedSeeds[i] == seed)
+            {
+                return cachedStratovolcanoSamplers[i];
+            }
+        }
+
+        return CenteredFeatureNoise.stratovolcano(Seed.of(seed));
     }
 
     private static final FeatureTest TUFF_RING_TEST = new FeatureTest()
@@ -170,6 +195,25 @@ public final class FeatureDetectors
         }
     };
 
+    private static final FeatureTest STRATOVOLCANO_TEST = new FeatureTest()
+    {
+        @Override
+        public boolean matches(FeatureQuery q)
+        {
+            return findCenter(q) != null;
+        }
+
+        @Override
+        public @Nullable BlockPos findCenter(FeatureQuery q)
+        {
+            if (q.biomeLookup() == null) return null;
+
+            CenteredFeatureNoiseSampler sampler = getStratovolcanoSampler(q.seed());
+
+            return getBlockPos(q, sampler);
+        }
+    };
+
     private static @Nullable BlockPos getBlockPos(FeatureQuery q, CenteredFeatureNoiseSampler sampler)
     {
         BlockPos cellCenter = sampler.calculateCenter(q.blockX(), 64, q.blockZ(), 1);
@@ -182,7 +226,7 @@ public final class FeatureDetectors
 
         if (biome == null || !sampler.isValidBiome(biome)) return null;
 
-        return sampler.calculateCenter(q.blockX(), 64, q.blockZ(), sampler.getRarity(biome));
+        return sampler.calculateCenter(q.blockX(), 64, q.blockZ(), sampler.getFrequency(biome));
     }
 
     private static final FeatureTest VOLCANO_TEST = q -> q.point() != null && q.point().hotSpotAge >= 1;
@@ -207,6 +251,11 @@ public final class FeatureDetectors
             ResourceLocation.fromNamespaceAndPath("tfc", "tuyas"),
             Component.translatable("feature.worldpreview.tuya"),
             TUYA_TEST
+        ),
+        new SearchableFeature(
+            ResourceLocation.fromNamespaceAndPath("tfc", "stratovolcanoes"),
+            Component.translatable("feature.worldpreview.stratovolcano"),
+            STRATOVOLCANO_TEST
         ),
 
         new SearchableFeature(
@@ -240,6 +289,8 @@ public final class FeatureDetectors
             true
         )
     );
+
+
 
     static
     {
@@ -278,6 +329,10 @@ public final class FeatureDetectors
             case "tuyas" ->
             {
                 return ext.hasTuyas();
+            }
+            case "stratovolcanoes" ->
+            {
+                return ext.hasStratovolcanoes();
             }
         }
 
