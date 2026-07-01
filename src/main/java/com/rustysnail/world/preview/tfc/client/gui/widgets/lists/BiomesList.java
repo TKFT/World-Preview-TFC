@@ -54,9 +54,8 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
     public void setSelected(@Nullable BiomesList.BiomeEntry entry, boolean centerScroll)
     {
         super.setSelected(entry);
-        if (centerScroll)
+        if (centerScroll && entry != null)
         {
-            assert entry != null;
             super.centerScrollOn(entry);
         }
 

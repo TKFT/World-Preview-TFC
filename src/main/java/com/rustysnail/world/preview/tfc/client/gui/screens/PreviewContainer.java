@@ -1264,7 +1264,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
 
         this.lastScreenRectangle = screenRectangle;
-        int leftWidth = Math.max(130, Math.min(180, screenRectangle.width() / 3));
+        int leftWidth = Math.clamp(screenRectangle.width() / 3, 130, 180);
         int left = screenRectangle.left() + 3;
         int previewLeft = left + leftWidth + 3;
         int top = screenRectangle.top() + 2;
@@ -1297,7 +1297,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleTFCRockBot.setPosition(previewLeft + width * 5, top);
         this.toggleTFCRockType.setPosition(previewLeft + width * 6, top);
         this.toggleKaolinClay.setPosition(previewLeft + width * 7, top);
-        this.toggleTFCHotspot.setPosition(previewLeft + width * 8, top);
+        this.toggleTFCForestType.setPosition(previewLeft + width * 8, top);
+        this.toggleTFCHotspot.setPosition(previewLeft + width * 9, top);
         int resolutionBtnRight = screenRectangle.right() - 8;
         this.cycleResolutionButton.setPosition(resolutionBtnRight - 50, top);
         top += 24;
@@ -1528,6 +1529,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public BiomesList.BiomeEntry biome4Id(int id)
     {
+        if (id < 0 || id >= this.allBiomes.length)
+        {
+            WorldPreview.LOGGER.warn("biome4Id called with out-of-range id {} (allBiomes length {})", id, this.allBiomes.length);
+            return null;
+        }
         return this.allBiomes[id];
     }
 
@@ -1582,7 +1588,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public void onBiomeVisuallySelected(BiomesList.BiomeEntry entry)
     {
-        this.biomesList.setSelected(entry, true);
+        this.biomesList.setSelected(entry, entry != null);
         this.previewDisplay.setHighlightCaves(false);
     }
 

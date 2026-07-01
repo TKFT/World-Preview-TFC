@@ -290,46 +290,56 @@ public class TFCSampleUtils
             return 0xFF222222;
         }
 
-        ForestType type = ForestType.valueOf(forestId);
+        return forestColor(ForestType.valueOf(forestId));
+    }
 
-        if (type == ForestType.GRASSLAND)
+    private static int forestColor(ForestType type)
+    {
+        return switch (type)
         {
-            return 0xFFB6C96A;
-        }
-        if (type == ForestType.CLEARING)
-        {
-            return 0xFFD0D884;
-        }
-        if (type == ForestType.SHRUBLAND)
-        {
-            return 0xFF8EA35A;
-        }
-        if (type == ForestType.SPARSE)
-        {
-            return 0xFF789A58;
-        }
-        if (type.isSavanna())
-        {
-            return 0xFFC8A94F;
-        }
-        if (type.isPrimary())
-        {
-            return 0xFF1F5E2E;
-        }
-        if (type.isSecondary())
-        {
-            return 0xFF3D7A3A;
-        }
-        if (type.isEdge())
-        {
-            return 0xFF6F9442;
-        }
-        if (type.isDead())
-        {
-            return 0xFF6F6256;
-        }
+            // Open / no forest
+            case GRASSLAND -> 0xFFCEDB7A;
+            case CLEARING -> 0xFFD9E28F;
 
-        return 0xFF777777;
+            // Low woody vegetation
+            case SHRUBLAND -> 0xFFA8B85E;
+            case SPARSE -> 0xFF8EA95A;
+
+            // Savanna palette
+            case SAVANNA_MONOCULTURE -> 0xFFC9B65A;
+            case SAVANNA_DIVERSE -> 0xFFBDA94D;
+            case SAVANNA_ALTERNATE -> 0xFFB19B43;
+            case SAVANNA_SHRUB_MONOCULTURE -> 0xFFA88F3D;
+            case SAVANNA_SHRUB_DIVERSE -> 0xFF9B8237;
+            case SAVANNA_SHRUB_ALTERNATE -> 0xFF8E7632;
+
+            // Forest edge palette
+            case EDGE_MONOCULTURE -> 0xFF88B45B;
+            case EDGE_DIVERSE -> 0xFF76A84F;
+            case EDGE_ALTERNATE -> 0xFF669A45;
+            case EDGE_BAMBOO -> 0xFF7FAF64;
+
+            // Secondary forest palette
+            case SECONDARY_MONOCULTURE -> 0xFF4F8F3F;
+            case SECONDARY_MONOCULTURE_TALL -> 0xFF467F39;
+            case SECONDARY_DIVERSE -> 0xFF3F803A;
+            case SECONDARY_DIVERSE_TALL -> 0xFF357136;
+            case SECONDARY_ALTERNATE -> 0xFF2F6B32;
+            case SECONDARY_DENSE -> 0xFF286331;
+            case SECONDARY_DENSE_TALL -> 0xFF20582D;
+            case SECONDARY_BAMBOO -> 0xFF5E9B4B;
+
+            // Primary forest palette
+            case PRIMARY_MONOCULTURE -> 0xFF1F6235;
+            case PRIMARY_DIVERSE -> 0xFF154F2D;
+            case PRIMARY_ALTERNATE -> 0xFF0F4328;
+
+            // Dead forest palette
+            case DEAD_MONOCULTURE -> 0xFF766A58;
+            case DEAD_DIVERSE -> 0xFF675C50;
+            case DEAD_ALTERNATE -> 0xFF50483F;
+            case DEAD_BAMBOO -> 0xFF6D6A4E;
+        };
     }
 
     public ChunkData sampleChunkData(ChunkPos chunkPos)

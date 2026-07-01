@@ -68,6 +68,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] tfcTemperatureColorMap;
     private int[] tfcRainfallColorMap;
     private boolean[] cavesMap;
+    private boolean[] oceanBiomeMap;
+    private boolean loggedInvalidBiomeId = false;
     private IconData[] structureIcons;
     private IconData[] featureIcons;
     private IconData playerIcon;
@@ -179,12 +181,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.colorMap = new int[rawBiomeMap.length];
         this.colorMapGrayScale = new int[rawBiomeMap.length];
         this.cavesMap = new boolean[rawBiomeMap.length];
+        this.oceanBiomeMap = new boolean[rawBiomeMap.length];
 
         for (short i = 0; i < rawBiomeMap.length; i++)
         {
             this.colorMap[i] = textureColor(rawBiomeMap[i].color());
             this.colorMapGrayScale[i] = grayScale(this.colorMap[i]);
             this.cavesMap[i] = rawBiomeMap[i].isCave();
+            this.oceanBiomeMap[i] = rawBiomeMap[i].tag().getPath().contains("ocean");
         }
     }
 
@@ -305,7 +309,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 Matrix4f matrix4f = new Matrix4f().setOrtho(0.0F, (float) winWidth, (float) winHeight, 0.0F, 1000.0F, 21000.0F);
                 RenderSystem.setProjectionMatrix(matrix4f, VertexSorting.ORTHOGRAPHIC_Z);
                 this.renderStructures(renderData, guiGraphics);
-                this.renderFeatures(renderData, guiGraphics);
+                this.renderFeatures(renderData);
                 this.renderPlayerAndSpawn(guiGraphics);
                 matrix4f = new Matrix4f().setOrtho(0.0F, (float) (winWidth / guiScale), (float) (winHeight / guiScale), 0.0F, 1000.0F, 21000.0F);
                 RenderSystem.setProjectionMatrix(matrix4f, VertexSorting.ORTHOGRAPHIC_Z);
@@ -357,8 +361,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private void putHoverStructEntry(TextureCoordinate pos, StructHoverHelperEntry entry)
     {
-        int cellX = Math.max(0, Math.min(this.hoverHelperGridWidth - 1, pos.x / PreviewSection.SIZE));
-        int cellZ = Math.max(0, Math.min(this.hoverHelperGridHeight - 1, pos.z / PreviewSection.SIZE));
+        int cellX = Math.clamp(pos.x / PreviewSection.SIZE, 0, this.hoverHelperGridWidth - 1);
+        int cellZ = Math.clamp(pos.z / PreviewSection.SIZE, 0, this.hoverHelperGridHeight - 1);
         this.hoverHelperGrid[cellX * this.hoverHelperGridHeight + cellZ].entries.add(entry);
     }
 
@@ -449,15 +453,23 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     switch (this.renderSettings.mode)
                     {
                         case BIOMES:
-                            if (rawData >= 0)
+                            if (rawData >= 0 && rawData < this.colorMap.length)
                             {
                                 color = this.selectedBiomeId < 0 && !this.highlightCaves ? this.colorMap[rawData] : this.colorMapGrayScale[rawData];
                                 if (this.selectedBiomeId == rawData || this.highlightCaves && this.cavesMap[rawData])
                                 {
                                     color = this.colorMap[rawData];
                                 }
-
                                 this.workingVisibleBiomes[rawData]++;
+                            }
+                            else if (rawData >= 0)
+                            {
+                                if (!this.loggedInvalidBiomeId)
+                                {
+                                    WorldPreview.LOGGER.warn("Invalid biome id {} out of range (colorMap length {})", rawData, this.colorMap.length);
+                                    this.loggedInvalidBiomeId = true;
+                                }
+                                color = 0xFFFF00FF;
                             }
                             break;
                         case HEIGHTMAP:
@@ -479,7 +491,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 else
                                 {
                                     float normalized = (rawData + 32768.0F) / 65535.0F;
-                                    int idx = Math.min(1023, Math.max(0, (int) (normalized * 1023.0F)));
+                                    int idx = Math.clamp((int) (normalized * 1023.0F), 0, 1023);
                                     color = this.tfcTemperatureColorMap[idx];
                                 }
                             }
@@ -497,7 +509,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 else
                                 {
                                     float normalized = rawData / 32767.0F;
-                                    int idx = Math.min(1023, Math.max(0, (int) (normalized * 1023.0F)));
+                                    int idx = Math.clamp((int) (normalized * 1023.0F), 0, 1023);
                                     color = this.tfcRainfallColorMap[idx];
                                 }
                             }
@@ -582,6 +594,16 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_FOREST_TYPE:
+                            {
+                                int quartXCoord = r.dataSection.quartX() + x;
+                                int quartZCoord = r.dataSection.quartZ() + z;
+                                short biomeId = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, 0L);
+                                if (biomeId >= 0 && biomeId < this.oceanBiomeMap.length && this.oceanBiomeMap[biomeId])
+                                {
+                                    color = 0xFF8B0000;  // Ocean - Dark Blue
+                                    break;
+                                }
+                            }
                             if (rawData >= 0)
                             {
                                 color = TFCSampleUtils.getForestTypeColor(rawData);
@@ -684,7 +706,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
     }
 
-    private void renderFeatures(List<RenderHelper> renderData, GuiGraphics guiGraphics)
+    private void renderFeatures(List<RenderHelper> renderData)
     {
         if (!this.showFeatures || this.featureIcons == null || this.featureIcons.length == 0)
         {
@@ -806,10 +828,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int visMinZ = (int) (this.getY() * guiScale);
         int visMaxZ = (int) ((this.getY() + this.height) * guiScale);
 
-        screenMinX = Math.max(visMinX, Math.min(visMaxX, screenMinX));
-        screenMaxX = Math.max(visMinX, Math.min(visMaxX, screenMaxX));
-        screenMinZ = Math.max(visMinZ, Math.min(visMaxZ, screenMinZ));
-        screenMaxZ = Math.max(visMinZ, Math.min(visMaxZ, screenMaxZ));
+        screenMinX = Math.clamp(screenMinX, visMinX, visMaxX);
+        screenMaxX = Math.clamp(screenMaxX, visMinX, visMaxX);
+        screenMinZ = Math.clamp(screenMinZ, visMinZ, visMaxZ);
+        screenMaxZ = Math.clamp(screenMaxZ, visMinZ, visMaxZ);
 
         int borderColor = 0xAAFFAA00;
         int lineWidth = 2;
@@ -825,7 +847,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         double guiScale = this.minecraft.getWindow().getGuiScale();
         NativeImage icon = iconData.img;
         TextureCoordinate texCenter = this.blockToTexture(pos);
-        texCenter = new TextureCoordinate(Math.max(0, Math.min(this.texWidth, texCenter.x)), Math.max(0, Math.min(this.texHeight, texCenter.z)));
+        texCenter = new TextureCoordinate(Math.clamp(texCenter.x, 0, this.texWidth), Math.clamp(texCenter.z, 0, this.texHeight));
         int texStartX = texCenter.x - icon.getWidth();
         int texStartZ = texCenter.z - icon.getHeight();
         int rXMin = (int) (texStartX + this.getX() * guiScale);
@@ -908,6 +930,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             short tfcRockBot = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_ROCK_BOT.flag);
             short tfcRockType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
             short tfcHotspotAge = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
+            short tfcForestType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
             float tfcTemp = tfcTempRaw > -32768 ? TFCSampleUtils.denormalizeTemperature(tfcTempRaw) : Float.NaN;
             float tfcRain = tfcRainRaw > -32768 ? TFCSampleUtils.denormalizeRainfall(tfcRainRaw) : Float.NaN;
 
@@ -915,7 +938,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             {
                 return new HoverInfo(
                     xMin + xPos, center.getY(), zMin + zPos, null, height, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
-                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge
+                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge, tfcForestType
                 );
             }
             else
@@ -947,7 +970,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockMid,
                     tfcRockBot,
                     tfcRockType,
-                    tfcHotspotAge
+                    tfcHotspotAge,
+                    tfcForestType
                 )
                     : new HoverInfo(
                     xMin + xPos,
@@ -961,7 +985,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     erosion / 1.0 / 32767.0,
                     depth / 0.5 / 32767.0,
                     weirdness / 0.75 / 32767.0,
-                    NoiseRouterData.peaksAndValleys(Math.min(1.0F, Math.max(-1.0F, weirdness / 0.75F / 32767.0F))),
+                    NoiseRouterData.peaksAndValleys(Math.clamp(weirdness / 0.75F / 32767.0F, -1.0F, 1.0F)),
                     tfcTemp,
                     tfcRain,
                     tfcLandWater,
@@ -969,7 +993,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockMid,
                     tfcRockBot,
                     tfcRockType,
-                    tfcHotspotAge
+                    tfcHotspotAge,
+                    tfcForestType
                 );
             }
         }
@@ -1171,6 +1196,16 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 tfcInfo.append("\n§3Hotspot Age:§r §b%d§r".formatted((int) hoverInfo.tfcHotspotAge));
                             }
                             break;
+                        case TFC_FOREST_TYPE:
+                            if (hoverInfo.tfcForestType >= 0)
+                            {
+                                tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
+                            }
+                            if (hoverInfo.tfcLandWater > -32768)
+                            {
+                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -1333,7 +1368,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int R = orig >> 16 & 0xFF;
         int G = orig >> 8 & 0xFF;
         int B = orig & 0xFF;
-        int gray = Math.max(32, Math.min(224, (R + G + B) / 3));
+        int gray = Math.clamp((R + G + B) / 3, 32, 224);
         return 0xFF000000 | gray << 16 | gray << 8 | gray;
     }
 
@@ -1402,9 +1437,15 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         short tfcRockMid,
         short tfcRockBot,
         short tfcRockType,
-        short tfcHotspotAge
+        short tfcHotspotAge,
+        short tfcForestType
     )
     {
+        public String getTfcForestTypeName()
+        {
+            return TFCSampleUtils.getForestTypeName(tfcForestType);
+        }
+
         public String getTfcLandWaterName()
         {
             return switch (tfcLandWater)
