@@ -20,12 +20,23 @@ import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
 import net.dries007.tfc.world.chunkdata.ForestType;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
 
 public class TFCSampleUtils
 {
+    public static final short VALUE_INVALID = -1;
+    public static final short VALUE_WATER   = -2;
+    public static final int   COLOR_INVALID = 0xFF222222;
+    public static final int   COLOR_WATER   = 0xFF1C5596;
+
+    public static boolean isOceanBiome(ResourceLocation biomeId)
+    {
+        return biomeId.getPath().contains("ocean");
+    }
+
 
     private final RegionGenerator regionGenerator;
     private final Settings settings;

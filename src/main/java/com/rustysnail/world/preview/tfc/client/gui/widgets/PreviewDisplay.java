@@ -68,7 +68,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] tfcTemperatureColorMap;
     private int[] tfcRainfallColorMap;
     private boolean[] cavesMap;
-    private boolean[] oceanBiomeMap;
     private boolean loggedInvalidBiomeId = false;
     private IconData[] structureIcons;
     private IconData[] featureIcons;
@@ -181,14 +180,12 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.colorMap = new int[rawBiomeMap.length];
         this.colorMapGrayScale = new int[rawBiomeMap.length];
         this.cavesMap = new boolean[rawBiomeMap.length];
-        this.oceanBiomeMap = new boolean[rawBiomeMap.length];
 
         for (short i = 0; i < rawBiomeMap.length; i++)
         {
             this.colorMap[i] = textureColor(rawBiomeMap[i].color());
             this.colorMapGrayScale[i] = grayScale(this.colorMap[i]);
             this.cavesMap[i] = rawBiomeMap[i].isCave();
-            this.oceanBiomeMap[i] = rawBiomeMap[i].tag().getPath().contains("ocean");
         }
     }
 
@@ -594,19 +591,17 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_FOREST_TYPE:
+                            if (rawData == TFCSampleUtils.VALUE_WATER)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short biomeId = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, 0L);
-                                if (biomeId >= 0 && biomeId < this.oceanBiomeMap.length && this.oceanBiomeMap[biomeId])
-                                {
-                                    color = 0xFF8B0000;  // Ocean - Dark Blue
-                                    break;
-                                }
+                                color = TFCSampleUtils.COLOR_WATER;
                             }
-                            if (rawData >= 0)
+                            else if (rawData >= 0)
                             {
                                 color = TFCSampleUtils.getForestTypeColor(rawData);
+                            }
+                            else
+                            {
+                                color = TFCSampleUtils.COLOR_INVALID;
                             }
                             break;
                         case TFC_HOTSPOT:

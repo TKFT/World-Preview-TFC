@@ -184,7 +184,7 @@ public class TFCRegionWorkUnit extends WorkUnit
 
                     PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
 
-                    short forestTypeId = -1;
+                    short forestTypeId = TFCSampleUtils.VALUE_INVALID;
                     if (this.tfcSampleUtils != null)
                     {
                         try
@@ -284,7 +284,17 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
-                        this.sampler.expandRaw(pos, forestTypeId, forestTypeResult);
+                        short forestTypeValue = forestTypeId;
+                        if (forestTypeId >= 0)
+                        {
+                            long bkey = packBlockKey(pos.getX(), pos.getZ());
+                            ResourceKey<Biome> biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
+                            if (TFCSampleUtils.isOceanBiome(biomeKey.location()))
+                            {
+                                forestTypeValue = TFCSampleUtils.VALUE_WATER;
+                            }
+                        }
+                        this.sampler.expandRaw(pos, forestTypeValue, forestTypeResult);
 
                     }
 
