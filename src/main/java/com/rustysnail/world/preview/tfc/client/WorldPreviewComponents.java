@@ -97,6 +97,7 @@ public class WorldPreviewComponents
     public static final Component BTN_TFC_ROCK_TYPE = Component.translatable("world_preview_tfc.button.tfc_rock_type");
     public static final Component BTN_TFC_KAOLINITE = Component.translatable("world_preview_tfc.button.tfc_kaolinite.tooltip");
     public static final Component BTN_TFC_FOREST_TYPE = Component.translatable("world_preview_tfc.button.tfc_forest_type");
+    public static final Component BTN_TFC_TREE_SPECIES = Component.translatable("world_preview_tfc.button.tfc_tree_species");
     public static final Component BTN_TFC_HOTSPOT = Component.translatable("world_preview_tfc.button.tfc_hotspot");
     public static final Component BTN_RESOLUTION_TOOLTIP = Component.translatable("world_preview_tfc.button.resolution.tooltip");
     // Seed search tab / container

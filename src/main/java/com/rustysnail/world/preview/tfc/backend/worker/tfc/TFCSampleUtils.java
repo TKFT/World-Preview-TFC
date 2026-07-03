@@ -25,6 +25,9 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class TFCSampleUtils
 {
     public static final short VALUE_INVALID = -1;
@@ -261,6 +264,131 @@ public class TFCSampleUtils
         return ROCK_COLORS[rockId];
     }
 
+    // --------------- Dominant Tree Species ---------------
+
+    public static final String[] TREE_SPECIES_NAMES = {
+        "acacia", "ash", "aspen", "birch", "blackwood", "chestnut",
+        "douglas_fir", "hickory", "kapok", "mangrove", "maple", "oak",
+        "palm", "pine", "rosewood", "sequoia", "spruce", "sycamore",
+        "white_cedar", "willow"
+    };
+
+    // [minTemp, maxTemp, minGroundwater, maxGroundwater, minRainVariance, maxRainVariance, absRainVariance(1=abs)]
+    // Climate ranges copied verbatim from tfc:worldgen/configured_feature/tree/*_entry.json
+    private static final float[][] TREE_SPECIES_CLIMATE = {
+        {  10.4f,  40.0f,  90f, 500f,  0.40f,  0.85f, 1 }, // 0 acacia
+        {   1.4f,  15.8f,  60f, 380f, -0.20f,  1.00f, 0 }, // 1 ash
+        { -14.2f,   5.0f, 350f, 500f, -0.65f,  1.00f, 0 }, // 2 aspen
+        {  -9.4f,   8.6f, 125f, 360f, -0.60f,  0.80f, 0 }, // 3 birch
+        {  10.4f,  40.0f,  35f, 215f, -1.00f,  1.00f, 0 }, // 4 blackwood
+        {  -0.4f,  14.0f, 150f, 340f, -0.20f,  1.00f, 0 }, // 5 chestnut
+        { -14.2f,   8.6f, 270f, 500f, -1.00f,  0.10f, 0 }, // 6 douglas_fir
+        {   6.8f,  17.6f, 210f, 500f, -0.40f,  0.60f, 0 }, // 7 hickory
+        {  19.4f,  40.0f, 300f, 500f, -0.55f,  0.55f, 0 }, // 8 kapok
+        {  15.8f,  40.0f, 200f, 500f, -1.00f,  1.00f, 0 }, // 9 mangrove
+        {  -5.8f,  10.4f, 200f, 450f, -0.80f,  1.00f, 0 }, // 10 maple
+        {  -0.4f,  17.6f, 210f, 500f, -0.50f,  0.75f, 0 }, // 11 oak
+        {  17.6f,  40.0f, 150f, 330f, -0.70f,  0.70f, 0 }, // 12 palm
+        { -14.2f,  12.2f,  90f, 320f, -1.00f,  0.75f, 0 }, // 13 pine
+        {  12.2f,  40.0f, 200f, 500f,  0.65f,  1.00f, 1 }, // 14 rosewood
+        {   5.0f,  14.0f, 215f, 500f, -1.00f, -0.40f, 0 }, // 15 sequoia
+        { -16.0f,  -4.0f, 220f, 500f, -1.00f,  1.00f, 0 }, // 16 spruce
+        {  -4.0f,  17.6f, 330f, 500f, -0.15f,  1.00f, 0 }, // 17 sycamore
+        { -14.2f,   3.2f, 100f, 285f, -0.45f,  0.65f, 0 }, // 18 white_cedar
+        {   8.6f,  26.6f, 330f, 500f, -0.55f,  1.00f, 0 }, // 19 willow
+    };
+
+    private static final int[] TREE_SPECIES_COLORS = {
+        0xFFCCB840, // 0 acacia      - warm olive / dry savanna
+        0xFF7B9F62, // 1 ash         - medium temperate green
+        0xFFDFCC70, // 2 aspen       - golden grove
+        0xFFB8C882, // 3 birch       - pale yellow-green
+        0xFF5C4A28, // 4 blackwood   - dark olive-brown
+        0xFF7A6030, // 5 chestnut    - earthy warm brown
+        0xFF2A5C2A, // 6 douglas_fir - dark forest green
+        0xFFC09040, // 7 hickory     - golden amber
+        0xFF38A848, // 8 kapok       - bright tropical green
+        0xFF405838, // 9 mangrove    - dark murky coastal green
+        0xFFC84030, // 10 maple      - vivid red-orange (autumn)
+        0xFF5A8C40, // 11 oak        - classic mid-green
+        0xFF7AC048, // 12 palm       - light tropical yellow-green
+        0xFF306845, // 13 pine       - deep blue-green conifer
+        0xFFB84870, // 14 rosewood   - rose / magenta
+        0xFF883860, // 15 sequoia    - deep red-purple
+        0xFF386860, // 16 spruce     - cold steel blue-green
+        0xFF7CA060, // 17 sycamore   - medium gray-green
+        0xFF60A890, // 18 white_cedar - cool cyan-green
+        0xFFA0C848, // 19 willow     - yellow-lime
+    };
+
+    /**
+     * Resolves the dominant (most climate-suitable) tree species for a given chunk position.
+     * Mirrors ForestConfig.Entry.isValid() and distanceFromMean() from TFC's ForestFeature,
+     * but uses hardcoded climate tables instead of runtime feature-config access.
+     * Assumes northern hemisphere (no rain-variance sign flip).
+     */
+    public static short resolveDominantTreeSpecies(ChunkData chunkData, int blockX, int blockZ)
+    {
+        float temperature = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
+        float groundwater = chunkData.getAverageGroundwater(blockX, blockZ);
+        float rainVariance = chunkData.getRainVariance(blockX, blockZ);
+        final int elevation = 63; // TFC SEA_LEVEL_Y; all species span -64..320 so elev check always passes
+
+        short bestId = VALUE_INVALID;
+        float bestDist = Float.MAX_VALUE;
+
+        for (short i = 0; i < TREE_SPECIES_CLIMATE.length; i++)
+        {
+            float[] c = TREE_SPECIES_CLIMATE[i];
+            float adjRV = c[6] != 0 ? Math.abs(rainVariance) : rainVariance;
+
+            if (temperature >= c[0] && temperature <= c[1]
+                && groundwater >= c[2] && groundwater <= c[3]
+                && adjRV >= c[4] && adjRV <= c[5])
+            {
+                // Mirror TFC ForestConfig.Entry.distanceFromMean exactly
+                float halfTempRange = (c[1] - c[0]) / 2f;
+                float halfGWRange   = (c[3] - c[2]) / 2f;
+                float halfRVRange   = (c[5] - c[4]) / 2f;
+                float halfElevRange = (320f - (-64f)) / 2f;
+
+                float dist = (temperature - halfTempRange)   * 10f
+                           + (groundwater  - halfGWRange)
+                           + (adjRV        - halfRVRange)    * 250f
+                           + (elevation    - halfElevRange)  * 5f;
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestId = i;
+                }
+            }
+        }
+        return bestId;
+    }
+
+    public static int getTreeSpeciesColor(short treeId)
+    {
+        if (treeId < 0 || treeId >= TREE_SPECIES_COLORS.length) return COLOR_INVALID;
+        return TREE_SPECIES_COLORS[treeId];
+    }
+
+    public static String getTreeSpeciesName(short treeId)
+    {
+        if (treeId < 0 || treeId >= TREE_SPECIES_NAMES.length) return "Unknown";
+        String raw = TREE_SPECIES_NAMES[treeId].replace('_', ' ');
+        StringBuilder sb = new StringBuilder(raw.length());
+        boolean cap = true;
+        for (int i = 0; i < raw.length(); i++)
+        {
+            char ch = raw.charAt(i);
+            if (cap && Character.isLetter(ch)) { sb.append(Character.toUpperCase(ch)); cap = false; }
+            else { sb.append(ch); }
+            if (ch == ' ') cap = true;
+        }
+        return sb.toString();
+    }
+
     public static String getForestTypeName(short forestId)
     {
         if (forestId < 0 || forestId >= ForestType.values().length)
@@ -357,5 +485,55 @@ public class TFCSampleUtils
     {
         ChunkData data = new ChunkData(this.chunkDataGenerator, chunkPos);
         return this.chunkDataGenerator.generate(data);
+    }
+
+    public static String getForestDensityLabel(short forestId)
+    {
+        if (forestId < 0 || forestId >= ForestType.values().length) return null;
+        ForestType type = ForestType.valueOf(forestId);
+        if (type.isPrimary()) return "Dense Forest";
+        if (type.isSecondary()) return "Closed Forest";
+        if (type.isEdge()) return "Open Forest";
+        if (type.isSavanna()) return "Savanna";
+        if (type.isDead()) return "Dead Forest";
+        return switch (type.getSerializedName())
+        {
+            case "shrubland" -> "Shrubs Only";
+            case "sparse" -> "Sparse Trees";
+            default -> "No Trees"; // grassland, clearing
+        };
+    }
+
+    public static List<String> resolveAllPossibleSpeciesNames(ChunkData chunkData, int blockX, int blockZ)
+    {
+        float temperature = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
+        float groundwater = chunkData.getAverageGroundwater(blockX, blockZ);
+        float rainVariance = chunkData.getRainVariance(blockX, blockZ);
+        final int elevation = 63;
+
+        List<float[]> candidates = new ArrayList<>();
+        for (short i = 0; i < TREE_SPECIES_CLIMATE.length; i++)
+        {
+            float[] c = TREE_SPECIES_CLIMATE[i];
+            float adjRV = c[6] != 0 ? Math.abs(rainVariance) : rainVariance;
+            if (temperature >= c[0] && temperature <= c[1]
+                && groundwater >= c[2] && groundwater <= c[3]
+                && adjRV >= c[4] && adjRV <= c[5])
+            {
+                float halfTempRange = (c[1] - c[0]) / 2f;
+                float halfGWRange   = (c[3] - c[2]) / 2f;
+                float halfRVRange   = (c[5] - c[4]) / 2f;
+                float halfElevRange = (320f - (-64f)) / 2f;
+                float dist = (temperature - halfTempRange) * 10f
+                           + (groundwater  - halfGWRange)
+                           + (adjRV        - halfRVRange)  * 250f
+                           + (elevation    - halfElevRange) * 5f;
+                candidates.add(new float[]{ i, dist });
+            }
+        }
+        candidates.sort((a, b) -> Float.compare(a[1], b[1]));
+        List<String> result = new ArrayList<>(candidates.size());
+        for (float[] c : candidates) result.add(getTreeSpeciesName((short) c[0]));
+        return result;
     }
 }

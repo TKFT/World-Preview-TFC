@@ -175,5 +175,6 @@
   "world_preview_tfc.search.biome_mode.all": "All Biomes (AND)",
   "world_preview_tfc.search.biome_mode.tooltip": "Toggle between matching ANY selected biome (OR) or ALL selected biomes (AND).",
   "feature.worldpreview.stratovolcano": "Stratovolcanoes",
-  "world_preview_tfc.button.tfc_forest_type": "Forest Types"
+  "world_preview_tfc.button.tfc_forest_type": "Forest Types",
+  "world_preview_tfc.button.tfc_tree_species": "Dominant Tree Species - Shows the most climate-suitable tree species for each location"
 }

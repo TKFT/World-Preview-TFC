@@ -38,6 +38,8 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
+import net.minecraft.world.level.ChunkPos;
+import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
@@ -92,6 +94,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int hoverHelperGridHeight;
     private final Queue<Long> frametimes = new ArrayDeque<>();
     private boolean clicked = false;
+    private long lastSpeciesChunkKey = Long.MIN_VALUE;
+    private List<String> cachedPossibleSpecies = List.of();
 
     public PreviewDisplay(Minecraft minecraft, PreviewDisplayDataProvider dataProvider, Component component)
     {
@@ -604,6 +608,20 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 color = TFCSampleUtils.COLOR_INVALID;
                             }
                             break;
+                        case TFC_TREE_SPECIES:
+                            if (rawData == TFCSampleUtils.VALUE_WATER)
+                            {
+                                color = TFCSampleUtils.COLOR_WATER;
+                            }
+                            else if (rawData >= 0)
+                            {
+                                color = TFCSampleUtils.getTreeSpeciesColor(rawData);
+                            }
+                            else
+                            {
+                                color = TFCSampleUtils.COLOR_INVALID;
+                            }
+                            break;
                         case TFC_HOTSPOT:
                             if (rawData > -32768)
                             {
@@ -926,6 +944,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             short tfcRockType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
             short tfcHotspotAge = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
             short tfcForestType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
+            short tfcTreeSpecies = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag);
             float tfcTemp = tfcTempRaw > -32768 ? TFCSampleUtils.denormalizeTemperature(tfcTempRaw) : Float.NaN;
             float tfcRain = tfcRainRaw > -32768 ? TFCSampleUtils.denormalizeRainfall(tfcRainRaw) : Float.NaN;
 
@@ -933,7 +952,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             {
                 return new HoverInfo(
                     xMin + xPos, center.getY(), zMin + zPos, null, height, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
-                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge, tfcForestType
+                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge, tfcForestType, tfcTreeSpecies
                 );
             }
             else
@@ -966,7 +985,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockBot,
                     tfcRockType,
                     tfcHotspotAge,
-                    tfcForestType
+                    tfcForestType,
+                    tfcTreeSpecies
                 )
                     : new HoverInfo(
                     xMin + xPos,
@@ -989,7 +1009,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockBot,
                     tfcRockType,
                     tfcHotspotAge,
-                    tfcForestType
+                    tfcForestType,
+                    tfcTreeSpecies
                 );
             }
         }
@@ -1192,14 +1213,47 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_FOREST_TYPE:
-                            if (hoverInfo.tfcForestType >= 0)
+                            if (hoverInfo.entry != null)
+                                tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
+                            if (hoverInfo.tfcForestType == TFCSampleUtils.VALUE_WATER)
+                            {
+                                tfcInfo.append("\n§7Trees: None — ocean biome§r");
+                            }
+                            else if (hoverInfo.tfcForestType >= 0)
                             {
                                 tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
+                                String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
+                                if (densityLabel != null)
+                                    tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
                             }
                             if (hoverInfo.tfcLandWater > -32768)
-                            {
                                 tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
+                            break;
+                        case TFC_TREE_SPECIES:
+                            if (hoverInfo.entry != null)
+                                tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
+                            if (hoverInfo.tfcTreeSpecies == TFCSampleUtils.VALUE_WATER)
+                            {
+                                tfcInfo.append("\n§7Trees: None — ocean biome§r");
                             }
+                            else
+                            {
+                                String dominantName = hoverInfo.tfcTreeSpecies >= 0
+                                    ? hoverInfo.getTfcTreeSpeciesName() : "None";
+                                tfcInfo.append("\n§3Dominant Tree:§r §b%s§r".formatted(dominantName));
+                                List<String> possible = getPossibleSpecies(hoverInfo.blockX, hoverInfo.blockZ);
+                                String possibleStr = possible.isEmpty() ? "None" : String.join(", ", possible);
+                                tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(possibleStr));
+                                if (hoverInfo.tfcForestType >= 0)
+                                {
+                                    tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
+                                    String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
+                                    if (densityLabel != null)
+                                        tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
+                                }
+                            }
+                            if (hoverInfo.tfcLandWater > -32768)
+                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
                             break;
                         default:
                             break;
@@ -1258,6 +1312,29 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             tfcClimate = "\n\n§6TFC Climate§r\n§3Temp:§r " + tfcTempStr + "  §3Rain:§r " + tfcRainStr;
         }
         return tfcClimate;
+    }
+
+    private List<String> getPossibleSpecies(int blockX, int blockZ)
+    {
+        long chunkKey = ((long) (blockX >> 4) << 32) | ((blockZ >> 4) & 0xFFFFFFFFL);
+        if (chunkKey == this.lastSpeciesChunkKey) return this.cachedPossibleSpecies;
+        this.lastSpeciesChunkKey = chunkKey;
+        TFCSampleUtils tfcSu = this.workManager.tfcSampleUtils();
+        if (tfcSu == null)
+        {
+            this.cachedPossibleSpecies = List.of();
+            return this.cachedPossibleSpecies;
+        }
+        try
+        {
+            ChunkData data = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
+            this.cachedPossibleSpecies = TFCSampleUtils.resolveAllPossibleSpeciesNames(data, blockX, blockZ);
+        }
+        catch (Exception e)
+        {
+            this.cachedPossibleSpecies = List.of();
+        }
+        return this.cachedPossibleSpecies;
     }
 
     public void playDownSound(@NotNull SoundManager handler)
@@ -1433,12 +1510,18 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         short tfcRockBot,
         short tfcRockType,
         short tfcHotspotAge,
-        short tfcForestType
+        short tfcForestType,
+        short tfcTreeSpecies
     )
     {
         public String getTfcForestTypeName()
         {
             return TFCSampleUtils.getForestTypeName(tfcForestType);
+        }
+
+        public String getTfcTreeSpeciesName()
+        {
+            return TFCSampleUtils.getTreeSpeciesName(tfcTreeSpecies);
         }
 
         public String getTfcLandWaterName()

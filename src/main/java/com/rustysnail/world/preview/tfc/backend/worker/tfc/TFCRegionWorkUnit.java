@@ -169,6 +169,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     PreviewSection rockTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
                     PreviewSection kaolinSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_KAOLINITE.flag);
                     PreviewSection forestTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
+                    PreviewSection treeSpeciesSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag);
                     PreviewSection hotspotSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
 
                     WorkResult tempResult = new WorkResult(this, 0, tempSection, new ArrayList<>(16), List.of());
@@ -181,20 +182,24 @@ public class TFCRegionWorkUnit extends WorkUnit
                     WorkResult kaolinResult = new WorkResult(this, 0, kaolinSection, new ArrayList<>(16), List.of());
                     WorkResult hotspotResult = new WorkResult(this, 0, hotspotSection, new ArrayList<>(16), List.of());
                     WorkResult forestTypeResult = new WorkResult(this, 0, forestTypeSection, new ArrayList<>(16), List.of());
+                    WorkResult treeSpeciesResult = new WorkResult(this, 0, treeSpeciesSection, new ArrayList<>(16), List.of());
 
                     PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
 
                     short forestTypeId = TFCSampleUtils.VALUE_INVALID;
+                    short treeSpeciesId = TFCSampleUtils.VALUE_INVALID;
                     if (this.tfcSampleUtils != null)
                     {
                         try
                         {
                             ChunkData chunkData = this.tfcSampleUtils.sampleChunkData(cp);
                             forestTypeId = (short) chunkData.getForestType().ordinal();
+                            treeSpeciesId = TFCSampleUtils.resolveDominantTreeSpecies(
+                                chunkData, cp.getMiddleBlockX(), cp.getMiddleBlockZ());
                         }
                         catch (Exception e)
                         {
-                            WorldPreview.LOGGER.debug("TFC forest type sampling failed for chunk {}: {}", cp, e.getMessage());
+                            WorldPreview.LOGGER.debug("TFC chunk data sampling failed for chunk {}: {}", cp, e.getMessage());
                         }
                     }
 
@@ -296,6 +301,18 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                         this.sampler.expandRaw(pos, forestTypeValue, forestTypeResult);
 
+                        short treeSpeciesValue = treeSpeciesId;
+                        if (treeSpeciesId >= 0)
+                        {
+                            long bkey = packBlockKey(pos.getX(), pos.getZ());
+                            ResourceKey<Biome> biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
+                            if (TFCSampleUtils.isOceanBiome(biomeKey.location()))
+                            {
+                                treeSpeciesValue = TFCSampleUtils.VALUE_WATER;
+                            }
+                        }
+                        this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
+
                     }
 
                     allResults.add(tempResult);
@@ -307,6 +324,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     allResults.add(rockTypeResult);
                     allResults.add(kaolinResult);
                     allResults.add(forestTypeResult);
+                    allResults.add(treeSpeciesResult);
                     allResults.add(hotspotResult);
                 }
             }
