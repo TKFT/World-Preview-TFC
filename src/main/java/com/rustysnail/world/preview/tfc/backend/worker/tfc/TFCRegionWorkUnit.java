@@ -302,7 +302,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
-                        short treeMapWater = classifyTreeMapWater(pos, landWaterValue);
+                        short treeMapWater = classifyTreeMapWater(pos);
                         switch (treeMapWater)
                         {
                             case LAND_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
@@ -389,18 +389,16 @@ public class TFCRegionWorkUnit extends WorkUnit
 
     /**
      * Per-position water classification for the forest-type / tree-species maps.
-     * Combines the quart-resolution biome layer (oceans, lakes, rivers as biomes) with the
-     * land/water grid result (generated river channels, region-level ocean/lake), so water
-     * stays blue while panning anywhere in the world rather than only in the first viewport.
-     * Returns LAND_WATER_OCEAN / LAND_WATER_LAKE / LAND_WATER_RIVER for water points,
+     * Uses only the sampled BiomeExtension from the generator's BiomeSourceExtension - the
+     * same effective biome lookup (including TFC's river overlay) as the normal biome map -
+     * so the water boundary matches the biome map at quart resolution. The coarse
+     * Region.Point land/water grid is deliberately not consulted here; it stays in use for
+     * the standalone TFC_LAND_WATER map only.
+     * Returns LAND_WATER_OCEAN / LAND_WATER_RIVER / LAND_WATER_LAKE for water points,
      * LAND_WATER_LAND otherwise.
      */
-    private short classifyTreeMapWater(BlockPos pos, short landWaterValue)
+    private short classifyTreeMapWater(BlockPos pos)
     {
-        if (landWaterValue == LAND_WATER_OCEAN) return LAND_WATER_OCEAN;
-        if (landWaterValue == LAND_WATER_LAKE) return LAND_WATER_LAKE;
-        if (landWaterValue == LAND_WATER_RIVER) return LAND_WATER_RIVER;
-
         BiomeExtension biome = null;
         if (this.tfcSampleUtils != null)
         {
@@ -410,17 +408,24 @@ public class TFCRegionWorkUnit extends WorkUnit
             }
             catch (Exception e)
             {
-                // Biome layer failure - fall back to the land/water grid alone
+                // Biome source not usable - treat as land rather than guessing
             }
         }
 
-        if (TFCSampleUtils.isTreeMapWaterBiome(biome))
+        if (!TFCSampleUtils.isTreeMapWaterBiome(biome))
         {
-            if (biome.biomeBlendType() == BiomeBlendType.OCEAN) return LAND_WATER_OCEAN;
-            if (biome.key().location().getPath().equals("river")) return LAND_WATER_RIVER;
-            return LAND_WATER_LAKE;
+            return LAND_WATER_LAND;
         }
-        return LAND_WATER_LAND;
+        if (biome.biomeBlendType() == BiomeBlendType.OCEAN)
+        {
+            return LAND_WATER_OCEAN;
+        }
+        if (biome.key().location().getPath().equals("river"))
+        {
+            return LAND_WATER_RIVER;
+        }
+        // LAKE blend type, "lake", "*_lake", "tower_karst_bay"
+        return LAND_WATER_LAKE;
     }
 
     private boolean isInRiver(int blockX, int blockZ)

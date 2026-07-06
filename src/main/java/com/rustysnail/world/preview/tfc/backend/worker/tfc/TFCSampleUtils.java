@@ -8,6 +8,7 @@ import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.Seed;
 import net.dries007.tfc.world.biome.BiomeBlendType;
 import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.biome.BiomeSourceExtension;
 import net.dries007.tfc.world.layer.TFCLayers;
 import net.dries007.tfc.world.layer.framework.AreaFactory;
 import net.dries007.tfc.world.layer.framework.ConcurrentArea;
@@ -69,19 +70,22 @@ public class TFCSampleUtils
     @Nullable
     public static TFCSampleUtils create(ChunkGenerator generator, long seed)
     {
-        if (generator instanceof ChunkGeneratorExtension ext)
+        if (generator instanceof ChunkGeneratorExtension ext
+            && generator.getBiomeSource() instanceof BiomeSourceExtension biomeSource)
         {
-            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), seed);
+            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), biomeSource, seed);
         }
         return null;
     }
 
     private final ConcurrentArea<BiomeExtension> biomeLayer;
+    private final BiomeSourceExtension biomeSource;
 
-    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, long seed)
+    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, long seed)
     {
         this.settings = settings;
         this.rockLayerSettings = rockLayerSettings;
+        this.biomeSource = biomeSource;
         Seed tfcSeed = Seed.of(seed);
         this.regionGenerator = new RegionGenerator(settings, tfcSeed);
 
@@ -105,9 +109,15 @@ public class TFCSampleUtils
         return this.biomeLayer::get;
     }
 
+    /**
+     * Samples the effective biome the way the normal biome map does: through the generator's
+     * {@link BiomeSourceExtension}, whose getBiomeExtension applies TFC's river overlay on top
+     * of the raw biome layer. Do not swap this back to the raw ConcurrentArea biomeLayer -
+     * that layer has no rivers.
+     */
     public @Nullable BiomeExtension sampleBiomeExtension(int blockX, int blockZ)
     {
-        return this.biomeLayer.get(
+        return this.biomeSource.getBiomeExtension(
             QuartPos.fromBlock(blockX),
             QuartPos.fromBlock(blockZ)
         );
