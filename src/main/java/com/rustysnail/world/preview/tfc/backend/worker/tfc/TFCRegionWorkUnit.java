@@ -290,26 +290,16 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
                         short forestTypeValue = forestTypeId;
-                        if (forestTypeId >= 0)
+                        if (forestTypeId >= 0 && landWaterValue == LAND_WATER_OCEAN)
                         {
-                            long bkey = packBlockKey(pos.getX(), pos.getZ());
-                            ResourceKey<Biome> biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
-                            if (TFCSampleUtils.isOceanBiome(biomeKey.location()))
-                            {
-                                forestTypeValue = TFCSampleUtils.VALUE_WATER;
-                            }
+                            forestTypeValue = TFCSampleUtils.VALUE_WATER;
                         }
                         this.sampler.expandRaw(pos, forestTypeValue, forestTypeResult);
 
                         short treeSpeciesValue = treeSpeciesId;
-                        if (treeSpeciesId >= 0)
+                        if (treeSpeciesId >= 0 && landWaterValue == LAND_WATER_OCEAN)
                         {
-                            long bkey = packBlockKey(pos.getX(), pos.getZ());
-                            ResourceKey<Biome> biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
-                            if (TFCSampleUtils.isOceanBiome(biomeKey.location()))
-                            {
-                                treeSpeciesValue = TFCSampleUtils.VALUE_WATER;
-                            }
+                            treeSpeciesValue = TFCSampleUtils.VALUE_WATER;
                         }
                         this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
 
