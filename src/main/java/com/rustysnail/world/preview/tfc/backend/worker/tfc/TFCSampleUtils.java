@@ -6,6 +6,7 @@ import com.rustysnail.world.preview.tfc.backend.search.FeatureQuery;
 
 import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.Seed;
+import net.dries007.tfc.world.biome.BiomeBlendType;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.layer.TFCLayers;
 import net.dries007.tfc.world.layer.framework.AreaFactory;
@@ -20,7 +21,7 @@ import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
 import net.dries007.tfc.world.chunkdata.ForestType;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
@@ -35,11 +36,30 @@ public class TFCSampleUtils
     public static final int   COLOR_INVALID = 0xFF222222;
     public static final int   COLOR_WATER   = 0xFF1C5596;
 
-    public static boolean isOceanBiome(ResourceLocation biomeId)
+    /**
+     * Classifies a biome as water for the forest-type / tree-species maps.
+     * Uses the blend type for oceans and lakes plus exact/suffix path matches
+     * for river and lake variants; deliberately avoids substring checks like
+     * contains("ocean") or contains("river") which would swallow
+     * oceanic_mountains and river_valley.
+     */
+    public static boolean isTreeMapWaterBiome(@Nullable BiomeExtension biome)
     {
-        return biomeId.getPath().contains("ocean");
-    }
+        if (biome == null)
+        {
+            return false;
+        }
 
+        BiomeBlendType blendType = biome.biomeBlendType();
+        String path = biome.key().location().getPath();
+
+        return blendType == BiomeBlendType.OCEAN
+            || blendType == BiomeBlendType.LAKE
+            || path.equals("river")
+            || path.equals("lake")
+            || path.endsWith("_lake")
+            || path.equals("tower_karst_bay");
+    }
 
     private final RegionGenerator regionGenerator;
     private final Settings settings;
@@ -83,6 +103,14 @@ public class TFCSampleUtils
     public FeatureQuery.BiomeLookup biomeLookup()
     {
         return this.biomeLayer::get;
+    }
+
+    public @Nullable BiomeExtension sampleBiomeExtension(int blockX, int blockZ)
+    {
+        return this.biomeLayer.get(
+            QuartPos.fromBlock(blockX),
+            QuartPos.fromBlock(blockZ)
+        );
     }
 
     public static BiomeExtension getBiomeExtensionFromPoint(Region.Point point)

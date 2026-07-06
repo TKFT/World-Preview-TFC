@@ -13,6 +13,7 @@ import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkResult;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 
+import net.dries007.tfc.world.biome.BiomeBlendType;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.region.Region;
@@ -52,12 +53,22 @@ public class TFCRegionWorkUnit extends WorkUnit
     private static final AtomicInteger gridCellsSampled = new AtomicInteger(0);
     private static long generationStartTime = 0;
 
+    // Temporary debug counters for tree-map water classification
+    private static final AtomicInteger treeMapOceanPoints = new AtomicInteger(0);
+    private static final AtomicInteger treeMapLakePoints = new AtomicInteger(0);
+    private static final AtomicInteger treeMapRiverPoints = new AtomicInteger(0);
+    private static final AtomicInteger treeMapLandPoints = new AtomicInteger(0);
+
     public static void resetStats()
     {
         totalUnitsQueued.set(0);
         unitsCompleted.set(0);
         totalTimeMs.set(0);
         gridCellsSampled.set(0);
+        treeMapOceanPoints.set(0);
+        treeMapLakePoints.set(0);
+        treeMapRiverPoints.set(0);
+        treeMapLandPoints.set(0);
         generationStartTime = System.currentTimeMillis();
         WorldPreview.LOGGER.info("[TFC] Starting new TFC generation batch");
     }
@@ -90,6 +101,8 @@ public class TFCRegionWorkUnit extends WorkUnit
                 total, gridCellsSampled.get(), elapsed,
                 totalTimeMs.get() / total,
                 gridCellsSampled.get() > 0 ? totalTimeMs.get() / gridCellsSampled.get() : 0);
+            WorldPreview.LOGGER.info("[TFC] Tree-map water points: ocean={}, lake={}, river={}, land={}",
+                treeMapOceanPoints.get(), treeMapLakePoints.get(), treeMapRiverPoints.get(), treeMapLandPoints.get());
         }
     }
 
@@ -289,17 +302,35 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
-                        short forestTypeValue = forestTypeId;
-                        if (forestTypeId >= 0 && landWaterValue == LAND_WATER_OCEAN)
+                        short treeMapWater = classifyTreeMapWater(pos, landWaterValue);
+                        switch (treeMapWater)
+                        {
+                            case LAND_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
+                            case LAND_WATER_LAKE -> treeMapLakePoints.incrementAndGet();
+                            case LAND_WATER_RIVER -> treeMapRiverPoints.incrementAndGet();
+                            default -> treeMapLandPoints.incrementAndGet();
+                        }
+                        boolean isWaterPoint = treeMapWater != LAND_WATER_LAND;
+
+                        short forestTypeValue;
+                        if (isWaterPoint)
                         {
                             forestTypeValue = TFCSampleUtils.VALUE_WATER;
                         }
+                        else
+                        {
+                            forestTypeValue = forestTypeId >= 0 ? forestTypeId : TFCSampleUtils.VALUE_INVALID;
+                        }
                         this.sampler.expandRaw(pos, forestTypeValue, forestTypeResult);
 
-                        short treeSpeciesValue = treeSpeciesId;
-                        if (treeSpeciesId >= 0 && landWaterValue == LAND_WATER_OCEAN)
+                        short treeSpeciesValue;
+                        if (isWaterPoint)
                         {
                             treeSpeciesValue = TFCSampleUtils.VALUE_WATER;
+                        }
+                        else
+                        {
+                            treeSpeciesValue = treeSpeciesId >= 0 ? treeSpeciesId : TFCSampleUtils.VALUE_INVALID;
                         }
                         this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
 
@@ -353,6 +384,42 @@ public class TFCRegionWorkUnit extends WorkUnit
         if (p.lake()) return LAND_WATER_LAKE;
         if (p.shore()) return LAND_WATER_SHORE;
         if (!p.land()) return LAND_WATER_OCEAN;
+        return LAND_WATER_LAND;
+    }
+
+    /**
+     * Per-position water classification for the forest-type / tree-species maps.
+     * Combines the quart-resolution biome layer (oceans, lakes, rivers as biomes) with the
+     * land/water grid result (generated river channels, region-level ocean/lake), so water
+     * stays blue while panning anywhere in the world rather than only in the first viewport.
+     * Returns LAND_WATER_OCEAN / LAND_WATER_LAKE / LAND_WATER_RIVER for water points,
+     * LAND_WATER_LAND otherwise.
+     */
+    private short classifyTreeMapWater(BlockPos pos, short landWaterValue)
+    {
+        if (landWaterValue == LAND_WATER_OCEAN) return LAND_WATER_OCEAN;
+        if (landWaterValue == LAND_WATER_LAKE) return LAND_WATER_LAKE;
+        if (landWaterValue == LAND_WATER_RIVER) return LAND_WATER_RIVER;
+
+        BiomeExtension biome = null;
+        if (this.tfcSampleUtils != null)
+        {
+            try
+            {
+                biome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
+            }
+            catch (Exception e)
+            {
+                // Biome layer failure - fall back to the land/water grid alone
+            }
+        }
+
+        if (TFCSampleUtils.isTreeMapWaterBiome(biome))
+        {
+            if (biome.biomeBlendType() == BiomeBlendType.OCEAN) return LAND_WATER_OCEAN;
+            if (biome.key().location().getPath().equals("river")) return LAND_WATER_RIVER;
+            return LAND_WATER_LAKE;
+        }
         return LAND_WATER_LAND;
     }
 
