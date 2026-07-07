@@ -43,6 +43,14 @@ public interface PreviewDisplayDataProvider
 
     void onVisibleRocksChanged(Short2LongMap visibleRocks);
 
+    /**
+     * Visible value counts for the forest-type / tree-species modes: forest ordinals or
+     * species ids plus the reserved water values (VALUE_WATER_OCEAN..VALUE_WATER_RIVER).
+     */
+    default void onVisibleTreeValuesChanged(Short2LongMap visibleTreeValues)
+    {
+    }
+
     StructureRenderInfo[] renderStructureMap();
 
     int[] heightColorMap();

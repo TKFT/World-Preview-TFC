@@ -32,10 +32,45 @@ import java.util.List;
 
 public class TFCSampleUtils
 {
-    public static final short VALUE_INVALID = -1;
-    public static final short VALUE_WATER   = -2;
-    public static final int   COLOR_INVALID = 0xFF222222;
-    public static final int   COLOR_WATER   = 0xFF1C5596;
+    // Reserved positive values for the forest-type / tree-species maps. Positive so they
+    // survive the bit-packed storage/render paths cleanly; kept well above all forest type
+    // ordinals (<30) and tree species ids (<20).
+    public static final short VALUE_WATER_OCEAN = 100;
+    public static final short VALUE_WATER_LAKE  = 101;
+    public static final short VALUE_WATER_RIVER = 102;
+    public static final short VALUE_INVALID     = 103;
+
+    public static final int COLOR_WATER_OCEAN = 0xFF1F4E8C;
+    public static final int COLOR_WATER_LAKE  = 0xFF2F74B8;
+    public static final int COLOR_WATER_RIVER = 0xFF6AA9E9;
+    public static final int COLOR_INVALID     = 0xFF2A2A2A;
+
+    public static boolean isWaterValue(short value)
+    {
+        return value >= VALUE_WATER_OCEAN && value <= VALUE_WATER_RIVER;
+    }
+
+    public static int getWaterColor(short value)
+    {
+        return switch (value)
+        {
+            case VALUE_WATER_OCEAN -> COLOR_WATER_OCEAN;
+            case VALUE_WATER_LAKE -> COLOR_WATER_LAKE;
+            case VALUE_WATER_RIVER -> COLOR_WATER_RIVER;
+            default -> COLOR_INVALID;
+        };
+    }
+
+    public static String getWaterTypeName(short value)
+    {
+        return switch (value)
+        {
+            case VALUE_WATER_OCEAN -> "Ocean";
+            case VALUE_WATER_LAKE -> "Lake";
+            case VALUE_WATER_RIVER -> "River";
+            default -> "Unknown";
+        };
+    }
 
     /**
      * Classifies a biome as water for the forest-type / tree-species maps.
@@ -337,26 +372,26 @@ public class TFCSampleUtils
     };
 
     private static final int[] TREE_SPECIES_COLORS = {
-        0xFFCCB840, // 0 acacia      - warm olive / dry savanna
-        0xFF7B9F62, // 1 ash         - medium temperate green
-        0xFFDFCC70, // 2 aspen       - golden grove
-        0xFFB8C882, // 3 birch       - pale yellow-green
-        0xFF5C4A28, // 4 blackwood   - dark olive-brown
-        0xFF7A6030, // 5 chestnut    - earthy warm brown
-        0xFF2A5C2A, // 6 douglas_fir - dark forest green
-        0xFFC09040, // 7 hickory     - golden amber
-        0xFF38A848, // 8 kapok       - bright tropical green
-        0xFF405838, // 9 mangrove    - dark murky coastal green
-        0xFFC84030, // 10 maple      - vivid red-orange (autumn)
-        0xFF5A8C40, // 11 oak        - classic mid-green
-        0xFF7AC048, // 12 palm       - light tropical yellow-green
-        0xFF306845, // 13 pine       - deep blue-green conifer
-        0xFFB84870, // 14 rosewood   - rose / magenta
-        0xFF883860, // 15 sequoia    - deep red-purple
-        0xFF386860, // 16 spruce     - cold steel blue-green
-        0xFF7CA060, // 17 sycamore   - medium gray-green
-        0xFF60A890, // 18 white_cedar - cool cyan-green
-        0xFFA0C848, // 19 willow     - yellow-lime
+        0xFFD8A34D, // 0 acacia
+        0xFFA7B97A, // 1 ash
+        0xFFE7DC85, // 2 aspen
+        0xFFDCE7B5, // 3 birch
+        0xFF2E4A39, // 4 blackwood
+        0xFF8F6A3F, // 5 chestnut
+        0xFF2E5F49, // 6 douglas_fir
+        0xFF86984A, // 7 hickory
+        0xFF2F9C5C, // 8 kapok
+        0xFF3E5C4B, // 9 mangrove (not in the supplied palette; muted coastal green to match)
+        0xFFCB7C46, // 10 maple
+        0xFF4F8C45, // 11 oak
+        0xFF7FCB61, // 12 palm
+        0xFF2F7440, // 13 pine
+        0xFF7C4A62, // 14 rosewood
+        0xFF234F3D, // 15 sequoia
+        0xFF3F6F58, // 16 spruce
+        0xFF7AB48C, // 17 sycamore
+        0xFF66937B, // 18 white_cedar
+        0xFF75B05D, // 19 willow
     };
 
     /**
@@ -464,7 +499,7 @@ public class TFCSampleUtils
     {
         if (forestId < 0 || forestId >= ForestType.values().length)
         {
-            return 0xFF222222;
+            return COLOR_INVALID;
         }
 
         return forestColor(ForestType.valueOf(forestId));
@@ -475,48 +510,58 @@ public class TFCSampleUtils
         return switch (type)
         {
             // Open / no forest
-            case GRASSLAND -> 0xFFCEDB7A;
-            case CLEARING -> 0xFFD9E28F;
+            case GRASSLAND -> 0xFFD6E38A;
+            case CLEARING -> 0xFFE4EDAA;
 
             // Low woody vegetation
-            case SHRUBLAND -> 0xFFA8B85E;
-            case SPARSE -> 0xFF8EA95A;
+            case SHRUBLAND -> 0xFFB6C46E;
+            case SPARSE -> 0xFF95B45F;
 
             // Savanna palette
-            case SAVANNA_MONOCULTURE -> 0xFFC9B65A;
-            case SAVANNA_DIVERSE -> 0xFFBDA94D;
-            case SAVANNA_ALTERNATE -> 0xFFB19B43;
-            case SAVANNA_SHRUB_MONOCULTURE -> 0xFFA88F3D;
-            case SAVANNA_SHRUB_DIVERSE -> 0xFF9B8237;
-            case SAVANNA_SHRUB_ALTERNATE -> 0xFF8E7632;
+            case SAVANNA_MONOCULTURE -> 0xFFD3BE63;
+            case SAVANNA_DIVERSE -> 0xFFC3AF54;
+            case SAVANNA_ALTERNATE -> 0xFFB69F48;
+            case SAVANNA_SHRUB_MONOCULTURE -> 0xFFAB9440;
+            case SAVANNA_SHRUB_DIVERSE -> 0xFF9D883A;
+            case SAVANNA_SHRUB_ALTERNATE -> 0xFF8F7B34;
 
             // Forest edge palette
-            case EDGE_MONOCULTURE -> 0xFF88B45B;
-            case EDGE_DIVERSE -> 0xFF76A84F;
-            case EDGE_ALTERNATE -> 0xFF669A45;
-            case EDGE_BAMBOO -> 0xFF7FAF64;
+            case EDGE_MONOCULTURE -> 0xFF8AC75B;
+            case EDGE_DIVERSE -> 0xFF74B74D;
+            case EDGE_ALTERNATE -> 0xFF63A844;
+            case EDGE_BAMBOO -> 0xFF7BD06A;
 
             // Secondary forest palette
-            case SECONDARY_MONOCULTURE -> 0xFF4F8F3F;
-            case SECONDARY_MONOCULTURE_TALL -> 0xFF467F39;
-            case SECONDARY_DIVERSE -> 0xFF3F803A;
-            case SECONDARY_DIVERSE_TALL -> 0xFF357136;
-            case SECONDARY_ALTERNATE -> 0xFF2F6B32;
-            case SECONDARY_DENSE -> 0xFF286331;
-            case SECONDARY_DENSE_TALL -> 0xFF20582D;
-            case SECONDARY_BAMBOO -> 0xFF5E9B4B;
+            case SECONDARY_MONOCULTURE -> 0xFF4EA24B;
+            case SECONDARY_MONOCULTURE_TALL -> 0xFF449846;
+            case SECONDARY_DIVERSE -> 0xFF3E8E41;
+            case SECONDARY_DIVERSE_TALL -> 0xFF367F3A;
+            case SECONDARY_ALTERNATE -> 0xFF2F7335;
+            case SECONDARY_DENSE -> 0xFF28682F;
+            case SECONDARY_DENSE_TALL -> 0xFF215B2A;
+            case SECONDARY_BAMBOO -> 0xFF58B75D;
 
             // Primary forest palette
-            case PRIMARY_MONOCULTURE -> 0xFF1F6235;
-            case PRIMARY_DIVERSE -> 0xFF154F2D;
-            case PRIMARY_ALTERNATE -> 0xFF0F4328;
+            case PRIMARY_MONOCULTURE -> 0xFF245F3B;
+            case PRIMARY_DIVERSE -> 0xFF1A5234;
+            case PRIMARY_ALTERNATE -> 0xFF12462C;
 
             // Dead forest palette
-            case DEAD_MONOCULTURE -> 0xFF766A58;
-            case DEAD_DIVERSE -> 0xFF675C50;
-            case DEAD_ALTERNATE -> 0xFF50483F;
-            case DEAD_BAMBOO -> 0xFF6D6A4E;
+            case DEAD_MONOCULTURE -> 0xFF8A7965;
+            case DEAD_DIVERSE -> 0xFF776857;
+            case DEAD_ALTERNATE -> 0xFF65574A;
+            case DEAD_BAMBOO -> 0xFF7A7561;
         };
+    }
+
+    public static int forestTypeCount()
+    {
+        return ForestType.values().length;
+    }
+
+    public static int treeSpeciesCount()
+    {
+        return TREE_SPECIES_NAMES.length;
     }
 
     public ChunkData sampleChunkData(ChunkPos chunkPos)

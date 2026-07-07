@@ -305,34 +305,16 @@ public class TFCRegionWorkUnit extends WorkUnit
                         short treeMapWater = classifyTreeMapWater(pos);
                         switch (treeMapWater)
                         {
-                            case LAND_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
-                            case LAND_WATER_LAKE -> treeMapLakePoints.incrementAndGet();
-                            case LAND_WATER_RIVER -> treeMapRiverPoints.incrementAndGet();
+                            case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
+                            case TFCSampleUtils.VALUE_WATER_LAKE -> treeMapLakePoints.incrementAndGet();
+                            case TFCSampleUtils.VALUE_WATER_RIVER -> treeMapRiverPoints.incrementAndGet();
                             default -> treeMapLandPoints.incrementAndGet();
                         }
-                        boolean isWaterPoint = treeMapWater != LAND_WATER_LAND;
+                        boolean isWaterPoint = treeMapWater >= 0;
 
-                        short forestTypeValue;
-                        if (isWaterPoint)
-                        {
-                            forestTypeValue = TFCSampleUtils.VALUE_WATER;
-                        }
-                        else
-                        {
-                            forestTypeValue = forestTypeId >= 0 ? forestTypeId : TFCSampleUtils.VALUE_INVALID;
-                        }
-                        this.sampler.expandRaw(pos, forestTypeValue, forestTypeResult);
-
-                        short treeSpeciesValue;
-                        if (isWaterPoint)
-                        {
-                            treeSpeciesValue = TFCSampleUtils.VALUE_WATER;
-                        }
-                        else
-                        {
-                            treeSpeciesValue = treeSpeciesId >= 0 ? treeSpeciesId : TFCSampleUtils.VALUE_INVALID;
-                        }
-                        this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
+                        // forestTypeId / treeSpeciesId already hold VALUE_INVALID on sampling failure
+                        this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : forestTypeId, forestTypeResult);
+                        this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : treeSpeciesId, treeSpeciesResult);
 
                     }
 
@@ -394,8 +376,8 @@ public class TFCRegionWorkUnit extends WorkUnit
      * so the water boundary matches the biome map at quart resolution. The coarse
      * Region.Point land/water grid is deliberately not consulted here; it stays in use for
      * the standalone TFC_LAND_WATER map only.
-     * Returns LAND_WATER_OCEAN / LAND_WATER_RIVER / LAND_WATER_LAKE for water points,
-     * LAND_WATER_LAND otherwise.
+     * Returns VALUE_WATER_OCEAN / VALUE_WATER_LAKE / VALUE_WATER_RIVER for water points,
+     * or -1 for land.
      */
     private short classifyTreeMapWater(BlockPos pos)
     {
@@ -414,18 +396,18 @@ public class TFCRegionWorkUnit extends WorkUnit
 
         if (!TFCSampleUtils.isTreeMapWaterBiome(biome))
         {
-            return LAND_WATER_LAND;
+            return -1;
         }
         if (biome.biomeBlendType() == BiomeBlendType.OCEAN)
         {
-            return LAND_WATER_OCEAN;
+            return TFCSampleUtils.VALUE_WATER_OCEAN;
         }
         if (biome.key().location().getPath().equals("river"))
         {
-            return LAND_WATER_RIVER;
+            return TFCSampleUtils.VALUE_WATER_RIVER;
         }
         // LAKE blend type, "lake", "*_lake", "tower_karst_bay"
-        return LAND_WATER_LAKE;
+        return TFCSampleUtils.VALUE_WATER_LAKE;
     }
 
     private boolean isInRiver(int blockX, int blockZ)

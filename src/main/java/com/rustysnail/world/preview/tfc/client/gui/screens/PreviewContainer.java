@@ -144,6 +144,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private BiomesList.BiomeEntry[] allBiomes;
     private final RocksList.RockEntry[] allRocks;
     private final RocksList.RockEntry[] allRockTypes;
+    private final RocksList.RockEntry[] allForestTypes;
+    private final RocksList.RockEntry[] allTreeSpecies;
+    private final RocksList.RockEntry[] waterLegendEntries;
     private StructuresList.StructureEntry[] allStructures;
     private NativeImage[] allStructureIcons;
     private NativeImage[] allFeatureIcons;
@@ -259,6 +262,25 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         for (short rti = 0; rti < TFCSampleUtils.ROCK_TYPE_NAMES.length; rti++)
         {
             this.allRockTypes[rti] = this.rocksList.createRockTypeEntry(rti);
+        }
+        this.allForestTypes = new RocksList.RockEntry[TFCSampleUtils.forestTypeCount()];
+        for (short fi = 0; fi < this.allForestTypes.length; fi++)
+        {
+            this.allForestTypes[fi] = this.rocksList.createLegendEntry(
+                fi, TFCSampleUtils.getForestTypeName(fi), TFCSampleUtils.getForestTypeColor(fi));
+        }
+        this.allTreeSpecies = new RocksList.RockEntry[TFCSampleUtils.treeSpeciesCount()];
+        for (short ti = 0; ti < this.allTreeSpecies.length; ti++)
+        {
+            this.allTreeSpecies[ti] = this.rocksList.createLegendEntry(
+                ti, TFCSampleUtils.getTreeSpeciesName(ti), TFCSampleUtils.getTreeSpeciesColor(ti));
+        }
+        this.waterLegendEntries = new RocksList.RockEntry[3];
+        for (short wi = 0; wi < this.waterLegendEntries.length; wi++)
+        {
+            short waterValue = (short) (TFCSampleUtils.VALUE_WATER_OCEAN + wi);
+            this.waterLegendEntries[wi] = this.rocksList.createLegendEntry(
+                waterValue, TFCSampleUtils.getWaterTypeName(waterValue), TFCSampleUtils.getWaterColor(waterValue));
         }
         this.structuresList = new StructuresList(this.minecraft, 200, 300, 4, 100);
         this.toRender.add(this.structuresList);
@@ -514,17 +536,19 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             || mode == RenderSettings.RenderMode.TFC_ROCK_MID
             || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
             || mode == RenderSettings.RenderMode.TFC_ROCK_TYPE;
-        this.rocksList.visible = isRockMode;
-        this.rocksList.active = isRockMode;
+        boolean isTreeLegendMode = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
+            || mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
+        this.rocksList.visible = isRockMode || isTreeLegendMode;
+        this.rocksList.active = isRockMode || isTreeLegendMode;
         if (this.lastScreenRectangle != null)
         {
             this.doLayout(this.lastScreenRectangle);
         }
-        if (isRockMode)
+        if (isRockMode || isTreeLegendMode)
         {
             this.rocksList.replaceEntries(new ArrayList<>());
         }
-        else
+        if (!isRockMode)
         {
             // Clear rock selection when leaving rock mode
             this.rocksList.setSelected(null);
@@ -1124,6 +1148,34 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 .toList();
             this.rocksList.replaceEntries(res);
         }
+    }
+
+    @Override
+    public void onVisibleTreeValuesChanged(Short2LongMap visibleTreeValues)
+    {
+        RenderSettings.RenderMode mode = this.renderSettings.mode;
+        boolean isForestMode = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE;
+        boolean isSpeciesMode = mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
+        if (!isForestMode && !isSpeciesMode)
+        {
+            return;
+        }
+
+        RocksList.RockEntry[] landEntries = isForestMode ? this.allForestTypes : this.allTreeSpecies;
+        List<RocksList.RockEntry> res = visibleTreeValues.short2LongEntrySet()
+            .stream()
+            .sorted(Comparator.comparing(Entry::getLongValue).reversed())
+            .map(Entry::getShortKey)
+            .map(x -> {
+                if (TFCSampleUtils.isWaterValue(x))
+                {
+                    return this.waterLegendEntries[x - TFCSampleUtils.VALUE_WATER_OCEAN];
+                }
+                return x >= 0 && x < landEntries.length ? landEntries[x] : null;
+            })
+            .filter(Objects::nonNull)
+            .toList();
+        this.rocksList.replaceEntries(res);
     }
 
     private void randomizeSeed(Button btn)

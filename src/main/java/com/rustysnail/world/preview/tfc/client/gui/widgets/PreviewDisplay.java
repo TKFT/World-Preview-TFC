@@ -59,11 +59,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private Short2LongMap visibleBiomes;
     private Short2LongMap visibleStructures;
     private Short2LongMap visibleRocks;
+    private Short2LongMap visibleTreeValues;
     private NativeImage previewImg;
     private DynamicTexture previewTexture;
     private long[] workingVisibleBiomes;
     private long[] workingVisibleStructures;
     private final long[] workingVisibleRocks;
+    private final long[] workingVisibleTreeValues;
     private int[] colorMap;
     private int[] colorMapGrayScale;
     private int[] heightColorMap;
@@ -107,6 +109,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.visibleStructures = new Short2LongOpenHashMap();
         this.visibleRocks = new Short2LongOpenHashMap();
         this.workingVisibleRocks = new long[TFCSampleUtils.ROCK_NAMES.length];
+        this.visibleTreeValues = new Short2LongOpenHashMap();
+        this.workingVisibleTreeValues = new long[TFCSampleUtils.VALUE_INVALID + 1];
         this.renderSettings = WorldPreview.get().renderSettings();
         this.config = WorldPreview.get().cfg();
         this.structureIcons = new IconData[0];
@@ -301,6 +305,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 Arrays.fill(this.workingVisibleBiomes, 0L);
                 Arrays.fill(this.workingVisibleStructures, 0L);
                 Arrays.fill(this.workingVisibleRocks, 0L);
+                Arrays.fill(this.workingVisibleTreeValues, 0L);
                 Arrays.stream(this.hoverHelperGrid).forEach(cell -> cell.entries.clear());
                 List<RenderHelper> renderData = this.generateRenderData();
                 this.updateTexture(renderData);
@@ -595,13 +600,15 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_FOREST_TYPE:
-                            if (rawData == TFCSampleUtils.VALUE_WATER)
+                            if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                color = TFCSampleUtils.COLOR_WATER;
+                                color = TFCSampleUtils.getWaterColor(rawData);
+                                this.workingVisibleTreeValues[rawData]++;
                             }
-                            else if (rawData >= 0)
+                            else if (rawData >= 0 && rawData < TFCSampleUtils.forestTypeCount())
                             {
                                 color = TFCSampleUtils.getForestTypeColor(rawData);
+                                this.workingVisibleTreeValues[rawData]++;
                             }
                             else
                             {
@@ -609,13 +616,15 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_TREE_SPECIES:
-                            if (rawData == TFCSampleUtils.VALUE_WATER)
+                            if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                color = TFCSampleUtils.COLOR_WATER;
+                                color = TFCSampleUtils.getWaterColor(rawData);
+                                this.workingVisibleTreeValues[rawData]++;
                             }
-                            else if (rawData >= 0)
+                            else if (rawData >= 0 && rawData < TFCSampleUtils.treeSpeciesCount())
                             {
                                 color = TFCSampleUtils.getTreeSpeciesColor(rawData);
+                                this.workingVisibleTreeValues[rawData]++;
                             }
                             else
                             {
@@ -914,9 +923,23 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.dataProvider.onVisibleRocksChanged(tempRocksSet);
         }
 
+        Short2LongMap tempTreeValuesSet = new Short2LongOpenHashMap();
+        for (short it = 0; it < this.workingVisibleTreeValues.length; it++)
+        {
+            if (this.workingVisibleTreeValues[it] > 0L)
+            {
+                tempTreeValuesSet.put(it, this.workingVisibleTreeValues[it]);
+            }
+        }
+        if (!tempTreeValuesSet.equals(this.visibleTreeValues))
+        {
+            this.dataProvider.onVisibleTreeValuesChanged(tempTreeValuesSet);
+        }
+
         this.visibleBiomes = tempBiomesSet;
         this.visibleStructures = tempStructuresSet;
         this.visibleRocks = tempRocksSet;
+        this.visibleTreeValues = tempTreeValuesSet;
     }
 
     @Nullable
@@ -1215,11 +1238,12 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_FOREST_TYPE:
                             if (hoverInfo.entry != null)
                                 tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
-                            if (hoverInfo.tfcForestType == TFCSampleUtils.VALUE_WATER)
+                            if (TFCSampleUtils.isWaterValue(hoverInfo.tfcForestType))
                             {
-                                tfcInfo.append("\n§7Trees: None — ocean biome§r");
+                                tfcInfo.append("\n§7Trees: None — %s§r".formatted(
+                                    TFCSampleUtils.getWaterTypeName(hoverInfo.tfcForestType).toLowerCase()));
                             }
-                            else if (hoverInfo.tfcForestType >= 0)
+                            else if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
                             {
                                 tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
                                 String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
@@ -1232,19 +1256,20 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_TREE_SPECIES:
                             if (hoverInfo.entry != null)
                                 tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
-                            if (hoverInfo.tfcTreeSpecies == TFCSampleUtils.VALUE_WATER)
+                            if (TFCSampleUtils.isWaterValue(hoverInfo.tfcTreeSpecies))
                             {
-                                tfcInfo.append("\n§7Trees: None — ocean biome§r");
+                                tfcInfo.append("\n§7Trees: None — %s§r".formatted(
+                                    TFCSampleUtils.getWaterTypeName(hoverInfo.tfcTreeSpecies).toLowerCase()));
                             }
                             else
                             {
-                                String dominantName = hoverInfo.tfcTreeSpecies >= 0
+                                String dominantName = hoverInfo.tfcTreeSpecies >= 0 && hoverInfo.tfcTreeSpecies < TFCSampleUtils.treeSpeciesCount()
                                     ? hoverInfo.getTfcTreeSpeciesName() : "None";
                                 tfcInfo.append("\n§3Dominant Tree:§r §b%s§r".formatted(dominantName));
                                 List<String> possible = getPossibleSpecies(hoverInfo.blockX, hoverInfo.blockZ);
                                 String possibleStr = possible.isEmpty() ? "None" : String.join(", ", possible);
                                 tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(possibleStr));
-                                if (hoverInfo.tfcForestType >= 0)
+                                if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
                                 {
                                     tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
                                     String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
