@@ -15,6 +15,7 @@ import com.rustysnail.world.preview.tfc.backend.worker.StructStartWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -51,6 +52,9 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
 
 import net.dries007.tfc.world.ChunkGeneratorExtension;
+import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.chunkdata.ChunkData;
+import net.dries007.tfc.world.chunkdata.ForestType;
 import net.dries007.tfc.world.settings.Settings;
 
 import org.jetbrains.annotations.Nullable;
@@ -69,6 +73,7 @@ public class WorkManager
     private PreviewStorage previewStorage;
     private PreviewStorageCacheManager previewStorageCacheManager;
     private TFCSampleUtils tfcSampleUtils;
+    private TFCTreeResolver tfcTreeResolver;
     private final KaolinBiomeRules kaolinRules = new KaolinBiomeRules();
 
     @Nullable
@@ -139,6 +144,9 @@ public class WorkManager
         }
 
         this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.worldOptions.seed());
+        this.tfcTreeResolver = this.tfcSampleUtils != null
+            ? TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings())
+            : null;
 
         synchronized (this.previewStorageSynchro)
         {
@@ -272,7 +280,12 @@ public class WorkManager
             if (this.tfcSampleUtils != null)
             {
                 this.kaolinRules.rebuild(this.sampleUtils.resourceManager());
+                this.tfcTreeResolver = TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings());
                 WorldPreview.LOGGER.info("TFC-compatible chunk generator detected, TFC sampling enabled");
+            }
+            else
+            {
+                this.tfcTreeResolver = null;
             }
         }
         catch (IOException e)
@@ -367,6 +380,7 @@ public class WorkManager
         this.chunkGenerator = null;
         this.sampleUtils = null;
         this.tfcSampleUtils = null;
+        this.tfcTreeResolver = null;
         this.previewStorage = null;
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
@@ -518,6 +532,7 @@ public class WorkManager
                     this.previewData,
                     this.tfcSampleUtils.regionGenerator(),
                     this.tfcSampleUtils,
+                    this.tfcTreeResolver,
                     this.kaolinRules,
                     computeKaolin,
                     worldSeed
@@ -667,6 +682,54 @@ public class WorkManager
     public TFCSampleUtils tfcSampleUtils()
     {
         return this.tfcSampleUtils;
+    }
+
+    /**
+     * Resolves the dominant-tree result at a block position for UI (hover tooltip). Samples the
+     * containing chunk's data, forest type, biome (for salt_marsh) and surface height, then runs
+     * the shared resolver. Returns {@link TFCTreeResolver.Result#NONE} if TFC data is unavailable.
+     */
+    public TFCTreeResolver.Result resolveTreeAt(int blockX, int blockZ)
+    {
+        TFCSampleUtils tfcSu = this.tfcSampleUtils;
+        TFCTreeResolver resolver = this.tfcTreeResolver;
+        if (tfcSu == null || resolver == null)
+        {
+            return TFCTreeResolver.Result.NONE;
+        }
+        try
+        {
+            ChunkData chunkData = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
+            ForestType forestType = chunkData.getForestType();
+            BiomeExtension biome = tfcSu.sampleBiomeExtension(blockX, blockZ);
+            TFCTreeResolver.ConfigType configType;
+            if (biome != null && biome.key().location().getPath().equals("salt_marsh"))
+            {
+                configType = TFCTreeResolver.ConfigType.MANGROVE_FOREST;
+            }
+            else if (forestType.isDead())
+            {
+                configType = TFCTreeResolver.ConfigType.DEAD_FOREST;
+            }
+            else
+            {
+                configType = TFCTreeResolver.ConfigType.FOREST;
+            }
+            int surfaceY;
+            try
+            {
+                surfaceY = this.sampleUtils.doHeightSlow(new BlockPos(blockX, 0, blockZ));
+            }
+            catch (Exception e)
+            {
+                surfaceY = 63;
+            }
+            return resolver.resolve(chunkData, forestType, configType, blockX, blockZ, surfaceY);
+        }
+        catch (Exception e)
+        {
+            return TFCTreeResolver.Result.NONE;
+        }
     }
 
     public boolean isTFCEnabled()

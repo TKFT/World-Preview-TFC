@@ -338,6 +338,9 @@ public class TFCSampleUtils
 
     // --------------- Dominant Tree Species ---------------
 
+    // Seed names for the stable preview species registry. Their index is the species id used by
+    // the palette / legend, so this order must stay fixed. Runtime resolution no longer relies on
+    // a hardcoded climate table (see TFCTreeResolver); this only anchors ids/colors/names.
     public static final String[] TREE_SPECIES_NAMES = {
         "acacia", "ash", "aspen", "birch", "blackwood", "chestnut",
         "douglas_fir", "hickory", "kapok", "mangrove", "maple", "oak",
@@ -345,30 +348,28 @@ public class TFCSampleUtils
         "white_cedar", "willow"
     };
 
-    // [minTemp, maxTemp, minGroundwater, maxGroundwater, minRainVariance, maxRainVariance, absRainVariance(1=abs)]
-    // Climate ranges copied verbatim from tfc:worldgen/configured_feature/tree/*_entry.json
-    private static final float[][] TREE_SPECIES_CLIMATE = {
-        {  10.4f,  40.0f,  90f, 500f,  0.40f,  0.85f, 1 }, // 0 acacia
-        {   1.4f,  15.8f,  60f, 380f, -0.20f,  1.00f, 0 }, // 1 ash
-        { -14.2f,   5.0f, 350f, 500f, -0.65f,  1.00f, 0 }, // 2 aspen
-        {  -9.4f,   8.6f, 125f, 360f, -0.60f,  0.80f, 0 }, // 3 birch
-        {  10.4f,  40.0f,  35f, 215f, -1.00f,  1.00f, 0 }, // 4 blackwood
-        {  -0.4f,  14.0f, 150f, 340f, -0.20f,  1.00f, 0 }, // 5 chestnut
-        { -14.2f,   8.6f, 270f, 500f, -1.00f,  0.10f, 0 }, // 6 douglas_fir
-        {   6.8f,  17.6f, 210f, 500f, -0.40f,  0.60f, 0 }, // 7 hickory
-        {  19.4f,  40.0f, 300f, 500f, -0.55f,  0.55f, 0 }, // 8 kapok
-        {  15.8f,  40.0f, 200f, 500f, -1.00f,  1.00f, 0 }, // 9 mangrove
-        {  -5.8f,  10.4f, 200f, 450f, -0.80f,  1.00f, 0 }, // 10 maple
-        {  -0.4f,  17.6f, 210f, 500f, -0.50f,  0.75f, 0 }, // 11 oak
-        {  17.6f,  40.0f, 150f, 330f, -0.70f,  0.70f, 0 }, // 12 palm
-        { -14.2f,  12.2f,  90f, 320f, -1.00f,  0.75f, 0 }, // 13 pine
-        {  12.2f,  40.0f, 200f, 500f,  0.65f,  1.00f, 1 }, // 14 rosewood
-        {   5.0f,  14.0f, 215f, 500f, -1.00f, -0.40f, 0 }, // 15 sequoia
-        { -16.0f,  -4.0f, 220f, 500f, -1.00f,  1.00f, 0 }, // 16 spruce
-        {  -4.0f,  17.6f, 330f, 500f, -0.15f,  1.00f, 0 }, // 17 sycamore
-        { -14.2f,   3.2f, 100f, 285f, -0.45f,  0.65f, 0 }, // 18 white_cedar
-        {   8.6f,  26.6f, 330f, 500f, -0.55f,  1.00f, 0 }, // 19 willow
-    };
+    // Dynamic, stable species registry: name -> id. Seeded from TREE_SPECIES_NAMES so the vanilla
+    // 20 keep ids 0-19 (and thus their palette color / legend entry / tooltip name). Datapack or
+    // addon species discovered at runtime are appended with new ids (>= 20); those have no palette
+    // entry, so the map renders them with COLOR_INVALID and they are absent from the fixed legend,
+    // but their real names still appear in hover tooltips.
+    private static final List<String> SPECIES_REGISTRY = new ArrayList<>(java.util.Arrays.asList(TREE_SPECIES_NAMES));
+
+    public static synchronized short registerSpecies(String name)
+    {
+        int idx = SPECIES_REGISTRY.indexOf(name);
+        if (idx >= 0)
+        {
+            return (short) idx;
+        }
+        SPECIES_REGISTRY.add(name);
+        return (short) (SPECIES_REGISTRY.size() - 1);
+    }
+
+    private static synchronized String speciesRegistryName(short id)
+    {
+        return id >= 0 && id < SPECIES_REGISTRY.size() ? SPECIES_REGISTRY.get(id) : null;
+    }
 
     private static final int[] TREE_SPECIES_COLORS = {
         0xFFD8A34D, // 0 acacia
@@ -394,49 +395,15 @@ public class TFCSampleUtils
     };
 
     /**
-     * Resolves the dominant (most climate-suitable) tree species for a given chunk position.
-     * Mirrors ForestConfig.Entry.isValid() and distanceFromMean() from TFC's ForestFeature,
-     * but uses hardcoded climate tables instead of runtime feature-config access.
-     * Assumes northern hemisphere (no rain-variance sign flip).
+     * ForestType values that place neither trees nor bushes (their treeCount and bushCount are both
+     * {@code ConstantInt(0)} in TFC's ForestType enum) — GRASSLAND and CLEARING. These have no
+     * dominant species. SHRUBLAND (bush-only) and SPARSE (few trees) still resolve normally, so
+     * useful shrub/sparse behavior is preserved. ForestType is a fixed enum (not datapack-driven),
+     * so this explicit check is stable.
      */
-    public static short resolveDominantTreeSpecies(ChunkData chunkData, int blockX, int blockZ)
+    public static boolean forestTypeHasVegetation(ForestType type)
     {
-        float temperature = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
-        float groundwater = chunkData.getAverageGroundwater(blockX, blockZ);
-        float rainVariance = chunkData.getRainVariance(blockX, blockZ);
-        final int elevation = 63; // TFC SEA_LEVEL_Y; all species span -64..320 so elev check always passes
-
-        short bestId = VALUE_INVALID;
-        float bestDist = Float.MAX_VALUE;
-
-        for (short i = 0; i < TREE_SPECIES_CLIMATE.length; i++)
-        {
-            float[] c = TREE_SPECIES_CLIMATE[i];
-            float adjRV = c[6] != 0 ? Math.abs(rainVariance) : rainVariance;
-
-            if (temperature >= c[0] && temperature <= c[1]
-                && groundwater >= c[2] && groundwater <= c[3]
-                && adjRV >= c[4] && adjRV <= c[5])
-            {
-                // Mirror TFC ForestConfig.Entry.distanceFromMean exactly
-                float halfTempRange = (c[1] - c[0]) / 2f;
-                float halfGWRange   = (c[3] - c[2]) / 2f;
-                float halfRVRange   = (c[5] - c[4]) / 2f;
-                float halfElevRange = (320f - (-64f)) / 2f;
-
-                float dist = (temperature - halfTempRange)   * 10f
-                           + (groundwater  - halfGWRange)
-                           + (adjRV        - halfRVRange)    * 250f
-                           + (elevation    - halfElevRange)  * 5f;
-
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    bestId = i;
-                }
-            }
-        }
-        return bestId;
+        return type != ForestType.GRASSLAND && type != ForestType.CLEARING;
     }
 
     public static int getTreeSpeciesColor(short treeId)
@@ -447,8 +414,9 @@ public class TFCSampleUtils
 
     public static String getTreeSpeciesName(short treeId)
     {
-        if (treeId < 0 || treeId >= TREE_SPECIES_NAMES.length) return "Unknown";
-        String raw = TREE_SPECIES_NAMES[treeId].replace('_', ' ');
+        String registered = speciesRegistryName(treeId);
+        if (registered == null) return "Unknown";
+        String raw = registered.replace('_', ' ');
         StringBuilder sb = new StringBuilder(raw.length());
         boolean cap = true;
         for (int i = 0; i < raw.length(); i++)
@@ -586,36 +554,4 @@ public class TFCSampleUtils
         };
     }
 
-    public static List<String> resolveAllPossibleSpeciesNames(ChunkData chunkData, int blockX, int blockZ)
-    {
-        float temperature = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
-        float groundwater = chunkData.getAverageGroundwater(blockX, blockZ);
-        float rainVariance = chunkData.getRainVariance(blockX, blockZ);
-        final int elevation = 63;
-
-        List<float[]> candidates = new ArrayList<>();
-        for (short i = 0; i < TREE_SPECIES_CLIMATE.length; i++)
-        {
-            float[] c = TREE_SPECIES_CLIMATE[i];
-            float adjRV = c[6] != 0 ? Math.abs(rainVariance) : rainVariance;
-            if (temperature >= c[0] && temperature <= c[1]
-                && groundwater >= c[2] && groundwater <= c[3]
-                && adjRV >= c[4] && adjRV <= c[5])
-            {
-                float halfTempRange = (c[1] - c[0]) / 2f;
-                float halfGWRange   = (c[3] - c[2]) / 2f;
-                float halfRVRange   = (c[5] - c[4]) / 2f;
-                float halfElevRange = (320f - (-64f)) / 2f;
-                float dist = (temperature - halfTempRange) * 10f
-                           + (groundwater  - halfGWRange)
-                           + (adjRV        - halfRVRange)  * 250f
-                           + (elevation    - halfElevRange) * 5f;
-                candidates.add(new float[]{ i, dist });
-            }
-        }
-        candidates.sort((a, b) -> Float.compare(a[1], b[1]));
-        List<String> result = new ArrayList<>(candidates.size());
-        for (float[] c : candidates) result.add(getTreeSpeciesName((short) c[0]));
-        return result;
-    }
 }

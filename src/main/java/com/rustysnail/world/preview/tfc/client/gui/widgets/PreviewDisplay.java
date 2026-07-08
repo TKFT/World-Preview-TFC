@@ -1330,19 +1330,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private List<String> getPossibleSpecies(int blockX, int blockZ)
     {
-        long chunkKey = ((long) (blockX >> 4) << 32) | ((blockZ >> 4) & 0xFFFFFFFFL);
-        if (chunkKey == this.lastSpeciesChunkKey) return this.cachedPossibleSpecies;
-        this.lastSpeciesChunkKey = chunkKey;
-        TFCSampleUtils tfcSu = this.workManager.tfcSampleUtils();
-        if (tfcSu == null)
-        {
-            this.cachedPossibleSpecies = List.of();
-            return this.cachedPossibleSpecies;
-        }
+        // Cache per quart position: the dominant/possible set now varies within a chunk (elevation
+        // and per-point climate), so a per-chunk cache key would be wrong.
+        long quartKey = ((long) (blockX >> 2) << 32) | ((blockZ >> 2) & 0xFFFFFFFFL);
+        if (quartKey == this.lastSpeciesChunkKey) return this.cachedPossibleSpecies;
+        this.lastSpeciesChunkKey = quartKey;
         try
         {
-            ChunkData data = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
-            this.cachedPossibleSpecies = TFCSampleUtils.resolveAllPossibleSpeciesNames(data, blockX, blockZ);
+            this.cachedPossibleSpecies = this.workManager.resolveTreeAt(blockX, blockZ).possibleSpecies();
         }
         catch (Exception e)
         {

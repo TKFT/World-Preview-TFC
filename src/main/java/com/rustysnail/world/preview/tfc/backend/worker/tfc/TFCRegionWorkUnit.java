@@ -16,6 +16,7 @@ import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 import net.dries007.tfc.world.biome.BiomeBlendType;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
+import net.dries007.tfc.world.chunkdata.ForestType;
 import net.dries007.tfc.world.region.Region;
 import net.dries007.tfc.world.region.RegionGenerator;
 import net.dries007.tfc.world.region.RiverEdge;
@@ -27,6 +28,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,6 +111,8 @@ public class TFCRegionWorkUnit extends WorkUnit
     private final ChunkSampler sampler;
     private final RegionGenerator regionGenerator;
     private final TFCSampleUtils tfcSampleUtils;
+    @Nullable
+    private final TFCTreeResolver treeResolver;
     private final int numChunks;
     private final long seed;
 
@@ -122,6 +126,7 @@ public class TFCRegionWorkUnit extends WorkUnit
         PreviewData previewData,
         RegionGenerator regionGenerator,
         TFCSampleUtils tfcSampleUtils,
+        @Nullable TFCTreeResolver treeResolver,
         KaolinBiomeRules kaolinRules,
         boolean computeKaolin,
         long seed
@@ -132,6 +137,7 @@ public class TFCRegionWorkUnit extends WorkUnit
         this.numChunks = numChunks;
         this.regionGenerator = regionGenerator;
         this.tfcSampleUtils = tfcSampleUtils;
+        this.treeResolver = treeResolver;
         this.computeKaolin = computeKaolin;
         this.kaolinRules = computeKaolin ? kaolinRules : null;
         this.seed = seed;
@@ -199,22 +205,30 @@ public class TFCRegionWorkUnit extends WorkUnit
 
                     PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
 
+                    // ForestType is chunk-resolution in TFC: sample it (and the ChunkData) once per
+                    // chunk and reuse for every point. Dominant species, by contrast, is resolved
+                    // per sampled point below (climate varies within a chunk).
                     short forestTypeId = TFCSampleUtils.VALUE_INVALID;
-                    short treeSpeciesId = TFCSampleUtils.VALUE_INVALID;
+                    ChunkData chunkData = null;
+                    ForestType forestType = null;
                     if (this.tfcSampleUtils != null)
                     {
                         try
                         {
-                            ChunkData chunkData = this.tfcSampleUtils.sampleChunkData(cp);
-                            forestTypeId = (short) chunkData.getForestType().ordinal();
-                            treeSpeciesId = TFCSampleUtils.resolveDominantTreeSpecies(
-                                chunkData, cp.getMiddleBlockX(), cp.getMiddleBlockZ());
+                            chunkData = this.tfcSampleUtils.sampleChunkData(cp);
+                            forestType = chunkData.getForestType();
+                            forestTypeId = (short) forestType.ordinal();
                         }
                         catch (Exception e)
                         {
                             WorldPreview.LOGGER.debug("TFC chunk data sampling failed for chunk {}: {}", cp, e.getMessage());
                         }
                     }
+                    // Base config for the whole chunk (dead forests use tfc:dead_forest); individual
+                    // salt_marsh points override to tfc:mangrove_forest inside the loop.
+                    TFCTreeResolver.ConfigType baseConfigType = forestType != null && forestType.isDead()
+                        ? TFCTreeResolver.ConfigType.DEAD_FOREST
+                        : TFCTreeResolver.ConfigType.FOREST;
 
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
@@ -302,7 +316,22 @@ public class TFCRegionWorkUnit extends WorkUnit
                         this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
-                        short treeMapWater = classifyTreeMapWater(pos);
+                        // Sample the effective biome once and use it for both water classification
+                        // and (for land) mangrove/salt_marsh config selection.
+                        BiomeExtension treeMapBiome = null;
+                        if (this.tfcSampleUtils != null)
+                        {
+                            try
+                            {
+                                treeMapBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
+                            }
+                            catch (Exception e)
+                            {
+                                // fall through to non-water land
+                            }
+                        }
+
+                        short treeMapWater = classifyTreeMapWater(treeMapBiome);
                         switch (treeMapWater)
                         {
                             case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
@@ -312,9 +341,24 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                         boolean isWaterPoint = treeMapWater >= 0;
 
-                        // forestTypeId / treeSpeciesId already hold VALUE_INVALID on sampling failure
+                        short treeSpeciesValue = TFCSampleUtils.VALUE_INVALID;
+                        if (isWaterPoint)
+                        {
+                            treeSpeciesValue = treeMapWater;
+                        }
+                        else if (this.treeResolver != null && chunkData != null && forestType != null)
+                        {
+                            TFCTreeResolver.ConfigType configType = isSaltMarsh(treeMapBiome)
+                                ? TFCTreeResolver.ConfigType.MANGROVE_FOREST
+                                : baseConfigType;
+                            int surfaceY = sampleSurfaceY(pos);
+                            treeSpeciesValue = this.treeResolver
+                                .resolve(chunkData, forestType, configType, pos.getX(), pos.getZ(), surfaceY)
+                                .speciesId();
+                        }
+
                         this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : forestTypeId, forestTypeResult);
-                        this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : treeSpeciesId, treeSpeciesResult);
+                        this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
 
                     }
 
@@ -377,23 +421,10 @@ public class TFCRegionWorkUnit extends WorkUnit
      * Region.Point land/water grid is deliberately not consulted here; it stays in use for
      * the standalone TFC_LAND_WATER map only.
      * Returns VALUE_WATER_OCEAN / VALUE_WATER_LAKE / VALUE_WATER_RIVER for water points,
-     * or -1 for land.
+     * or -1 for land. Takes the biome sampled once by the caller.
      */
-    private short classifyTreeMapWater(BlockPos pos)
+    private short classifyTreeMapWater(@Nullable BiomeExtension biome)
     {
-        BiomeExtension biome = null;
-        if (this.tfcSampleUtils != null)
-        {
-            try
-            {
-                biome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
-            }
-            catch (Exception e)
-            {
-                // Biome source not usable - treat as land rather than guessing
-            }
-        }
-
         if (!TFCSampleUtils.isTreeMapWaterBiome(biome))
         {
             return -1;
@@ -408,6 +439,28 @@ public class TFCRegionWorkUnit extends WorkUnit
         }
         // LAKE blend type, "lake", "*_lake", "tower_karst_bay"
         return TFCSampleUtils.VALUE_WATER_LAKE;
+    }
+
+    private static boolean isSaltMarsh(@Nullable BiomeExtension biome)
+    {
+        return biome != null && biome.key().location().getPath().equals("salt_marsh");
+    }
+
+    /**
+     * Surface height for elevation-adjusted climate, via the same per-column path the heightmap
+     * render uses ({@link SampleUtils#doHeightSlow}). Falls back to TFC sea level (63) when the
+     * height sampler is unavailable, so resolution still works (without elevation cooling).
+     */
+    private int sampleSurfaceY(BlockPos pos)
+    {
+        try
+        {
+            return this.sampleUtils.doHeightSlow(pos);
+        }
+        catch (Exception e)
+        {
+            return 63; // TFC SEA_LEVEL_Y fallback
+        }
     }
 
     private boolean isInRiver(int blockX, int blockZ)
