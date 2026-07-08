@@ -32,33 +32,32 @@ import java.util.List;
 
 public class TFCSampleUtils
 {
-    // Reserved positive values for the forest-type / tree-species maps. Positive so they
-    // survive the bit-packed storage/render paths cleanly; kept well above all forest type
-    // ordinals (<30) and tree species ids (<20).
+    // Reserved positive values stored in the forest-type / tree-species maps. Positive so they
+    // survive the bit-packed storage path cleanly; kept well above all forest type ordinals
+    // (<30) and tree species ids (<20). Generation still writes the three distinct water
+    // subtypes (used for hover naming), but the map / list / selection treat all water as one
+    // category (VALUE_WATER / COLOR_WATER).
     public static final short VALUE_WATER_OCEAN = 100;
     public static final short VALUE_WATER_LAKE  = 101;
     public static final short VALUE_WATER_RIVER = 102;
     public static final short VALUE_INVALID     = 103;
 
-    public static final int COLOR_WATER_OCEAN = 0xFF1F4E8C;
-    public static final int COLOR_WATER_LAKE  = 0xFF2F74B8;
-    public static final int COLOR_WATER_RIVER = 0xFF6AA9E9;
-    public static final int COLOR_INVALID     = 0xFF2A2A2A;
+    // Canonical water value + color for the map, side list, and selection. All palette
+    // constants are normal ARGB (0xAARRGGBB) for readability and GUI legend use; PreviewDisplay
+    // converts to NativeImage byte order via textureColor(...) before writing pixels.
+    public static final short VALUE_WATER = VALUE_WATER_OCEAN;
+    public static final int   COLOR_WATER = 0xFF2868B2;
+    public static final int   COLOR_INVALID = 0xFF2A2A2A;
 
     public static boolean isWaterValue(short value)
     {
         return value >= VALUE_WATER_OCEAN && value <= VALUE_WATER_RIVER;
     }
 
-    public static int getWaterColor(short value)
+    /** Collapses the three water subtypes to VALUE_WATER; passes other ids through unchanged. */
+    public static short canonicalMapValue(short value)
     {
-        return switch (value)
-        {
-            case VALUE_WATER_OCEAN -> COLOR_WATER_OCEAN;
-            case VALUE_WATER_LAKE -> COLOR_WATER_LAKE;
-            case VALUE_WATER_RIVER -> COLOR_WATER_RIVER;
-            default -> COLOR_INVALID;
-        };
+        return isWaterValue(value) ? VALUE_WATER : value;
     }
 
     public static String getWaterTypeName(short value)
@@ -68,7 +67,7 @@ public class TFCSampleUtils
             case VALUE_WATER_OCEAN -> "Ocean";
             case VALUE_WATER_LAKE -> "Lake";
             case VALUE_WATER_RIVER -> "River";
-            default -> "Unknown";
+            default -> "Water";
         };
     }
 

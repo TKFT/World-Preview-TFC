@@ -59,13 +59,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private Short2LongMap visibleBiomes;
     private Short2LongMap visibleStructures;
     private Short2LongMap visibleRocks;
-    private Short2LongMap visibleTreeValues;
     private NativeImage previewImg;
     private DynamicTexture previewTexture;
     private long[] workingVisibleBiomes;
     private long[] workingVisibleStructures;
     private final long[] workingVisibleRocks;
-    private final long[] workingVisibleTreeValues;
     private int[] colorMap;
     private int[] colorMapGrayScale;
     private int[] heightColorMap;
@@ -87,6 +85,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int texHeight = 100;
     private short selectedBiomeId;
     private short selectedRockId;
+    // Short.MIN_VALUE = no selection (the small ids 0.. and the reserved 100-103 are all valid raw values)
+    private short selectedTFCMapValue = Short.MIN_VALUE;
     private boolean highlightCaves;
     private double totalDragX = 0.0;
     private double totalDragZ = 0.0;
@@ -109,8 +109,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.visibleStructures = new Short2LongOpenHashMap();
         this.visibleRocks = new Short2LongOpenHashMap();
         this.workingVisibleRocks = new long[TFCSampleUtils.ROCK_NAMES.length];
-        this.visibleTreeValues = new Short2LongOpenHashMap();
-        this.workingVisibleTreeValues = new long[TFCSampleUtils.VALUE_INVALID + 1];
         this.renderSettings = WorldPreview.get().renderSettings();
         this.config = WorldPreview.get().cfg();
         this.structureIcons = new IconData[0];
@@ -305,7 +303,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 Arrays.fill(this.workingVisibleBiomes, 0L);
                 Arrays.fill(this.workingVisibleStructures, 0L);
                 Arrays.fill(this.workingVisibleRocks, 0L);
-                Arrays.fill(this.workingVisibleTreeValues, 0L);
                 Arrays.stream(this.hoverHelperGrid).forEach(cell -> cell.entries.clear());
                 List<RenderHelper> renderData = this.generateRenderData();
                 this.updateTexture(renderData);
@@ -600,37 +597,43 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_FOREST_TYPE:
+                        {
+                            int argb;
                             if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                color = TFCSampleUtils.getWaterColor(rawData);
-                                this.workingVisibleTreeValues[rawData]++;
+                                argb = TFCSampleUtils.COLOR_WATER;
                             }
                             else if (rawData >= 0 && rawData < TFCSampleUtils.forestTypeCount())
                             {
-                                color = TFCSampleUtils.getForestTypeColor(rawData);
-                                this.workingVisibleTreeValues[rawData]++;
+                                argb = TFCSampleUtils.getForestTypeColor(rawData);
                             }
                             else
                             {
-                                color = TFCSampleUtils.COLOR_INVALID;
+                                argb = TFCSampleUtils.COLOR_INVALID;
                             }
+                            argb = this.applyTFCMapValueSelection(rawData, argb);
+                            color = textureColor(argb);
                             break;
+                        }
                         case TFC_TREE_SPECIES:
+                        {
+                            int argb;
                             if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                color = TFCSampleUtils.getWaterColor(rawData);
-                                this.workingVisibleTreeValues[rawData]++;
+                                argb = TFCSampleUtils.COLOR_WATER;
                             }
                             else if (rawData >= 0 && rawData < TFCSampleUtils.treeSpeciesCount())
                             {
-                                color = TFCSampleUtils.getTreeSpeciesColor(rawData);
-                                this.workingVisibleTreeValues[rawData]++;
+                                argb = TFCSampleUtils.getTreeSpeciesColor(rawData);
                             }
                             else
                             {
-                                color = TFCSampleUtils.COLOR_INVALID;
+                                argb = TFCSampleUtils.COLOR_INVALID;
                             }
+                            argb = this.applyTFCMapValueSelection(rawData, argb);
+                            color = textureColor(argb);
                             break;
+                        }
                         case TFC_HOTSPOT:
                             if (rawData > -32768)
                             {
@@ -923,23 +926,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.dataProvider.onVisibleRocksChanged(tempRocksSet);
         }
 
-        Short2LongMap tempTreeValuesSet = new Short2LongOpenHashMap();
-        for (short it = 0; it < this.workingVisibleTreeValues.length; it++)
-        {
-            if (this.workingVisibleTreeValues[it] > 0L)
-            {
-                tempTreeValuesSet.put(it, this.workingVisibleTreeValues[it]);
-            }
-        }
-        if (!tempTreeValuesSet.equals(this.visibleTreeValues))
-        {
-            this.dataProvider.onVisibleTreeValuesChanged(tempTreeValuesSet);
-        }
-
         this.visibleBiomes = tempBiomesSet;
         this.visibleStructures = tempStructuresSet;
         this.visibleRocks = tempRocksSet;
-        this.visibleTreeValues = tempTreeValuesSet;
     }
 
     @Nullable
@@ -1391,25 +1380,73 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             if (Math.abs(this.totalDragX) <= 4.0 && Math.abs(this.totalDragZ) <= 4.0)
             {
                 HoverInfo hoverInfo = this.hoveredBiome(mouseX, mouseY);
-                if (hoverInfo == null || hoverInfo.entry == null)
+                if (hoverInfo != null)
                 {
-                    return;
-                }
-
-                super.playDownSound(this.minecraft.getSoundManager());
-                if (this.selectedBiomeId == hoverInfo.entry.id())
-                {
-                    this.dataProvider.onBiomeVisuallySelected(null);
-                }
-                else
-                {
-                    this.dataProvider.onBiomeVisuallySelected(hoverInfo.entry);
+                    switch (this.renderSettings.mode)
+                    {
+                        case BIOMES:
+                            if (hoverInfo.entry != null)
+                            {
+                                super.playDownSound(this.minecraft.getSoundManager());
+                                if (this.selectedBiomeId == hoverInfo.entry.id())
+                                {
+                                    this.dataProvider.onBiomeVisuallySelected(null);
+                                }
+                                else
+                                {
+                                    this.dataProvider.onBiomeVisuallySelected(hoverInfo.entry);
+                                }
+                            }
+                            break;
+                        case TFC_FOREST_TYPE:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_FOREST_TYPE, hoverInfo.tfcForestType);
+                            break;
+                        case TFC_TREE_SPECIES:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_TREE_SPECIES, hoverInfo.tfcTreeSpecies);
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
 
             this.renderSettings.setCenter(this.center());
             this.totalDragX = 0.0;
             this.totalDragZ = 0.0;
+        }
+    }
+
+    private void handleTFCMapValueClick(RenderSettings.RenderMode mode, short rawValue)
+    {
+        if (rawValue == TFCSampleUtils.VALUE_INVALID)
+        {
+            return;
+        }
+        short value;
+        if (TFCSampleUtils.isWaterValue(rawValue))
+        {
+            value = TFCSampleUtils.VALUE_WATER;
+        }
+        else
+        {
+            int count = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
+                ? TFCSampleUtils.forestTypeCount()
+                : TFCSampleUtils.treeSpeciesCount();
+            if (rawValue < 0 || rawValue >= count)
+            {
+                return;
+            }
+            value = rawValue;
+        }
+
+        super.playDownSound(this.minecraft.getSoundManager());
+        if (this.selectedTFCMapValue == value)
+        {
+            this.dataProvider.onTFCMapValueVisuallySelected(mode, Short.MIN_VALUE);
+        }
+        else
+        {
+            this.dataProvider.onTFCMapValueVisuallySelected(mode, value);
         }
     }
 
@@ -1498,6 +1535,29 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     public void setSelectedRockId(short rockId)
     {
         this.selectedRockId = rockId;
+    }
+
+    public void setSelectedTFCMapValue(short value)
+    {
+        this.selectedTFCMapValue = value;
+    }
+
+    /**
+     * Category-selection grayscale for the forest-type / tree-species maps, in ARGB space.
+     * No selection or a match keeps the original ARGB; anything else is grayed out. The three
+     * water subtypes collapse to VALUE_WATER so selecting Water keeps all water colored.
+     */
+    private int applyTFCMapValueSelection(short rawData, int argb)
+    {
+        if (this.selectedTFCMapValue == Short.MIN_VALUE)
+        {
+            return argb;
+        }
+        if (TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue)
+        {
+            return argb;
+        }
+        return grayScale(argb);
     }
 
     public void setHighlightCaves(boolean highlightCaves)
