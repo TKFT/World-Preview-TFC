@@ -76,12 +76,6 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
         return new RockEntry(rockTypeId, name, color);
     }
 
-    /** Generic swatch+name entry, used for the forest-type / tree-species legends. */
-    public RockEntry createLegendEntry(short id, String name, int color)
-    {
-        return new RockEntry(id, name, color);
-    }
-
     public class RockEntry extends Entry<RockEntry>
     {
         private final short id;

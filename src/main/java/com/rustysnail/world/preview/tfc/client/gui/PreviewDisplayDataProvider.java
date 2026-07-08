@@ -44,12 +44,11 @@ public interface PreviewDisplayDataProvider
     void onVisibleRocksChanged(Short2LongMap visibleRocks);
 
     /**
-     * Visible value counts for the forest-type / tree-species modes: forest ordinals or
-     * species ids plus the reserved water values (VALUE_WATER_OCEAN..VALUE_WATER_RIVER).
+     * A forest-type / tree-species category was selected by clicking the map. {@code value} is a
+     * forest ordinal, tree species id, or {@link com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils#VALUE_WATER};
+     * {@code Short.MIN_VALUE} clears the current selection.
      */
-    default void onVisibleTreeValuesChanged(Short2LongMap visibleTreeValues)
-    {
-    }
+    void onTFCMapValueVisuallySelected(com.rustysnail.world.preview.tfc.RenderSettings.RenderMode mode, short value);
 
     StructureRenderInfo[] renderStructureMap();
 
