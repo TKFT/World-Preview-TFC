@@ -53,16 +53,18 @@ public final class TFCTreeResolver
     }
 
     /**
-     * Result of a resolution: the most likely species id, the final (trimmed) possible-species
-     * names, and the ForestConfig id the candidates came from (for the tooltip / diagnostics).
+     * Result of a resolution: the most likely species id, the final (trimmed) possible-species ids,
+     * and the ForestConfig id the candidates came from. Ids (not display strings) are stored so the
+     * UI converts them through TFCTreeSpeciesRegistry at draw time. {@code sourceConfig} is reported
+     * even when there is no valid tree (e.g. grassland), so long as a config would apply.
      */
-    public record Result(short speciesId, List<String> possibleSpecies, @Nullable ResourceLocation sourceConfig)
+    public record Result(short dominantId, List<Short> possibleIds, @Nullable ResourceLocation sourceConfig)
     {
         public static final Result NONE = new Result(TFCSampleUtils.VALUE_INVALID, List.of(), null);
 
         public boolean hasTree()
         {
-            return speciesId != TFCSampleUtils.VALUE_INVALID;
+            return dominantId != TFCSampleUtils.VALUE_INVALID;
         }
     }
 
@@ -194,13 +196,9 @@ public final class TFCTreeResolver
 
     private Result computeResult(ChunkData chunkData, ForestType forestType, ConfigType configType, int blockX, int blockZ, int surfaceY)
     {
-        // Forest types that place neither trees nor bushes have no dominant species.
-        if (!TFCSampleUtils.forestTypeHasVegetation(forestType))
-        {
-            return Result.NONE;
-        }
-
-        // Select the config, falling back to tfc:forest when the requested one is absent.
+        // Select the config, falling back to tfc:forest when the requested one is absent. The
+        // sourceConfig is reported for the tooltip whenever a config would apply, even if there is
+        // ultimately no tree (grassland / no valid candidates).
         ResourceLocation configId = configIdFor(configType);
         List<SpeciesEntry> entries = this.entriesByConfig.get(configId);
         if (entries == null || entries.isEmpty())
@@ -208,9 +206,16 @@ public final class TFCTreeResolver
             configId = FOREST_ID;
             entries = this.entriesByConfig.get(FOREST_ID);
         }
+        final ResourceLocation sourceConfig = entries != null ? configId : null;
+
+        // Forest types that place neither trees nor bushes have no dominant species.
+        if (!TFCSampleUtils.forestTypeHasVegetation(forestType))
+        {
+            return new Result(TFCSampleUtils.VALUE_INVALID, List.of(), sourceConfig);
+        }
         if (entries == null || entries.isEmpty())
         {
-            return Result.NONE;
+            return new Result(TFCSampleUtils.VALUE_INVALID, List.of(), sourceConfig);
         }
 
         final BlockPos pos = new BlockPos(blockX, surfaceY, blockZ);
@@ -233,7 +238,7 @@ public final class TFCTreeResolver
         }
         if (candidates.isEmpty())
         {
-            return Result.NONE;
+            return new Result(TFCSampleUtils.VALUE_INVALID, List.of(), sourceConfig);
         }
         candidates.sort(Comparator.comparingDouble(
             se -> se.entry().distanceFromMean(averageTemperature, groundwater, rainVariance, elevation)));
@@ -256,13 +261,13 @@ public final class TFCTreeResolver
         //   size 1 -> 0; size 2 -> 1 (0.6 vs 0.4); size >= 3 -> 0 (largest individual probability, 0.4).
         final int mostLikely = candidates.size() == 2 ? 1 : 0;
 
-        final short speciesId = candidates.get(mostLikely).speciesId();
-        final List<String> possible = new ArrayList<>(candidates.size());
+        final short dominantId = candidates.get(mostLikely).speciesId();
+        final List<Short> possibleIds = new ArrayList<>(candidates.size());
         for (SpeciesEntry se : candidates)
         {
-            possible.add(TFCSampleUtils.getTreeSpeciesName(se.speciesId()));
+            possibleIds.add(se.speciesId());
         }
-        return new Result(speciesId, possible, configId);
+        return new Result(dominantId, possibleIds, sourceConfig);
     }
 
     private static long packKey(int blockX, int blockZ, ForestType forestType, ConfigType configType)

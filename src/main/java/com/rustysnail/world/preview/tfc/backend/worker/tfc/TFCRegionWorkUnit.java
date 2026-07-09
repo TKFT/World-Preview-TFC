@@ -357,7 +357,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             int surfaceY = sampleSurfaceY(pos);
                             treeSpeciesValue = this.treeResolver
                                 .resolve(chunkData, forestType, configType, pos.getX(), pos.getZ(), surfaceY)
-                                .speciesId();
+                                .dominantId();
                         }
 
                         this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : forestTypeId, forestTypeResult);

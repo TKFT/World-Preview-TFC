@@ -96,6 +96,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int hoverHelperGridHeight;
     private final Queue<Long> frametimes = new ArrayDeque<>();
     private boolean clicked = false;
+    private boolean loggedUnknownTreeSpecies = false;
     private long lastSpeciesChunkKey = Long.MIN_VALUE;
     private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result cachedTreeResult =
         com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result.NONE;
@@ -1340,7 +1341,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
                             if (TFCSampleUtils.isWaterValue(hoverInfo.tfcForestType))
                             {
-                                tfcInfo.append("\n§7Trees: None — %s§r".formatted(
+                                tfcInfo.append("\n§7Forest Type: None — %s§r".formatted(
                                     TFCSampleUtils.getWaterTypeName(hoverInfo.tfcForestType).toLowerCase()));
                             }
                             else if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
@@ -1350,8 +1351,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 if (densityLabel != null)
                                     tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
                             }
-                            if (hoverInfo.tfcLandWater > -32768)
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
+                            else
+                            {
+                                tfcInfo.append("\n§3Forest Type:§r §bUnknown§r");
+                            }
                             break;
                         case TFC_TREE_SPECIES:
                             if (hoverInfo.entry != null)
@@ -1363,13 +1366,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             else
                             {
-                                String dominantName = hoverInfo.tfcTreeSpecies >= 0 && hoverInfo.tfcTreeSpecies < TFCSampleUtils.treeSpeciesCount()
-                                    ? hoverInfo.getTfcTreeSpeciesName() : "None";
-                                tfcInfo.append("\n§3Most Likely Tree:§r §b%s§r".formatted(dominantName));
-                                var treeResult = resolvedTreeAt(hoverInfo.blockX, hoverInfo.blockZ);
-                                List<String> possible = treeResult.possibleSpecies();
-                                String possibleStr = possible.isEmpty() ? "None" : String.join(", ", possible);
-                                tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(possibleStr));
+                                // Forest type first (matches the biome-map ordering), then tree details.
                                 if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
                                 {
                                     tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
@@ -1377,13 +1374,23 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                     if (densityLabel != null)
                                         tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
                                 }
+                                else
+                                {
+                                    tfcInfo.append("\n§3Forest Type:§r §bUnknown§r");
+                                }
+
+                                String dominantName = hoverInfo.tfcTreeSpecies >= 0 && hoverInfo.tfcTreeSpecies < TFCSampleUtils.treeSpeciesCount()
+                                    ? treeSpeciesDisplayName(hoverInfo.tfcTreeSpecies) : "None";
+                                tfcInfo.append("\n§3Most Likely Tree:§r §b%s§r".formatted(dominantName));
+
+                                var treeResult = resolvedTreeAt(hoverInfo.blockX, hoverInfo.blockZ);
+                                tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(formatPossibleTrees(treeResult.possibleIds())));
+
                                 if (treeResult.sourceConfig() != null)
                                 {
                                     tfcInfo.append("\n§3Source:§r §b%s§r".formatted(treeResult.sourceConfig()));
                                 }
                             }
-                            if (hoverInfo.tfcLandWater > -32768)
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
                             break;
                         default:
                             break;
@@ -1442,6 +1449,43 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             tfcClimate = "\n\n§6TFC Climate§r\n§3Temp:§r " + tfcTempStr + "  §3Rain:§r " + tfcRainStr;
         }
         return tfcClimate;
+    }
+
+    /** Registry display name for a species id, or "Unknown Tree #id" (logged once) if not registered. */
+    private String treeSpeciesDisplayName(short id)
+    {
+        if (id >= 0 && id < TFCSampleUtils.treeSpeciesCount())
+        {
+            return TFCSampleUtils.getTreeSpeciesName(id);
+        }
+        if (!this.loggedUnknownTreeSpecies)
+        {
+            this.loggedUnknownTreeSpecies = true;
+            WorldPreview.LOGGER.warn("Tree species id {} not in runtime registry (count {})", id, TFCSampleUtils.treeSpeciesCount());
+        }
+        return "Unknown Tree #" + id;
+    }
+
+    /** Comma-joined species names, capped at 5 with a "+N more" suffix to keep the tooltip short. */
+    private String formatPossibleTrees(List<Short> ids)
+    {
+        if (ids.isEmpty())
+        {
+            return "None";
+        }
+        int shown = Math.min(5, ids.size());
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < shown; i++)
+        {
+            if (i > 0) sb.append(", ");
+            sb.append(treeSpeciesDisplayName(ids.get(i)));
+        }
+        int more = ids.size() - shown;
+        if (more > 0)
+        {
+            sb.append(" +").append(more).append(" more");
+        }
+        return sb.toString();
     }
 
     private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result resolvedTreeAt(int blockX, int blockZ)
