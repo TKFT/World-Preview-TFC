@@ -152,7 +152,7 @@ public class WorkManager
             }
         }
 
-        this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.worldOptions.seed());
+        this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.sampleUtils.registryAccess(), this.worldOptions.seed());
         this.tfcTreeResolver = this.tfcSampleUtils != null
             ? TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings())
             : null;
@@ -311,7 +311,7 @@ public class WorkManager
                 this.sampleUtils = new SampleUtils(server, biomeSource, this.chunkGenerator, this.worldOptions, this.levelStem, levelHeightAccessor);
             }
 
-            this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.worldOptions.seed());
+            this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.sampleUtils.registryAccess(), this.worldOptions.seed());
             if (this.tfcSampleUtils != null)
             {
                 this.kaolinRules.rebuild(this.sampleUtils.resourceManager());

@@ -147,7 +147,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final RocksList.RockEntry[] allRockTypes;
     private final TFCMapValueList tfcMapValueList;
     private final List<TFCMapValueList.ValueEntry> forestTypeEntries;
-    private final List<TFCMapValueList.ValueEntry> treeSpeciesEntries;
+    // Rebuilt from the runtime tree-species registry each time Tree Species mode is entered, so
+    // addon species that only appear once a world is loaded are included.
+    private List<TFCMapValueList.ValueEntry> treeSpeciesEntries = new ArrayList<>();
     // The currently selected side-panel tab. Together with the render mode it decides which single
     // side list is shown; see updateSidePanelVisibility().
     private DisplayType currentDisplayType = DisplayType.BIOMES;
@@ -280,14 +282,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         {
             this.forestTypeEntries.add(this.tfcMapValueList.createEntry(
                 fi, TFCSampleUtils.getForestTypeName(fi), TFCSampleUtils.getForestTypeColor(fi)));
-        }
-        this.treeSpeciesEntries = new ArrayList<>();
-        this.treeSpeciesEntries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
-        for (short ti = 0; ti < TFCSampleUtils.treeSpeciesCount(); ti++)
-        {
-            this.treeSpeciesEntries.add(this.tfcMapValueList.createEntry(
-                ti, TFCSampleUtils.getTreeSpeciesName(ti), TFCSampleUtils.getTreeSpeciesColor(ti)));
         }
         this.structuresList = new StructuresList(this.minecraft, 200, 300, 4, 100);
         this.toRender.add(this.structuresList);
@@ -569,6 +563,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.tfcMapValueList.setSelected(null);
         if (isTreeMode)
         {
+            if (isSpeciesMode)
+            {
+                // Rebuild from the current runtime registry so addon species are present.
+                this.treeSpeciesEntries = this.buildTreeSpeciesEntries();
+            }
             this.tfcMapValueList.replaceEntries(isForestMode ? this.forestTypeEntries : this.treeSpeciesEntries);
             this.tfcMapValueList.setScrollAmount(0.0); // reset scroll between the two entry sets
         }
@@ -579,6 +578,21 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
 
         // Apply the single-active-list visibility for the new mode (also runs doLayout/moveList).
         this.updateSidePanelVisibility();
+    }
+
+    /** Water entry first, then every species in the runtime tree-species registry (TFC + addons). */
+    private List<TFCMapValueList.ValueEntry> buildTreeSpeciesEntries()
+    {
+        List<TFCMapValueList.ValueEntry> entries = new ArrayList<>();
+        entries.add(this.tfcMapValueList.createEntry(
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+        int count = TFCSampleUtils.treeSpeciesCount();
+        for (short ti = 0; ti < count; ti++)
+        {
+            entries.add(this.tfcMapValueList.createEntry(
+                ti, TFCSampleUtils.getTreeSpeciesName(ti), TFCSampleUtils.getTreeSpeciesColor(ti)));
+        }
+        return entries;
     }
 
     private void onSearchBiomeClick(Button btn)

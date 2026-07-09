@@ -117,43 +117,12 @@ public final class TFCTreeResolver
             {
                 continue;
             }
-            String speciesName = speciesNameFromHolder(holder, entry);
-            short id = TFCSampleUtils.registerSpecies(speciesName);
+            // Resolve the species location the same way the registry does, then map to its runtime id.
+            ResourceLocation species = TFCTreeSpeciesRegistry.speciesFromHolder(holder, entry);
+            short id = TFCSampleUtils.treeSpeciesId(species);
             result.add(new SpeciesEntry(id, entry));
         }
         return result;
-    }
-
-    /**
-     * Derives the species name from the entry's configured-feature key, e.g.
-     * {@code tfc:tree/oak_entry -> oak}, {@code tfc:tree/dead_oak_entry -> oak},
-     * {@code tfc:tree/mangrove_entry -> mangrove}. Strips a leading path segment, the
-     * {@code _entry} suffix, and a {@code dead_} prefix.
-     */
-    private static String speciesNameFromHolder(Holder<ConfiguredFeature<?, ?>> holder, ForestConfig.Entry entry)
-    {
-        ResourceLocation loc = holder.unwrapKey()
-            .map(k -> k.location())
-            .orElseGet(() -> entry.treeFeature().unwrapKey().map(k -> k.location()).orElse(null));
-        if (loc == null)
-        {
-            return "tree";
-        }
-        String path = loc.getPath();
-        int slash = path.lastIndexOf('/');
-        if (slash >= 0)
-        {
-            path = path.substring(slash + 1);
-        }
-        if (path.endsWith("_entry"))
-        {
-            path = path.substring(0, path.length() - "_entry".length());
-        }
-        if (path.startsWith("dead_"))
-        {
-            path = path.substring("dead_".length());
-        }
-        return path.isEmpty() ? "tree" : path;
     }
 
     private List<SpeciesEntry> entriesFor(ConfigType type)

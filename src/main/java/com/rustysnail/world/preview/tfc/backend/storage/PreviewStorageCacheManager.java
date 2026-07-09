@@ -43,6 +43,10 @@ public interface PreviewStorageCacheManager
         // makes pre-bump caches (whose completion markers meant "temperature only") be ignored, so
         // forest/tree sections are regenerated rather than served empty.
         flags |= 131072L;
+        // Second bump: tree-species ids are now assigned by the runtime TFCTreeSpeciesRegistry
+        // (ResourceLocation-sorted) and special water/invalid values moved to 32760-32763, so stored
+        // tree-species values from older caches are no longer meaningful.
+        flags |= 262144L;
         return String.format("%s-%d-%d", settings.dimension, settings.pixelsPerChunk(), flags)
             .replace(":", "_")
             .replace(";", "_")

@@ -23,6 +23,8 @@ import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
 import net.dries007.tfc.world.chunkdata.ForestType;
 
 import net.minecraft.core.QuartPos;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
@@ -32,26 +34,26 @@ import java.util.List;
 
 public class TFCSampleUtils
 {
-    // Reserved positive values stored in the forest-type / tree-species maps. Positive so they
-    // survive the bit-packed storage path cleanly; kept well above all forest type ordinals
-    // (<30) and tree species ids (<20). Generation still writes the three distinct water
-    // subtypes (used for hover naming), but the map / list / selection treat all water as one
-    // category (VALUE_WATER / COLOR_WATER).
-    public static final short VALUE_WATER_OCEAN = 100;
-    public static final short VALUE_WATER_LAKE  = 101;
-    public static final short VALUE_WATER_RIVER = 102;
-    public static final short VALUE_INVALID     = 103;
+    // Reserved special values stored in the forest-type / tree-species maps. Kept near the top of
+    // the short range so they never collide with runtime species ids (assigned 0, 1, 2, ... by
+    // TFCTreeSpeciesRegistry) even when many addon trees are present. Generation still writes the
+    // three distinct water subtypes (used for hover naming), but the map / list / selection treat
+    // all water as one category (VALUE_WATER / COLOR_WATER).
+    public static final short VALUE_WATER_OCEAN = 32760;
+    public static final short VALUE_WATER_LAKE  = 32761;
+    public static final short VALUE_WATER_RIVER = 32762;
+    public static final short VALUE_WATER       = VALUE_WATER_OCEAN;
+    public static final short VALUE_INVALID     = 32763;
 
-    // Canonical water value + color for the map, side list, and selection. All palette
-    // constants are normal ARGB (0xAARRGGBB) for readability and GUI legend use; PreviewDisplay
-    // converts to NativeImage byte order via textureColor(...) before writing pixels.
-    public static final short VALUE_WATER = VALUE_WATER_OCEAN;
-    public static final int   COLOR_WATER = 0xFF2868B2;
-    public static final int   COLOR_INVALID = 0xFF2A2A2A;
+    // Canonical water color for the map, side list, and selection. All palette constants are normal
+    // ARGB (0xAARRGGBB) for readability and GUI legend use; PreviewDisplay converts to NativeImage
+    // byte order via textureColor(...) before writing pixels.
+    public static final int COLOR_WATER = 0xFF2868B2;
+    public static final int COLOR_INVALID = 0xFF2A2A2A;
 
     public static boolean isWaterValue(short value)
     {
-        return value >= VALUE_WATER_OCEAN && value <= VALUE_WATER_RIVER;
+        return value == VALUE_WATER_OCEAN || value == VALUE_WATER_LAKE || value == VALUE_WATER_RIVER;
     }
 
     /** Collapses the three water subtypes to VALUE_WATER; passes other ids through unchanged. */
@@ -100,14 +102,22 @@ public class TFCSampleUtils
     private final Settings settings;
     private final RockLayerSettings rockLayerSettings;
     private final ChunkDataGenerator chunkDataGenerator;
+    private final TFCTreeSpeciesRegistry treeSpeciesRegistry;
+
+    // The registry backing the static tree-species helpers used by UI code. Points at the most
+    // recently created TFCSampleUtils' runtime registry, or a fallback (known TFC species) before
+    // any world loads / if runtime loading fails.
+    private static volatile TFCTreeSpeciesRegistry activeRegistry = TFCTreeSpeciesRegistry.fallback();
 
     @Nullable
-    public static TFCSampleUtils create(ChunkGenerator generator, long seed)
+    public static TFCSampleUtils create(ChunkGenerator generator, RegistryAccess registryAccess, long seed)
     {
         if (generator instanceof ChunkGeneratorExtension ext
             && generator.getBiomeSource() instanceof BiomeSourceExtension biomeSource)
         {
-            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), biomeSource, seed);
+            TFCTreeSpeciesRegistry registry = TFCTreeSpeciesRegistry.build(registryAccess);
+            activeRegistry = registry;
+            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), biomeSource, registry, seed);
         }
         return null;
     }
@@ -115,17 +125,29 @@ public class TFCSampleUtils
     private final ConcurrentArea<BiomeExtension> biomeLayer;
     private final BiomeSourceExtension biomeSource;
 
-    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, long seed)
+    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, TFCTreeSpeciesRegistry treeSpeciesRegistry, long seed)
     {
         this.settings = settings;
         this.rockLayerSettings = rockLayerSettings;
         this.biomeSource = biomeSource;
+        this.treeSpeciesRegistry = treeSpeciesRegistry;
         Seed tfcSeed = Seed.of(seed);
         this.regionGenerator = new RegionGenerator(settings, tfcSeed);
 
         AreaFactory biomeFactory = TFCLayers.createRegionBiomeLayer(this.regionGenerator, tfcSeed);
         this.biomeLayer = new ConcurrentArea<>(biomeFactory, TFCLayers::getFromLayerId);
         this.chunkDataGenerator = chunkDataGenerator;
+    }
+
+    public TFCTreeSpeciesRegistry treeSpeciesRegistry()
+    {
+        return this.treeSpeciesRegistry;
+    }
+
+    /** Runtime short id for a species location, or VALUE_INVALID if not registered. */
+    public static short treeSpeciesId(ResourceLocation species)
+    {
+        return activeRegistry.idFor(species).orElse(VALUE_INVALID);
     }
 
     public Settings settings()
@@ -337,62 +359,9 @@ public class TFCSampleUtils
     }
 
     // --------------- Dominant Tree Species ---------------
-
-    // Seed names for the stable preview species registry. Their index is the species id used by
-    // the palette / legend, so this order must stay fixed. Runtime resolution no longer relies on
-    // a hardcoded climate table (see TFCTreeResolver); this only anchors ids/colors/names.
-    public static final String[] TREE_SPECIES_NAMES = {
-        "acacia", "ash", "aspen", "birch", "blackwood", "chestnut",
-        "douglas_fir", "hickory", "kapok", "mangrove", "maple", "oak",
-        "palm", "pine", "rosewood", "sequoia", "spruce", "sycamore",
-        "white_cedar", "willow"
-    };
-
-    // Dynamic, stable species registry: name -> id. Seeded from TREE_SPECIES_NAMES so the vanilla
-    // 20 keep ids 0-19 (and thus their palette color / legend entry / tooltip name). Datapack or
-    // addon species discovered at runtime are appended with new ids (>= 20); those have no palette
-    // entry, so the map renders them with COLOR_INVALID and they are absent from the fixed legend,
-    // but their real names still appear in hover tooltips.
-    private static final List<String> SPECIES_REGISTRY = new ArrayList<>(java.util.Arrays.asList(TREE_SPECIES_NAMES));
-
-    public static synchronized short registerSpecies(String name)
-    {
-        int idx = SPECIES_REGISTRY.indexOf(name);
-        if (idx >= 0)
-        {
-            return (short) idx;
-        }
-        SPECIES_REGISTRY.add(name);
-        return (short) (SPECIES_REGISTRY.size() - 1);
-    }
-
-    private static synchronized String speciesRegistryName(short id)
-    {
-        return id >= 0 && id < SPECIES_REGISTRY.size() ? SPECIES_REGISTRY.get(id) : null;
-    }
-
-    private static final int[] TREE_SPECIES_COLORS = {
-        0xFFD8A34D, // 0 acacia
-        0xFFA7B97A, // 1 ash
-        0xFFE7DC85, // 2 aspen
-        0xFFDCE7B5, // 3 birch
-        0xFF2E4A39, // 4 blackwood
-        0xFF8F6A3F, // 5 chestnut
-        0xFF2E5F49, // 6 douglas_fir
-        0xFF86984A, // 7 hickory
-        0xFF2F9C5C, // 8 kapok
-        0xFF3E5C4B, // 9 mangrove (not in the supplied palette; muted coastal green to match)
-        0xFFCB7C46, // 10 maple
-        0xFF4F8C45, // 11 oak
-        0xFF7FCB61, // 12 palm
-        0xFF2F7440, // 13 pine
-        0xFF7C4A62, // 14 rosewood
-        0xFF234F3D, // 15 sequoia
-        0xFF3F6F58, // 16 spruce
-        0xFF7AB48C, // 17 sycamore
-        0xFF66937B, // 18 white_cedar
-        0xFF75B05D, // 19 willow
-    };
+    // Species ids/names/colors are now owned by the runtime TFCTreeSpeciesRegistry (built from the
+    // configured-feature registry), so TFC and addon trees are handled uniformly. The static helpers
+    // below delegate to the currently active registry for UI code.
 
     /**
      * ForestType values that place neither trees nor bushes (their treeCount and bushCount are both
@@ -406,27 +375,19 @@ public class TFCSampleUtils
         return type != ForestType.GRASSLAND && type != ForestType.CLEARING;
     }
 
+    public static int treeSpeciesCount()
+    {
+        return activeRegistry.size();
+    }
+
     public static int getTreeSpeciesColor(short treeId)
     {
-        if (treeId < 0 || treeId >= TREE_SPECIES_COLORS.length) return COLOR_INVALID;
-        return TREE_SPECIES_COLORS[treeId];
+        return activeRegistry.color(treeId);
     }
 
     public static String getTreeSpeciesName(short treeId)
     {
-        String registered = speciesRegistryName(treeId);
-        if (registered == null) return "Unknown";
-        String raw = registered.replace('_', ' ');
-        StringBuilder sb = new StringBuilder(raw.length());
-        boolean cap = true;
-        for (int i = 0; i < raw.length(); i++)
-        {
-            char ch = raw.charAt(i);
-            if (cap && Character.isLetter(ch)) { sb.append(Character.toUpperCase(ch)); cap = false; }
-            else { sb.append(ch); }
-            if (ch == ' ') cap = true;
-        }
-        return sb.toString();
+        return activeRegistry.name(treeId);
     }
 
     public static String getForestTypeName(short forestId)
@@ -524,11 +485,6 @@ public class TFCSampleUtils
     public static int forestTypeCount()
     {
         return ForestType.values().length;
-    }
-
-    public static int treeSpeciesCount()
-    {
-        return TREE_SPECIES_NAMES.length;
     }
 
     public ChunkData sampleChunkData(ChunkPos chunkPos)
