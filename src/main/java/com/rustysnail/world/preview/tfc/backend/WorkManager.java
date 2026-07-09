@@ -16,6 +16,7 @@ import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCWorkPlan;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -171,6 +172,18 @@ public class WorkManager
         // restartExecutors() -> shutdownExecutors() cancels and clears currentBatches; do not clear
         // here first, or those batches would never get their isCanceled flag set.
         this.restartExecutors();
+    }
+
+    /**
+     * Called when the feature-icon overlay is toggled. Forces the next queueRange to re-evaluate,
+     * so TFC feature detection is queued when the overlay turns on (and not otherwise).
+     */
+    public synchronized void onFeatureOverlayChanged()
+    {
+        this.lastQueuedTopLeft = null;
+        this.lastQueuedBotRight = null;
+        this.lastQueuedWasTfc = false;
+        this.lastQueuedModeFlag = Long.MIN_VALUE;
     }
 
     public synchronized void onResolutionChanged()
@@ -529,11 +542,14 @@ public class WorkManager
             units += this.queueForLevel(chunks, 0, 256, (pos, yx) -> new StructStartWorkUnit(this.sampleUtils, pos, this.previewData));
         }
 
-        // TFC data is queued before height so that a height-induced early abort cannot prevent
-        // TFC climate/feature data from being computed (needed for biome map tooltip and icons).
-        if (this.tfcSampleUtils != null && !this.shouldEarlyAbortQueuing.get())
+        // Only queue TFC work for TFC modes, or when the feature overlay explicitly needs TFC feature
+        // icons — the normal biome map no longer triggers full TFC generation. The plan makes each
+        // mode compute only what it needs (e.g. Temperature does not sample rocks or resolve trees).
+        final boolean featureOverlay = this.renderSettings.featureOverlay;
+        final TFCWorkPlan tfcPlan = TFCWorkPlan.forMode(this.renderSettings.mode, featureOverlay);
+        final boolean queueTfc = tfcMode || (featureOverlay && tfcPlan.anyOutput());
+        if (this.tfcSampleUtils != null && queueTfc && tfcPlan.anyOutput() && !this.shouldEarlyAbortQueuing.get())
         {
-            final boolean computeKaolin = this.renderSettings.mode == RenderSettings.RenderMode.TFC_KAOLINITE;
             TFCRegionWorkUnit.resetStats();
 
             LongSet queuedTFCChunks = new LongOpenHashSet(chunks.size());
@@ -555,6 +571,8 @@ public class WorkManager
             }
 
             TFCRegionWorkUnit.setTotalUnits(tfcChunks.size());
+            WorldPreview.LOGGER.debug("[TFC] Queuing {} TFC units, plan[{}] for mode {}",
+                tfcChunks.size(), tfcPlan.describe(), this.renderSettings.mode);
 
             final long worldSeed = this.worldOptions.seed();
             units += this.queueForLevel(
@@ -571,7 +589,7 @@ public class WorkManager
                     this.tfcSampleUtils,
                     this.tfcTreeResolver,
                     this.kaolinRules,
-                    computeKaolin,
+                    tfcPlan,
                     worldSeed
                 )
             );
@@ -611,26 +629,14 @@ public class WorkManager
     }
 
     /**
-     * Queue-identity key for a render mode. All non-kaolin TFC modes map to the single combined
-     * TFC unit's completion flag, so switching among Forest Type / Tree Species / Temperature / ...
-     * is a display-only change and does not re-queue or cancel in-flight TFC generation.
-     * TFC_KAOLINITE keeps its own key because it gates an expensive per-point computation.
+     * Queue-identity key for a render mode. Each mode now has its own key: TFC generation is
+     * mode-specific (see TFCWorkPlan), so switching modes must re-queue to compute the new mode's
+     * data. Per-group completion tracking then skips chunks whose data already exists, so re-queuing
+     * an already-generated mode is cheap.
      */
     private long effectiveModeKey(RenderSettings.RenderMode mode)
     {
-        if (mode == null)
-        {
-            return Long.MIN_VALUE;
-        }
-        if (mode == RenderSettings.RenderMode.TFC_KAOLINITE)
-        {
-            return RenderSettings.RenderMode.TFC_KAOLINITE.flag;
-        }
-        if (mode.isTFC())
-        {
-            return TFCRegionWorkUnit.TFC_GENERATION_COMPLETE_FLAG;
-        }
-        return mode.flag;
+        return mode == null ? Long.MIN_VALUE : mode.flag;
     }
 
     private WorkUnit workUnitFactory(ChunkPos pos, int y)

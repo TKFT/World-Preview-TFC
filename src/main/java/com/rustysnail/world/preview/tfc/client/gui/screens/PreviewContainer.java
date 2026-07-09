@@ -297,7 +297,12 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleShowStructures.active = false;
         this.toRender.add(this.toggleShowStructures);
         this.toggleShowFeatures = new ToggleButton(
-            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.previewDisplay.setShowFeatures(((ToggleButton) x).selected)
+            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> {
+                boolean selected = ((ToggleButton) x).selected;
+                this.previewDisplay.setShowFeatures(selected);
+                this.renderSettings.featureOverlay = selected;
+                this.workManager.onFeatureOverlayChanged();
+            }
         );
         this.toggleShowFeatures.selected = false;
         this.toggleShowFeatures.active = true;

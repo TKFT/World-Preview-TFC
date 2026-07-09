@@ -17,6 +17,9 @@ public class RenderSettings
     public ResourceLocation dimension = null;
     public boolean hideAllStructures = false;
     public transient RenderMode mode = RenderMode.BIOMES;
+    // True when the feature-icon overlay is shown; lets WorkManager queue TFC feature detection
+    // even in non-TFC modes (and skip it otherwise).
+    public transient boolean featureOverlay = false;
 
 
     public BlockPos center()

@@ -41,17 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TFCRegionWorkUnit extends WorkUnit
 {
-    /**
-     * Dedicated completion marker for the combined TFC work unit. This unit writes many render
-     * sections (temperature, rainfall, rock, forest type, tree species, ...) in a single pass;
-     * completion means "all of those were written", so it must not be tracked on any single render
-     * section (previously TFC_TEMPERATURE) — that let forest/tree stay empty yet be treated as
-     * done. Value 4L is an unused storage flag (not a user render mode).
-     */
-    public static final long TFC_GENERATION_COMPLETE_FLAG = 4L;
-
     private final KaolinBiomeRules kaolinRules;
-    private final boolean computeKaolin;
     public static final short LAND_WATER_OCEAN = 0;
     public static final short LAND_WATER_LAND = 1;
     public static final short LAND_WATER_SHORE = 2;
@@ -124,6 +114,8 @@ public class TFCRegionWorkUnit extends WorkUnit
     private final TFCTreeResolver treeResolver;
     private final int numChunks;
     private final long seed;
+    private final TFCWorkPlan plan;
+    private final List<PreviewSection> completionSections;
 
     private final Set<Long> detectedFeatureCenters = new HashSet<>();
 
@@ -137,7 +129,7 @@ public class TFCRegionWorkUnit extends WorkUnit
         TFCSampleUtils tfcSampleUtils,
         @Nullable TFCTreeResolver treeResolver,
         KaolinBiomeRules kaolinRules,
-        boolean computeKaolin,
+        TFCWorkPlan plan,
         long seed
     )
     {
@@ -147,21 +139,44 @@ public class TFCRegionWorkUnit extends WorkUnit
         this.regionGenerator = regionGenerator;
         this.tfcSampleUtils = tfcSampleUtils;
         this.treeResolver = treeResolver;
-        this.computeKaolin = computeKaolin;
-        this.kaolinRules = computeKaolin ? kaolinRules : null;
+        this.plan = plan;
+        this.kaolinRules = plan.kaolin() ? kaolinRules : null;
         this.seed = seed;
+
+        // Completion is tracked per output group (see TFCWorkPlan#requiredCompletionFlags), so this
+        // unit is skipped only when the active mode's data is genuinely present. The completion
+        // bitmaps live on the render sections themselves (separate from their pixel data).
+        this.completionSections = new ArrayList<>();
+        for (long flag : plan.requiredCompletionFlags())
+        {
+            this.completionSections.add(this.storage.section4(chunkPos, 0, flag));
+        }
     }
 
-    private record AggregatedSample(
-        float temperature,
-        float rainfall,
-        int landWater,
-        short rockTop,
-        short rockMid,
-        short rockBot,
-        short rockType
-    )
+    @Override
+    public boolean isCompleted()
     {
+        if (this.completionSections.isEmpty())
+        {
+            return false;
+        }
+        for (PreviewSection section : this.completionSections)
+        {
+            if (!section.isCompleted(this.chunkPos))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void markCompleted()
+    {
+        for (PreviewSection section : this.completionSections)
+        {
+            section.markCompleted(this.chunkPos);
+        }
     }
 
     @Override
@@ -188,39 +203,26 @@ public class TFCRegionWorkUnit extends WorkUnit
                 {
                     ChunkPos cp = new ChunkPos(baseChunkX + dx, baseChunkZ + dz);
 
-                    PreviewSection tempSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_TEMPERATURE.flag);
-                    PreviewSection rainSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_RAINFALL.flag);
-                    PreviewSection landWaterSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
-                    PreviewSection rockTopSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_TOP.flag);
-                    PreviewSection rockMidSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_MID.flag);
-                    PreviewSection rockBotSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_BOT.flag);
-                    PreviewSection rockTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
-                    PreviewSection kaolinSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_KAOLINITE.flag);
-                    PreviewSection forestTypeSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
-                    PreviewSection treeSpeciesSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag);
-                    PreviewSection hotspotSection = this.storage.section4(cp, 0, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
+                    // Create sections/results only for outputs this plan needs.
+                    WorkResult tempResult = this.plan.temperature() ? newResult(cp, RenderSettings.RenderMode.TFC_TEMPERATURE.flag) : null;
+                    WorkResult rainResult = this.plan.rainfall() ? newResult(cp, RenderSettings.RenderMode.TFC_RAINFALL.flag) : null;
+                    WorkResult landWaterResult = this.plan.landWater() ? newResult(cp, RenderSettings.RenderMode.TFC_LAND_WATER.flag) : null;
+                    WorkResult rockTopResult = this.plan.rocks() ? newResult(cp, RenderSettings.RenderMode.TFC_ROCK_TOP.flag) : null;
+                    WorkResult rockMidResult = this.plan.rocks() ? newResult(cp, RenderSettings.RenderMode.TFC_ROCK_MID.flag) : null;
+                    WorkResult rockBotResult = this.plan.rocks() ? newResult(cp, RenderSettings.RenderMode.TFC_ROCK_BOT.flag) : null;
+                    WorkResult rockTypeResult = this.plan.rocks() ? newResult(cp, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag) : null;
+                    WorkResult kaolinResult = this.plan.kaolin() ? newResult(cp, RenderSettings.RenderMode.TFC_KAOLINITE.flag) : null;
+                    WorkResult hotspotResult = this.plan.hotspot() ? newResult(cp, RenderSettings.RenderMode.TFC_HOTSPOT.flag) : null;
+                    WorkResult forestTypeResult = this.plan.forestType() ? newResult(cp, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag) : null;
+                    WorkResult treeSpeciesResult = this.plan.treeSpecies() ? newResult(cp, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag) : null;
 
-                    WorkResult tempResult = new WorkResult(this, 0, tempSection, new ArrayList<>(16), List.of());
-                    WorkResult rainResult = new WorkResult(this, 0, rainSection, new ArrayList<>(16), List.of());
-                    WorkResult landWaterResult = new WorkResult(this, 0, landWaterSection, new ArrayList<>(16), List.of());
-                    WorkResult rockTopResult = new WorkResult(this, 0, rockTopSection, new ArrayList<>(16), List.of());
-                    WorkResult rockMidResult = new WorkResult(this, 0, rockMidSection, new ArrayList<>(16), List.of());
-                    WorkResult rockBotResult = new WorkResult(this, 0, rockBotSection, new ArrayList<>(16), List.of());
-                    WorkResult rockTypeResult = new WorkResult(this, 0, rockTypeSection, new ArrayList<>(16), List.of());
-                    WorkResult kaolinResult = new WorkResult(this, 0, kaolinSection, new ArrayList<>(16), List.of());
-                    WorkResult hotspotResult = new WorkResult(this, 0, hotspotSection, new ArrayList<>(16), List.of());
-                    WorkResult forestTypeResult = new WorkResult(this, 0, forestTypeSection, new ArrayList<>(16), List.of());
-                    WorkResult treeSpeciesResult = new WorkResult(this, 0, treeSpeciesSection, new ArrayList<>(16), List.of());
+                    PreviewSection structureSection = this.plan.features() ? this.storage.section4(cp, 0, 1L) : null;
 
-                    PreviewSection structureSection = this.storage.section4(cp, 0, 1L);
-
-                    // ForestType is chunk-resolution in TFC: sample it (and the ChunkData) once per
-                    // chunk and reuse for every point. Dominant species, by contrast, is resolved
-                    // per sampled point below (climate varies within a chunk).
+                    // ChunkData / forest type only when forest or tree species is requested.
                     short forestTypeId = TFCSampleUtils.VALUE_INVALID;
                     ChunkData chunkData = null;
                     ForestType forestType = null;
-                    if (this.tfcSampleUtils != null)
+                    if (this.plan.needsChunkData() && this.tfcSampleUtils != null)
                     {
                         try
                         {
@@ -234,30 +236,59 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                     }
 
+                    final boolean needsPoint = this.plan.needsRegionPoint();
+                    final boolean needsTreeMap = this.plan.forestType() || this.plan.treeSpecies();
+
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
                         if (this.isCanceled()) break;
 
-                        Region.Point point;
-                        try
+                        Region.Point point = null;
+                        if (needsPoint)
                         {
-                            point = getPointCached(pos.getX(), pos.getZ(), gridCache);
+                            try
+                            {
+                                point = getPointCached(pos.getX(), pos.getZ(), gridCache);
+                            }
+                            catch (Exception e)
+                            {
+                                continue;
+                            }
+                            if (point == null) continue;
                         }
-                        catch (Exception e)
+
+                        if (this.plan.features() && point != null)
                         {
-                            continue;
+                            detectFeatures(point, pos.getX(), pos.getZ(), structureSection);
                         }
-                        if (point == null) continue;
 
-                        detectFeatures(point, pos.getX(), pos.getZ(), structureSection);
-
-                        short landWaterValue = sampleLandWater(pos, gridCache);
-                        short rockTopId = -1;
-                        short rockMidId = -1;
-                        short rockBotId = -1;
-                        short rockTypeCategory = (short) TFCSampleUtils.getRockTypeCategory(point.rock);
-                        if (this.tfcSampleUtils != null)
+                        // Land/water (with river fractal) only when requested; also drives kaolin's land test.
+                        short landWaterValue = LAND_WATER_LAND;
+                        if (this.plan.landWater() && point != null)
                         {
+                            landWaterValue = sampleLandWater(pos, gridCache);
+                            this.sampler.expandRaw(pos, landWaterValue, landWaterResult);
+                        }
+
+                        if (this.plan.temperature() && point != null)
+                        {
+                            this.sampler.expandRaw(pos, TFCSampleUtils.normalizeTemperature(point.temperature), tempResult);
+                        }
+                        if (this.plan.rainfall() && point != null)
+                        {
+                            this.sampler.expandRaw(pos, TFCSampleUtils.normalizeRainfall(point.rainfall), rainResult);
+                        }
+                        if (this.plan.hotspot() && point != null)
+                        {
+                            this.sampler.expandRaw(pos, point.hotSpotAge, hotspotResult);
+                        }
+
+                        if (this.plan.rocks() && point != null && this.tfcSampleUtils != null)
+                        {
+                            short rockTopId = -1;
+                            short rockMidId = -1;
+                            short rockBotId = -1;
+                            short rockTypeCategory = (short) TFCSampleUtils.getRockTypeCategory(point.rock);
                             try
                             {
                                 rockTopId = TFCSampleUtils.getRockId(this.tfcSampleUtils.sampleRockAtLayer(point.rock, 0));
@@ -268,117 +299,108 @@ public class TFCRegionWorkUnit extends WorkUnit
                             {
                                 WorldPreview.LOGGER.debug("TFC rock sampling failed for rock type {}: {}", point.rock, e.getMessage());
                             }
+                            this.sampler.expandRaw(pos, rockTopId, rockTopResult);
+                            this.sampler.expandRaw(pos, rockMidId, rockMidResult);
+                            this.sampler.expandRaw(pos, rockBotId, rockBotResult);
+                            this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
                         }
-                        AggregatedSample sample = new AggregatedSample(
-                            point.temperature,
-                            point.rainfall,
-                            landWaterValue,
-                            rockTopId,
-                            rockMidId,
-                            rockBotId,
-                            rockTypeCategory
-                        );
 
-                        short tempValue = TFCSampleUtils.normalizeTemperature(sample.temperature());
-                        short rainValue = TFCSampleUtils.normalizeRainfall(sample.rainfall());
-
-                        short kaolinValue;
-                        if (landWaterValue == LAND_WATER_LAND)
+                        if (this.plan.kaolin() && point != null)
                         {
-                            if (this.computeKaolin && this.kaolinRules != null)
+                            short kaolinValue;
+                            if (landWaterValue == LAND_WATER_LAND)
                             {
-                                final boolean rainfallCheck = sample.rainfall() >= 300f;
-                                final boolean temperatureCheck = sample.temperature() >= 18f;
-                                long bkey = packBlockKey(pos.getX(), pos.getZ());
-
-                                var biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
-                                ResourceLocation biomeId = biomeKey.location();
-
-                                Boolean biomeAllowed = biomeAllowedCache.computeIfAbsent(biomeId, this.kaolinRules::isBiomeAllowed);
-
-                                final boolean kaolinPossible = rainfallCheck && temperatureCheck && biomeAllowed;
-                                kaolinValue = (short) (kaolinPossible ? 2 : 1);
+                                if (this.kaolinRules != null)
+                                {
+                                    final boolean rainfallCheck = point.rainfall >= 300f;
+                                    final boolean temperatureCheck = point.temperature >= 18f;
+                                    long bkey = packBlockKey(pos.getX(), pos.getZ());
+                                    var biomeKey = biomeKeyCache.computeIfAbsent(bkey, ignored -> this.sampleUtils.getBiomeKey(pos));
+                                    ResourceLocation biomeId = biomeKey.location();
+                                    Boolean biomeAllowed = biomeAllowedCache.computeIfAbsent(biomeId, this.kaolinRules::isBiomeAllowed);
+                                    kaolinValue = (short) (rainfallCheck && temperatureCheck && biomeAllowed ? 2 : 1);
+                                }
+                                else
+                                {
+                                    kaolinValue = 1;
+                                }
                             }
                             else
                             {
-                                kaolinValue = 1;
+                                kaolinValue = 0;
                             }
-                        }
-                        else
-                        {
-                            kaolinValue = 0;
+                            this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         }
 
-                        short hotspotAge = point.hotSpotAge;
-
-                        this.sampler.expandRaw(pos, tempValue, tempResult);
-                        this.sampler.expandRaw(pos, rainValue, rainResult);
-                        this.sampler.expandRaw(pos, landWaterValue, landWaterResult);
-                        this.sampler.expandRaw(pos, rockTopId, rockTopResult);
-                        this.sampler.expandRaw(pos, rockMidId, rockMidResult);
-                        this.sampler.expandRaw(pos, rockBotId, rockBotResult);
-                        this.sampler.expandRaw(pos, rockTypeCategory, rockTypeResult);
-                        this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
-                        this.sampler.expandRaw(pos, hotspotAge, hotspotResult);
-                        // Sample the effective biome once and use it for both water classification
-                        // and (for land) mangrove/salt_marsh config selection.
-                        BiomeExtension treeMapBiome = null;
-                        if (this.tfcSampleUtils != null)
+                        // Forest type / tree species: water via classifyTreeMapWater (no river fractal).
+                        if (needsTreeMap)
                         {
-                            try
+                            BiomeExtension treeMapBiome = null;
+                            if (this.tfcSampleUtils != null)
                             {
-                                treeMapBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
+                                try
+                                {
+                                    treeMapBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
+                                }
+                                catch (Exception e)
+                                {
+                                    // fall through to non-water land
+                                }
                             }
-                            catch (Exception e)
+
+                            short treeMapWater = classifyTreeMapWater(treeMapBiome);
+                            switch (treeMapWater)
                             {
-                                // fall through to non-water land
+                                case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
+                                case TFCSampleUtils.VALUE_WATER_LAKE -> treeMapLakePoints.incrementAndGet();
+                                case TFCSampleUtils.VALUE_WATER_RIVER -> treeMapRiverPoints.incrementAndGet();
+                                default -> treeMapLandPoints.incrementAndGet();
+                            }
+                            boolean isWaterPoint = treeMapWater >= 0;
+
+                            if (this.plan.forestType())
+                            {
+                                this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : forestTypeId, forestTypeResult);
+                            }
+                            if (this.plan.treeSpecies())
+                            {
+                                short treeSpeciesValue = TFCSampleUtils.VALUE_INVALID;
+                                if (isWaterPoint)
+                                {
+                                    treeSpeciesValue = treeMapWater;
+                                }
+                                else if (this.treeResolver != null && chunkData != null && forestType != null)
+                                {
+                                    int surfaceY = sampleSurfaceY(pos);
+                                    treeSpeciesValue = this.treeResolver
+                                        .resolve(chunkData, forestType, treeMapBiome, pos.getX(), pos.getZ(), surfaceY)
+                                        .dominantId();
+                                }
+                                this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
                             }
                         }
-
-                        short treeMapWater = classifyTreeMapWater(treeMapBiome);
-                        switch (treeMapWater)
-                        {
-                            case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
-                            case TFCSampleUtils.VALUE_WATER_LAKE -> treeMapLakePoints.incrementAndGet();
-                            case TFCSampleUtils.VALUE_WATER_RIVER -> treeMapRiverPoints.incrementAndGet();
-                            default -> treeMapLandPoints.incrementAndGet();
-                        }
-                        boolean isWaterPoint = treeMapWater >= 0;
-
-                        short treeSpeciesValue = TFCSampleUtils.VALUE_INVALID;
-                        if (isWaterPoint)
-                        {
-                            treeSpeciesValue = treeMapWater;
-                        }
-                        else if (this.treeResolver != null && chunkData != null && forestType != null)
-                        {
-                            int surfaceY = sampleSurfaceY(pos);
-                            treeSpeciesValue = this.treeResolver
-                                .resolve(chunkData, forestType, treeMapBiome, pos.getX(), pos.getZ(), surfaceY)
-                                .dominantId();
-                        }
-
-                        this.sampler.expandRaw(pos, isWaterPoint ? treeMapWater : forestTypeId, forestTypeResult);
-                        this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
-
                     }
 
-                    allResults.add(tempResult);
-                    allResults.add(rainResult);
-                    allResults.add(landWaterResult);
-                    allResults.add(rockTopResult);
-                    allResults.add(rockMidResult);
-                    allResults.add(rockBotResult);
-                    allResults.add(rockTypeResult);
-                    allResults.add(kaolinResult);
-                    allResults.add(forestTypeResult);
-                    allResults.add(treeSpeciesResult);
-                    allResults.add(hotspotResult);
+                    addIfPresent(allResults, tempResult);
+                    addIfPresent(allResults, rainResult);
+                    addIfPresent(allResults, landWaterResult);
+                    addIfPresent(allResults, rockTopResult);
+                    addIfPresent(allResults, rockMidResult);
+                    addIfPresent(allResults, rockBotResult);
+                    addIfPresent(allResults, rockTypeResult);
+                    addIfPresent(allResults, kaolinResult);
+                    addIfPresent(allResults, forestTypeResult);
+                    addIfPresent(allResults, treeSpeciesResult);
+                    addIfPresent(allResults, hotspotResult);
                 }
             }
 
             long elapsed = System.currentTimeMillis() - startTime;
             reportProgress(gridCellsProcessed[0], elapsed);
+
+            WorldPreview.LOGGER.debug("[TFC] Unit ({},{}) plan[{}] {} chunks in {}ms (features={}, treeSpecies={})",
+                this.chunkPos.x, this.chunkPos.z, this.plan.describe(), this.numChunks * this.numChunks, elapsed,
+                this.plan.features(), this.plan.treeSpecies());
 
             return allResults;
 
@@ -388,6 +410,19 @@ public class TFCRegionWorkUnit extends WorkUnit
             WorldPreview.LOGGER.error("[TFC] doWork() FAILED for chunk ({}, {}): {}",
                 this.chunkPos.x, this.chunkPos.z, t.getMessage(), t);
             throw t;
+        }
+    }
+
+    private WorkResult newResult(ChunkPos cp, long flag)
+    {
+        return new WorkResult(this, 0, this.storage.section4(cp, 0, flag), new ArrayList<>(16), List.of());
+    }
+
+    private static void addIfPresent(List<WorkResult> results, @Nullable WorkResult result)
+    {
+        if (result != null)
+        {
+            results.add(result);
         }
     }
 
@@ -572,6 +607,8 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public long flags()
     {
-        return TFC_GENERATION_COMPLETE_FLAG;
+        // Only used by the base class to build an (unused) primary section during construction;
+        // real completion tracking is per-plan via completionSections. Return a valid storage flag.
+        return TFCWorkPlan.FEATURES_FLAG;
     }
 }
