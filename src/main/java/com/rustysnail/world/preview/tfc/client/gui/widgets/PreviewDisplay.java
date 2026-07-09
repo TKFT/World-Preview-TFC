@@ -38,8 +38,6 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
-import net.minecraft.world.level.ChunkPos;
-import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
@@ -85,7 +83,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int texHeight = 100;
     private short selectedBiomeId;
     private short selectedRockId;
-    // Short.MIN_VALUE = no selection (the small ids 0.. and the reserved 100-103 are all valid raw values)
     private short selectedTFCMapValue = Short.MIN_VALUE;
     private boolean highlightCaves;
     private double totalDragX = 0.0;
@@ -336,16 +333,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 int centerX = this.getX() + this.width / 2;
                 int centerY = this.getY() + this.height / 2;
                 guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.MSG_PREVIEW_SETUP_LOADING, centerX, centerY, 16777215);
-                // We overwrote the texture with the loading screen; force a rebuild once data is ready
-                // so the black loading fill can never persist into the normal render path.
                 this.cachedRenderData = null;
             }
             else
             {
-                // Rebuild the (expensive) preview texture only when something that affects it
-                // changed: viewport, mode, selection, cave highlight, texture size/resolution, or a
-                // new data revision. Otherwise keep showing the previous valid texture. While
-                // dragging, throttle rebuilds so continuous panning does not rebuild every frame.
                 BlockPos center = this.center();
                 long revision = this.workManager.dataRevision();
                 long now = System.currentTimeMillis();
@@ -1697,11 +1688,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.selectedTFCMapValue = value;
     }
 
-    /**
-     * Category-selection grayscale for the forest-type / tree-species maps, in ARGB space.
-     * No selection or a match keeps the original ARGB; anything else is grayed out. The three
-     * water subtypes collapse to VALUE_WATER so selecting Water keeps all water colored.
-     */
     private int applyTFCMapValueSelection(short rawData, int argb)
     {
         if (this.selectedTFCMapValue == Short.MIN_VALUE)

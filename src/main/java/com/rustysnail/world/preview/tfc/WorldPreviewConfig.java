@@ -5,14 +5,14 @@ import java.util.List;
 
 public class WorldPreviewConfig
 {
-    public List<String> savedSeeds = new ArrayList<>();
+    public final List<String> savedSeeds = new ArrayList<>();
     public boolean showInPauseMenu = true;
     public boolean showPlayer = true;
     public boolean showControls = true;
     public boolean showFrameTime = false;
     public boolean sampleStructures = false;
     public boolean sampleHeightmap = false;
-    public boolean storeNoiseSamples = false;
+    public final boolean storeNoiseSamples = false;
     public int heightmapMinY = 32;
     public int heightmapMaxY = 255;
     public boolean onlySampleInVisualRange = true;
@@ -30,7 +30,7 @@ public class WorldPreviewConfig
 
     public void setNumThreads(int numThreads)
     {
-        numThreads = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), numThreads));
+        numThreads = Math.clamp(numThreads, 1, Runtime.getRuntime().availableProcessors());
         this.numThreads = numThreads;
     }
 }

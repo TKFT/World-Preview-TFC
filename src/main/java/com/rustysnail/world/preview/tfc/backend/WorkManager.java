@@ -668,7 +668,7 @@ public class WorkManager
                 toQueue[i] = temp;
             }
 
-            int batchSize = maxBatchSize == 1 ? 1 : Math.max(8, Math.min(maxBatchSize, size / 4096));
+            int batchSize = maxBatchSize == 1 ? 1 : Math.clamp(maxBatchSize, 8, size / 4096);
             WorkBatch[] batches = new WorkBatch[batchSize == 1 ? size : size / batchSize + 1];
             if (batchSize > 1)
             {
@@ -767,7 +767,6 @@ public class WorkManager
             ChunkData chunkData = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
             ForestType forestType = chunkData.getForestType();
             BiomeExtension biome = tfcSu.sampleBiomeExtension(blockX, blockZ);
-            TFCTreeResolver.ConfigType configType = TFCTreeResolver.selectConfigType(biome, forestType);
             int surfaceY;
             try
             {
@@ -777,7 +776,7 @@ public class WorkManager
             {
                 surfaceY = 63;
             }
-            return resolver.resolve(chunkData, forestType, configType, blockX, blockZ, surfaceY);
+            return resolver.resolve(chunkData, forestType, biome, blockX, blockZ, surfaceY);
         }
         catch (Exception e)
         {

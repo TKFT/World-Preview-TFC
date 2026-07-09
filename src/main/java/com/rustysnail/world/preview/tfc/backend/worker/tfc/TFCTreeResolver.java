@@ -12,11 +12,16 @@ import net.dries007.tfc.world.settings.Settings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.QuartPos;
+import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -25,7 +30,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * Deterministic "most likely tree" resolver for the preview. Mirrors TFC's
@@ -43,14 +50,6 @@ public final class TFCTreeResolver
     private static final ResourceLocation FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "forest");
     private static final ResourceLocation DEAD_FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "dead_forest");
     private static final ResourceLocation MANGROVE_FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "mangrove_forest");
-
-    /** Which forest config applies at a position; each maps to a concrete ForestConfig id. */
-    public enum ConfigType
-    {
-        FOREST,          // tfc:forest        (normal, never mangrove)
-        DEAD_FOREST,     // tfc:dead_forest   (ForestType#isDead)
-        MANGROVE_FOREST  // tfc:mangrove_forest (salt_marsh biome)
-    }
 
     /**
      * Result of a resolution: the most likely species id, the final (trimmed) possible-species ids,
@@ -75,14 +74,25 @@ public final class TFCTreeResolver
     // Every discovered ForestConfig, keyed by its configured-feature id (tfc:forest, tfc:dead_forest,
     // tfc:mangrove_forest, plus any addon ForestConfig). Immutable after construction.
     private final Map<ResourceLocation, List<SpeciesEntry>> entriesByConfig;
+    // Biome registry, used to inspect a biome's worldgen features to find its actual ForestConfig(s).
+    @Nullable
+    private final Registry<Biome> biomeRegistry;
+    // Lazy cache: biome id -> sorted list of ForestConfig ids referenced by that biome's features
+    // (only configs known in entriesByConfig). Built once per biome, reused across sampled points.
+    private final Map<ResourceLocation, List<ResourceLocation>> biomeConfigCache = new ConcurrentHashMap<>();
 
-    // Cache keyed by (quartX, quartZ, forestType ordinal, config type) — see packKey.
-    private final Map<Long, Result> resultCache = new ConcurrentHashMap<>();
+    // Cache keyed by quart position + forest type + resolved config id.
+    private final Map<CacheKey, Result> resultCache = new ConcurrentHashMap<>();
 
-    private TFCTreeResolver(Settings settings, Map<ResourceLocation, List<SpeciesEntry>> entriesByConfig)
+    private record CacheKey(int quartX, int quartZ, int forestOrdinal, @Nullable ResourceLocation config) {}
+
+    private volatile boolean loggedNoBiomeRegistry = false;
+
+    private TFCTreeResolver(Settings settings, Map<ResourceLocation, List<SpeciesEntry>> entriesByConfig, @Nullable Registry<Biome> biomeRegistry)
     {
         this.settings = settings;
         this.entriesByConfig = entriesByConfig;
+        this.biomeRegistry = biomeRegistry;
     }
 
     @Nullable
@@ -114,13 +124,25 @@ public final class TFCTreeResolver
                 WorldPreview.LOGGER.warn("[TFC] No forest configs found; dominant-tree resolution disabled");
                 return null;
             }
+
+            Registry<Biome> biomeRegistry = null;
+            try
+            {
+                biomeRegistry = registryAccess.registryOrThrow(Registries.BIOME);
+            }
+            catch (Exception e)
+            {
+                WorldPreview.LOGGER.warn("[TFC] Biome registry unavailable; biome-specific forest config detection disabled", e);
+            }
+
             WorldPreview.LOGGER.info(
-                "[TFC] Loaded {} forest configs ({} addon): forest={}, dead={}, mangrove={} entries",
+                "[TFC] Loaded {} forest configs ({} addon): forest={}, dead={}, mangrove={} entries; biome detection {}",
                 byConfig.size(), addonConfigs,
                 byConfig.getOrDefault(FOREST_ID, List.of()).size(),
                 byConfig.getOrDefault(DEAD_FOREST_ID, List.of()).size(),
-                byConfig.getOrDefault(MANGROVE_FOREST_ID, List.of()).size());
-            return new TFCTreeResolver(settings, Map.copyOf(byConfig));
+                byConfig.getOrDefault(MANGROVE_FOREST_ID, List.of()).size(),
+                biomeRegistry != null ? "enabled" : "disabled");
+            return new TFCTreeResolver(settings, Map.copyOf(byConfig), biomeRegistry);
         }
         catch (Exception e)
         {
@@ -145,33 +167,186 @@ public final class TFCTreeResolver
         return result;
     }
 
-    private static ResourceLocation configIdFor(ConfigType type)
+    // ---------------------------------------------------------------- config classification
+
+    static boolean isMangroveConfig(ResourceLocation id)
     {
-        return switch (type)
-        {
-            case DEAD_FOREST -> DEAD_FOREST_ID;
-            case MANGROVE_FOREST -> MANGROVE_FOREST_ID;
-            default -> FOREST_ID;
-        };
+        return id.equals(MANGROVE_FOREST_ID) || id.getPath().contains("mangrove");
     }
 
-    /**
-     * Picks the ForestConfig type for a position from its biome and forest type.
-     * <p>TODO (addon support): inspect the sampled biome's placed-feature references to detect the
-     * ForestConfig actually used by that biome, and select addon configs directly. For now this uses
-     * the fixed tfc:forest / tfc:dead_forest / tfc:mangrove_forest rules.
-     */
-    public static ConfigType selectConfigType(@Nullable BiomeExtension biome, ForestType forestType)
+    static boolean isDeadConfig(ResourceLocation id)
     {
-        if (biome != null && biome.key().location().getPath().equals("salt_marsh"))
+        return id.equals(DEAD_FOREST_ID) || id.getPath().contains("dead");
+    }
+
+    static boolean isNormalConfig(ResourceLocation id)
+    {
+        return !isMangroveConfig(id) && !isDeadConfig(id);
+    }
+
+    private static boolean isSaltMarsh(@Nullable BiomeExtension biome)
+    {
+        return biome != null && biome.key().location().getPath().equals("salt_marsh");
+    }
+
+    // ---------------------------------------------------------------- config selection
+
+    /**
+     * Chooses the ForestConfig id for a position. Prefers the config(s) actually referenced by the
+     * sampled biome's worldgen features (addon-aware); if the biome has none, falls back to the fixed
+     * salt_marsh -> mangrove, dead -> dead_forest, else -> forest rules. Returns null if no config
+     * is available (no tree).
+     */
+    @Nullable
+    private ResourceLocation selectConfigId(@Nullable BiomeExtension biome, ForestType forestType)
+    {
+        if (biome != null)
         {
-            return ConfigType.MANGROVE_FOREST;
+            List<ResourceLocation> candidates = biomeForestConfigs(biome);
+            if (!candidates.isEmpty())
+            {
+                ResourceLocation chosen = pickByContext(candidates, biome, forestType);
+                if (chosen != null)
+                {
+                    return chosen;
+                }
+            }
+        }
+
+        // Fallbacks (used only when the biome declares no ForestConfig features).
+        if (isSaltMarsh(biome) && this.entriesByConfig.containsKey(MANGROVE_FOREST_ID))
+        {
+            return MANGROVE_FOREST_ID;
+        }
+        if (forestType.isDead() && this.entriesByConfig.containsKey(DEAD_FOREST_ID))
+        {
+            return DEAD_FOREST_ID;
+        }
+        if (this.entriesByConfig.containsKey(FOREST_ID))
+        {
+            return FOREST_ID;
+        }
+        return null;
+    }
+
+    /** From a biome's candidate configs, pick the one matching the current context; else first sorted. */
+    @Nullable
+    private static ResourceLocation pickByContext(List<ResourceLocation> candidates, @Nullable BiomeExtension biome, ForestType forestType)
+    {
+        if (isSaltMarsh(biome))
+        {
+            ResourceLocation m = firstMatching(candidates, TFCTreeResolver::isMangroveConfig);
+            if (m != null) return m;
         }
         if (forestType.isDead())
         {
-            return ConfigType.DEAD_FOREST;
+            ResourceLocation d = firstMatching(candidates, TFCTreeResolver::isDeadConfig);
+            if (d != null) return d;
         }
-        return ConfigType.FOREST;
+        ResourceLocation n = firstMatching(candidates, TFCTreeResolver::isNormalConfig);
+        if (n != null) return n;
+        return candidates.isEmpty() ? null : candidates.getFirst();
+    }
+
+    @Nullable
+    private static ResourceLocation firstMatching(List<ResourceLocation> candidates, Predicate<ResourceLocation> test)
+    {
+        for (ResourceLocation c : candidates)
+        {
+            if (test.test(c)) return c;
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------- biome -> config detection
+
+    private List<ResourceLocation> biomeForestConfigs(BiomeExtension biome)
+    {
+        return this.biomeConfigCache.computeIfAbsent(biome.key().location(), id -> detectBiomeForestConfigs(biome, id));
+    }
+
+    /**
+     * Scans a biome's worldgen features for configured features whose config is a {@link ForestConfig}
+     * and are known in {@link #entriesByConfig}. Cached per biome; safe against a missing biome
+     * registry or unbound holders (returns an empty list, falling back to the fixed selection rules).
+     */
+    private List<ResourceLocation> detectBiomeForestConfigs(BiomeExtension biome, ResourceLocation biomeId)
+    {
+        if (this.biomeRegistry == null)
+        {
+            if (!this.loggedNoBiomeRegistry)
+            {
+                this.loggedNoBiomeRegistry = true;
+                // TODO: no biome registry (generation settings unavailable) — using fallback selection.
+                WorldPreview.LOGGER.debug("[TFC] No biome registry; forest config falls back to fixed rules");
+            }
+            return List.of();
+        }
+        try
+        {
+            Biome biomeObj = this.biomeRegistry.get(biome.key());
+            if (biomeObj == null)
+            {
+                return List.of();
+            }
+            TreeSet<ResourceLocation> found = new TreeSet<>(Comparator.comparing(ResourceLocation::toString));
+            for (HolderSet<PlacedFeature> step : biomeObj.getGenerationSettings().features())
+            {
+                // Each step is a HolderSet that may be a tag; iterating an unbound tag can throw, so
+                // guard per step and simply skip it rather than failing the whole biome scan.
+                try
+                {
+                    for (Holder<PlacedFeature> placedHolder : step)
+                    {
+                        PlacedFeature placed;
+                        try
+                        {
+                            placed = placedHolder.value();
+                        }
+                        catch (Exception unbound)
+                        {
+                            continue; // unbound/missing placed feature holder
+                        }
+                        Holder<ConfiguredFeature<?, ?>> cfHolder = placed.feature();
+                        ConfiguredFeature<?, ?> cf;
+                        try
+                        {
+                            cf = cfHolder.value();
+                        }
+                        catch (Exception unbound)
+                        {
+                            continue;
+                        }
+                        if (cf.config() instanceof ForestConfig)
+                        {
+                            cfHolder.unwrapKey()
+                                .map(ResourceKey::location)
+                                .filter(this.entriesByConfig::containsKey)
+                                .ifPresent(found::add);
+                        }
+                    }
+                }
+                catch (Exception stepUnbound)
+                {
+                    // unbound tag / feature set at this decoration step
+                }
+            }
+            List<ResourceLocation> result = List.copyOf(found);
+            if (result.size() > 1)
+            {
+                WorldPreview.LOGGER.debug("[TFC] Biome {} references multiple forest configs {}", biomeId, result);
+            }
+            else if (!result.isEmpty())
+            {
+                WorldPreview.LOGGER.debug("[TFC] Biome {} forest config: {}", biomeId, result.getFirst());
+            }
+            return result;
+        }
+        catch (Exception e)
+        {
+            WorldPreview.LOGGER.debug("[TFC] Failed scanning biome {} features for forest configs: {}", biomeId, e.getMessage());
+            return List.of();
+        }
     }
 
     /**
@@ -180,33 +355,28 @@ public final class TFCTreeResolver
      * {@code surfaceY} is the terrain height used for elevation temperature adjustment and the
      * elevation climate check.
      */
-    public Result resolve(ChunkData chunkData, ForestType forestType, ConfigType configType, int blockX, int blockZ, int surfaceY)
+    public Result resolve(ChunkData chunkData, ForestType forestType, @Nullable BiomeExtension biome, int blockX, int blockZ, int surfaceY)
     {
-        final long key = packKey(blockX, blockZ, forestType, configType);
+        final ResourceLocation configId = selectConfigId(biome, forestType);
+        final CacheKey key = new CacheKey(QuartPos.fromBlock(blockX), QuartPos.fromBlock(blockZ), forestType.ordinal(), configId);
         Result cached = this.resultCache.get(key);
         if (cached != null)
         {
             return cached;
         }
 
-        Result result = computeResult(chunkData, forestType, configType, blockX, blockZ, surfaceY);
+        Result result = computeResult(chunkData, forestType, configId, blockX, blockZ, surfaceY);
         this.resultCache.put(key, result);
         return result;
     }
 
-    private Result computeResult(ChunkData chunkData, ForestType forestType, ConfigType configType, int blockX, int blockZ, int surfaceY)
+    private Result computeResult(ChunkData chunkData, ForestType forestType, @Nullable ResourceLocation configId, int blockX, int blockZ, int surfaceY)
     {
-        // Select the config, falling back to tfc:forest when the requested one is absent. The
-        // sourceConfig is reported for the tooltip whenever a config would apply, even if there is
-        // ultimately no tree (grassland / no valid candidates).
-        ResourceLocation configId = configIdFor(configType);
-        List<SpeciesEntry> entries = this.entriesByConfig.get(configId);
-        if (entries == null || entries.isEmpty())
-        {
-            configId = FOREST_ID;
-            entries = this.entriesByConfig.get(FOREST_ID);
-        }
-        final ResourceLocation sourceConfig = entries != null ? configId : null;
+        // configId was resolved by selectConfigId (biome-specific, else fallback). The sourceConfig is
+        // reported for the tooltip whenever a config applies, even if there is ultimately no tree
+        // (grassland / no valid candidates).
+        List<SpeciesEntry> entries = configId != null ? this.entriesByConfig.get(configId) : null;
+        final ResourceLocation sourceConfig = entries != null && !entries.isEmpty() ? configId : null;
 
         // Forest types that place neither trees nor bushes have no dominant species.
         if (!TFCSampleUtils.forestTypeHasVegetation(forestType))
@@ -252,7 +422,7 @@ public final class TFCTreeResolver
         int alternate = forestType.getAlternateSize();
         while (candidates.size() > 1 && alternate > 0)
         {
-            candidates.remove(0);
+            candidates.removeFirst();
             alternate--;
         }
 
@@ -268,14 +438,5 @@ public final class TFCTreeResolver
             possibleIds.add(se.speciesId());
         }
         return new Result(dominantId, possibleIds, sourceConfig);
-    }
-
-    private static long packKey(int blockX, int blockZ, ForestType forestType, ConfigType configType)
-    {
-        final long qx = QuartPos.fromBlock(blockX) & 0x3FFFFFFL; // 26 bits
-        final long qz = QuartPos.fromBlock(blockZ) & 0x3FFFFFFL; // 26 bits
-        final long ft = forestType.ordinal() & 0x3FL;            // 6 bits
-        final long ct = configType.ordinal() & 0x3L;             // 2 bits
-        return (qx << 38) | (qz << 12) | (ft << 6) | ct;
     }
 }

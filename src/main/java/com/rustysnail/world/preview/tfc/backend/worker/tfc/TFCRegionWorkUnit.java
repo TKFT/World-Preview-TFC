@@ -352,11 +352,9 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                         else if (this.treeResolver != null && chunkData != null && forestType != null)
                         {
-                            TFCTreeResolver.ConfigType configType =
-                                TFCTreeResolver.selectConfigType(treeMapBiome, forestType);
                             int surfaceY = sampleSurfaceY(pos);
                             treeSpeciesValue = this.treeResolver
-                                .resolve(chunkData, forestType, configType, pos.getX(), pos.getZ(), surfaceY)
+                                .resolve(chunkData, forestType, treeMapBiome, pos.getX(), pos.getZ(), surfaceY)
                                 .dominantId();
                         }
 

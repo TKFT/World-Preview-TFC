@@ -98,7 +98,7 @@ public class RenderSettings
         public final long flag;
         public final boolean useY;
 
-        RenderMode(long flag, boolean useY)
+        RenderMode(long flag, @SuppressWarnings("SameParameterValue") boolean useY)
         {
             this.flag = flag;
             this.useY = useY;

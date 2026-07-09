@@ -29,9 +29,6 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class TFCSampleUtils
 {
     // Reserved special values stored in the forest-type / tree-species maps. Kept near the top of

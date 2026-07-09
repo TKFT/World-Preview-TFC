@@ -7,6 +7,7 @@ import net.dries007.tfc.world.feature.tree.ForestConfig;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
@@ -122,10 +123,10 @@ public final class TFCTreeSpeciesRegistry
             for (Map.Entry<net.minecraft.resources.ResourceKey<ConfiguredFeature<?, ?>>, ConfiguredFeature<?, ?>> e : registry.entrySet())
             {
                 FeatureConfiguration config = e.getValue().config();
-                if (config instanceof ForestConfig forestConfig)
+                if (config instanceof ForestConfig(net.minecraft.core.HolderSet<ConfiguredFeature<?, ?>> entries1))
                 {
                     forestConfigCount++;
-                    for (Holder<ConfiguredFeature<?, ?>> holder : forestConfig.entries())
+                    for (Holder<ConfiguredFeature<?, ?>> holder : entries1)
                     {
                         if (holder.value().config() instanceof ForestConfig.Entry entry)
                         {
@@ -175,8 +176,8 @@ public final class TFCTreeSpeciesRegistry
     public static ResourceLocation speciesFromHolder(Holder<ConfiguredFeature<?, ?>> holder, ForestConfig.Entry entry)
     {
         ResourceLocation key = holder.unwrapKey()
-            .map(k -> k.location())
-            .orElseGet(() -> entry.treeFeature().unwrapKey().map(k -> k.location()).orElse(null));
+            .map(ResourceKey::location)
+            .orElseGet(() -> entry.treeFeature().unwrapKey().map(ResourceKey::location).orElse(null));
         return key == null ? tfc("tree") : normalize(key);
     }
 

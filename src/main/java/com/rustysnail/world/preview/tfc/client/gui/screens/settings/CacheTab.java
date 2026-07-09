@@ -50,7 +50,7 @@ public class CacheTab extends GridLayoutTab
         rowHelper.addChild(cbCompressEnable);
     }
 
-    private void onClearCache(Button btn)
+    private void onClearCache(Button ignoredBtn)
     {
         this.cacheManager.clearCache();
     }
