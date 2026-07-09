@@ -4,6 +4,7 @@ import com.rustysnail.world.preview.tfc.WorldPreview;
 
 import net.dries007.tfc.client.overworld.SolarCalculator;
 import net.dries007.tfc.util.EnvironmentHelpers;
+import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ForestType;
 import net.dries007.tfc.world.feature.tree.ForestConfig;
@@ -16,12 +17,12 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
-import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,7 +40,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class TFCTreeResolver
 {
-    /** Which of the three TFC forest configs applies at a position. */
+    private static final ResourceLocation FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "forest");
+    private static final ResourceLocation DEAD_FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "dead_forest");
+    private static final ResourceLocation MANGROVE_FOREST_ID = ResourceLocation.fromNamespaceAndPath("tfc", "mangrove_forest");
+
+    /** Which forest config applies at a position; each maps to a concrete ForestConfig id. */
     public enum ConfigType
     {
         FOREST,          // tfc:forest        (normal, never mangrove)
@@ -47,10 +52,13 @@ public final class TFCTreeResolver
         MANGROVE_FOREST  // tfc:mangrove_forest (salt_marsh biome)
     }
 
-    /** Result of a resolution: the most likely species id and the final possible-species names. */
-    public record Result(short speciesId, List<String> possibleSpecies)
+    /**
+     * Result of a resolution: the most likely species id, the final (trimmed) possible-species
+     * names, and the ForestConfig id the candidates came from (for the tooltip / diagnostics).
+     */
+    public record Result(short speciesId, List<String> possibleSpecies, @Nullable ResourceLocation sourceConfig)
     {
-        public static final Result NONE = new Result(TFCSampleUtils.VALUE_INVALID, List.of());
+        public static final Result NONE = new Result(TFCSampleUtils.VALUE_INVALID, List.of(), null);
 
         public boolean hasTree()
         {
@@ -62,19 +70,17 @@ public final class TFCTreeResolver
     private record SpeciesEntry(short speciesId, ForestConfig.Entry entry) {}
 
     private final Settings settings;
-    private final List<SpeciesEntry> forestEntries;
-    private final List<SpeciesEntry> deadForestEntries;
-    private final List<SpeciesEntry> mangroveEntries;
+    // Every discovered ForestConfig, keyed by its configured-feature id (tfc:forest, tfc:dead_forest,
+    // tfc:mangrove_forest, plus any addon ForestConfig). Immutable after construction.
+    private final Map<ResourceLocation, List<SpeciesEntry>> entriesByConfig;
 
     // Cache keyed by (quartX, quartZ, forestType ordinal, config type) — see packKey.
     private final Map<Long, Result> resultCache = new ConcurrentHashMap<>();
 
-    private TFCTreeResolver(Settings settings, List<SpeciesEntry> forestEntries, List<SpeciesEntry> deadForestEntries, List<SpeciesEntry> mangroveEntries)
+    private TFCTreeResolver(Settings settings, Map<ResourceLocation, List<SpeciesEntry>> entriesByConfig)
     {
         this.settings = settings;
-        this.forestEntries = forestEntries;
-        this.deadForestEntries = deadForestEntries;
-        this.mangroveEntries = mangroveEntries;
+        this.entriesByConfig = entriesByConfig;
     }
 
     @Nullable
@@ -83,17 +89,36 @@ public final class TFCTreeResolver
         try
         {
             var registry = registryAccess.registryOrThrow(Registries.CONFIGURED_FEATURE);
-            List<SpeciesEntry> forest = loadConfig(registry, "forest");
-            List<SpeciesEntry> dead = loadConfig(registry, "dead_forest");
-            List<SpeciesEntry> mangrove = loadConfig(registry, "mangrove_forest");
-            if (forest.isEmpty() && dead.isEmpty() && mangrove.isEmpty())
+
+            // Scan every configured feature: any whose config is a ForestConfig is recorded by id, so
+            // addon forest configs are preserved and selectable, not just the three TFC ones.
+            Map<ResourceLocation, List<SpeciesEntry>> byConfig = new HashMap<>();
+            int addonConfigs = 0;
+            for (Map.Entry<net.minecraft.resources.ResourceKey<ConfiguredFeature<?, ?>>, ConfiguredFeature<?, ?>> e : registry.entrySet())
+            {
+                if (e.getValue().config() instanceof ForestConfig forestConfig)
+                {
+                    ResourceLocation id = e.getKey().location();
+                    byConfig.put(id, loadEntries(forestConfig));
+                    if (!id.getNamespace().equals("tfc"))
+                    {
+                        addonConfigs++;
+                    }
+                }
+            }
+
+            if (byConfig.isEmpty())
             {
                 WorldPreview.LOGGER.warn("[TFC] No forest configs found; dominant-tree resolution disabled");
                 return null;
             }
-            WorldPreview.LOGGER.info("[TFC] Loaded forest configs: forest={}, dead={}, mangrove={} entries",
-                forest.size(), dead.size(), mangrove.size());
-            return new TFCTreeResolver(settings, forest, dead, mangrove);
+            WorldPreview.LOGGER.info(
+                "[TFC] Loaded {} forest configs ({} addon): forest={}, dead={}, mangrove={} entries",
+                byConfig.size(), addonConfigs,
+                byConfig.getOrDefault(FOREST_ID, List.of()).size(),
+                byConfig.getOrDefault(DEAD_FOREST_ID, List.of()).size(),
+                byConfig.getOrDefault(MANGROVE_FOREST_ID, List.of()).size());
+            return new TFCTreeResolver(settings, Map.copyOf(byConfig));
         }
         catch (Exception e)
         {
@@ -102,37 +127,49 @@ public final class TFCTreeResolver
         }
     }
 
-    private static List<SpeciesEntry> loadConfig(net.minecraft.core.Registry<ConfiguredFeature<?, ?>> registry, String path)
+    private static List<SpeciesEntry> loadEntries(ForestConfig forestConfig)
     {
         List<SpeciesEntry> result = new ArrayList<>();
-        ConfiguredFeature<?, ?> configured = registry.get(ResourceLocation.fromNamespaceAndPath("tfc", path));
-        if (configured == null || !(configured.config() instanceof ForestConfig forestConfig))
-        {
-            return result;
-        }
         for (Holder<ConfiguredFeature<?, ?>> holder : forestConfig.entries())
         {
-            FeatureConfiguration cfg = holder.value().config();
-            if (!(cfg instanceof ForestConfig.Entry entry))
+            if (holder.value().config() instanceof ForestConfig.Entry entry)
             {
-                continue;
+                // Resolve the species location the same way the registry does, then map to its runtime id.
+                ResourceLocation species = TFCTreeSpeciesRegistry.speciesFromHolder(holder, entry);
+                short id = TFCSampleUtils.treeSpeciesId(species);
+                result.add(new SpeciesEntry(id, entry));
             }
-            // Resolve the species location the same way the registry does, then map to its runtime id.
-            ResourceLocation species = TFCTreeSpeciesRegistry.speciesFromHolder(holder, entry);
-            short id = TFCSampleUtils.treeSpeciesId(species);
-            result.add(new SpeciesEntry(id, entry));
         }
         return result;
     }
 
-    private List<SpeciesEntry> entriesFor(ConfigType type)
+    private static ResourceLocation configIdFor(ConfigType type)
     {
         return switch (type)
         {
-            case DEAD_FOREST -> this.deadForestEntries;
-            case MANGROVE_FOREST -> this.mangroveEntries;
-            default -> this.forestEntries;
+            case DEAD_FOREST -> DEAD_FOREST_ID;
+            case MANGROVE_FOREST -> MANGROVE_FOREST_ID;
+            default -> FOREST_ID;
         };
+    }
+
+    /**
+     * Picks the ForestConfig type for a position from its biome and forest type.
+     * <p>TODO (addon support): inspect the sampled biome's placed-feature references to detect the
+     * ForestConfig actually used by that biome, and select addon configs directly. For now this uses
+     * the fixed tfc:forest / tfc:dead_forest / tfc:mangrove_forest rules.
+     */
+    public static ConfigType selectConfigType(@Nullable BiomeExtension biome, ForestType forestType)
+    {
+        if (biome != null && biome.key().location().getPath().equals("salt_marsh"))
+        {
+            return ConfigType.MANGROVE_FOREST;
+        }
+        if (forestType.isDead())
+        {
+            return ConfigType.DEAD_FOREST;
+        }
+        return ConfigType.FOREST;
     }
 
     /**
@@ -163,8 +200,15 @@ public final class TFCTreeResolver
             return Result.NONE;
         }
 
-        final List<SpeciesEntry> entries = entriesFor(configType);
-        if (entries.isEmpty())
+        // Select the config, falling back to tfc:forest when the requested one is absent.
+        ResourceLocation configId = configIdFor(configType);
+        List<SpeciesEntry> entries = this.entriesByConfig.get(configId);
+        if (entries == null || entries.isEmpty())
+        {
+            configId = FOREST_ID;
+            entries = this.entriesByConfig.get(FOREST_ID);
+        }
+        if (entries == null || entries.isEmpty())
         {
             return Result.NONE;
         }
@@ -207,8 +251,9 @@ public final class TFCTreeResolver
             alternate--;
         }
 
-        // Most likely index of TFC's weighted 60% walk:
-        //   size 1 -> 0; size 2 -> 1 (0.6 vs 0.4); size >= 3 -> 0 (largest single probability, 0.4).
+        // Deterministic approximation of TFC's weighted random final choice, which walks the list
+        // while random.nextFloat() < 0.6. Picking the single most probable index:
+        //   size 1 -> 0; size 2 -> 1 (0.6 vs 0.4); size >= 3 -> 0 (largest individual probability, 0.4).
         final int mostLikely = candidates.size() == 2 ? 1 : 0;
 
         final short speciesId = candidates.get(mostLikely).speciesId();
@@ -217,7 +262,7 @@ public final class TFCTreeResolver
         {
             possible.add(TFCSampleUtils.getTreeSpeciesName(se.speciesId()));
         }
-        return new Result(speciesId, possible);
+        return new Result(speciesId, possible, configId);
     }
 
     private static long packKey(int blockX, int blockZ, ForestType forestType, ConfigType configType)

@@ -97,7 +97,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private final Queue<Long> frametimes = new ArrayDeque<>();
     private boolean clicked = false;
     private long lastSpeciesChunkKey = Long.MIN_VALUE;
-    private List<String> cachedPossibleSpecies = List.of();
+    private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result cachedTreeResult =
+        com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result.NONE;
     private boolean loggedInvalidHeight = false;
 
     // --- Texture dirty/revision tracking (rebuild the texture only when something actually changed) ---
@@ -1364,8 +1365,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             {
                                 String dominantName = hoverInfo.tfcTreeSpecies >= 0 && hoverInfo.tfcTreeSpecies < TFCSampleUtils.treeSpeciesCount()
                                     ? hoverInfo.getTfcTreeSpeciesName() : "None";
-                                tfcInfo.append("\n§3Dominant Tree:§r §b%s§r".formatted(dominantName));
-                                List<String> possible = getPossibleSpecies(hoverInfo.blockX, hoverInfo.blockZ);
+                                tfcInfo.append("\n§3Most Likely Tree:§r §b%s§r".formatted(dominantName));
+                                var treeResult = resolvedTreeAt(hoverInfo.blockX, hoverInfo.blockZ);
+                                List<String> possible = treeResult.possibleSpecies();
                                 String possibleStr = possible.isEmpty() ? "None" : String.join(", ", possible);
                                 tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(possibleStr));
                                 if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
@@ -1374,6 +1376,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                     String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
                                     if (densityLabel != null)
                                         tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
+                                }
+                                if (treeResult.sourceConfig() != null)
+                                {
+                                    tfcInfo.append("\n§3Source:§r §b%s§r".formatted(treeResult.sourceConfig()));
                                 }
                             }
                             if (hoverInfo.tfcLandWater > -32768)
@@ -1438,22 +1444,22 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return tfcClimate;
     }
 
-    private List<String> getPossibleSpecies(int blockX, int blockZ)
+    private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result resolvedTreeAt(int blockX, int blockZ)
     {
         // Cache per quart position: the dominant/possible set now varies within a chunk (elevation
         // and per-point climate), so a per-chunk cache key would be wrong.
         long quartKey = ((long) (blockX >> 2) << 32) | ((blockZ >> 2) & 0xFFFFFFFFL);
-        if (quartKey == this.lastSpeciesChunkKey) return this.cachedPossibleSpecies;
+        if (quartKey == this.lastSpeciesChunkKey) return this.cachedTreeResult;
         this.lastSpeciesChunkKey = quartKey;
         try
         {
-            this.cachedPossibleSpecies = this.workManager.resolveTreeAt(blockX, blockZ).possibleSpecies();
+            this.cachedTreeResult = this.workManager.resolveTreeAt(blockX, blockZ);
         }
         catch (Exception e)
         {
-            this.cachedPossibleSpecies = List.of();
+            this.cachedTreeResult = com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result.NONE;
         }
-        return this.cachedPossibleSpecies;
+        return this.cachedTreeResult;
     }
 
     public void playDownSound(@NotNull SoundManager handler)

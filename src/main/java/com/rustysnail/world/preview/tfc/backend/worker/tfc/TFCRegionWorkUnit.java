@@ -233,11 +233,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                             WorldPreview.LOGGER.debug("TFC chunk data sampling failed for chunk {}: {}", cp, e.getMessage());
                         }
                     }
-                    // Base config for the whole chunk (dead forests use tfc:dead_forest); individual
-                    // salt_marsh points override to tfc:mangrove_forest inside the loop.
-                    TFCTreeResolver.ConfigType baseConfigType = forestType != null && forestType.isDead()
-                        ? TFCTreeResolver.ConfigType.DEAD_FOREST
-                        : TFCTreeResolver.ConfigType.FOREST;
 
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
@@ -357,9 +352,8 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                         else if (this.treeResolver != null && chunkData != null && forestType != null)
                         {
-                            TFCTreeResolver.ConfigType configType = isSaltMarsh(treeMapBiome)
-                                ? TFCTreeResolver.ConfigType.MANGROVE_FOREST
-                                : baseConfigType;
+                            TFCTreeResolver.ConfigType configType =
+                                TFCTreeResolver.selectConfigType(treeMapBiome, forestType);
                             int surfaceY = sampleSurfaceY(pos);
                             treeSpeciesValue = this.treeResolver
                                 .resolve(chunkData, forestType, configType, pos.getX(), pos.getZ(), surfaceY)
@@ -450,15 +444,14 @@ public class TFCRegionWorkUnit extends WorkUnit
         return TFCSampleUtils.VALUE_WATER_LAKE;
     }
 
-    private static boolean isSaltMarsh(@Nullable BiomeExtension biome)
-    {
-        return biome != null && biome.key().location().getPath().equals("salt_marsh");
-    }
+    private static volatile boolean loggedSeaLevelFallback = false;
 
     /**
      * Surface height for elevation-adjusted climate, via the same per-column path the heightmap
-     * render uses ({@link SampleUtils#doHeightSlow}). Falls back to TFC sea level (63) when the
-     * height sampler is unavailable, so resolution still works (without elevation cooling).
+     * render uses ({@link SampleUtils#doHeightSlow}), which approximates OCEAN_FLOOR_WG. Falls back
+     * to TFC sea level (63) when the height sampler is unavailable, so resolution still works
+     * (without elevation cooling). The fallback is logged once. A dedicated surface-height resolver
+     * can be plugged in here later.
      */
     private int sampleSurfaceY(BlockPos pos)
     {
@@ -468,6 +461,11 @@ public class TFCRegionWorkUnit extends WorkUnit
         }
         catch (Exception e)
         {
+            if (!loggedSeaLevelFallback)
+            {
+                loggedSeaLevelFallback = true;
+                WorldPreview.LOGGER.warn("[TFC] Tree species elevation using sea-level (63) fallback: {}", e.getMessage());
+            }
             return 63; // TFC SEA_LEVEL_Y fallback
         }
     }

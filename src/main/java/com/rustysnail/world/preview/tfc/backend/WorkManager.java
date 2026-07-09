@@ -767,19 +767,7 @@ public class WorkManager
             ChunkData chunkData = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
             ForestType forestType = chunkData.getForestType();
             BiomeExtension biome = tfcSu.sampleBiomeExtension(blockX, blockZ);
-            TFCTreeResolver.ConfigType configType;
-            if (biome != null && biome.key().location().getPath().equals("salt_marsh"))
-            {
-                configType = TFCTreeResolver.ConfigType.MANGROVE_FOREST;
-            }
-            else if (forestType.isDead())
-            {
-                configType = TFCTreeResolver.ConfigType.DEAD_FOREST;
-            }
-            else
-            {
-                configType = TFCTreeResolver.ConfigType.FOREST;
-            }
+            TFCTreeResolver.ConfigType configType = TFCTreeResolver.selectConfigType(biome, forestType);
             int surfaceY;
             try
             {
