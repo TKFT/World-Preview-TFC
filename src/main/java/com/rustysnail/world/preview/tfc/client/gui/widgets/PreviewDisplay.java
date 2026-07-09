@@ -68,6 +68,21 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] tfcTemperatureColorMap;
     private int[] tfcRainfallColorMap;
     private boolean[] cavesMap;
+    // Precomputed NativeImage-order TFC palettes (normal + grayscale for selection dimming).
+    private int[] forestTexPalette;
+    private int[] forestTexPaletteGray;
+    private int[] treeTexPalette;
+    private int[] treeTexPaletteGray;
+    private int[][] rockTexPalette;
+    private int[][] rockTexPaletteGray;
+    private int[][] rockTexPaletteBright;
+    private int[] rockTypeTexPalette;
+    private int[] rockTypeTexPaletteGray;
+    private int[] rockTypeTexPaletteBright;
+    private int tfcWaterTex;
+    private int tfcWaterTexGray;
+    private int tfcInvalidTex;
+    private int tfcInvalidTexGray;
     private boolean loggedInvalidBiomeId = false;
     private IconData[] structureIcons;
     private IconData[] featureIcons;
@@ -228,6 +243,103 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.colorMap[i] = textureColor(rawBiomeMap[i].color());
             this.colorMapGrayScale[i] = grayScale(this.colorMap[i]);
             this.cavesMap[i] = rawBiomeMap[i].isCave();
+        }
+
+        this.buildTfcPalettes();
+    }
+
+    private static boolean needsLandWaterOverlay(RenderSettings.RenderMode mode)
+    {
+        return mode == RenderSettings.RenderMode.TFC_TEMPERATURE
+            || mode == RenderSettings.RenderMode.TFC_RAINFALL
+            || mode == RenderSettings.RenderMode.TFC_ROCK_TOP
+            || mode == RenderSettings.RenderMode.TFC_ROCK_MID
+            || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
+            || mode == RenderSettings.RenderMode.TFC_HOTSPOT;
+    }
+
+    private static int packTex(int r, int g, int b)
+    {
+        return 0xFF000000 | (b << 16) | (g << 8) | r;
+    }
+
+    /** Rebuild the TFC palettes if the tree-species registry changed (cheap no-op otherwise). */
+    private void maybeRebuildTfcPalettes()
+    {
+        if (this.treeTexPalette == null || this.treeTexPalette.length != TFCSampleUtils.treeSpeciesCount()
+            || this.forestTexPalette == null)
+        {
+            this.buildTfcPalettes();
+        }
+    }
+
+    /**
+     * Precomputes NativeImage-order color palettes for the categorical TFC maps, so updateTexture
+     * needs no per-pixel textureColor(...) conversion or getXxxColor(...) lookup. Rebuilt on data
+     * reload (rock colors / palette resources) and when the tree-species registry changes.
+     */
+    private void buildTfcPalettes()
+    {
+        int fc = TFCSampleUtils.forestTypeCount();
+        this.forestTexPalette = new int[fc];
+        this.forestTexPaletteGray = new int[fc];
+        for (short i = 0; i < fc; i++)
+        {
+            int tex = textureColor(TFCSampleUtils.getForestTypeColor(i));
+            this.forestTexPalette[i] = tex;
+            this.forestTexPaletteGray[i] = grayScale(tex);
+        }
+
+        int tc = TFCSampleUtils.treeSpeciesCount();
+        this.treeTexPalette = new int[tc];
+        this.treeTexPaletteGray = new int[tc];
+        for (short i = 0; i < tc; i++)
+        {
+            int tex = textureColor(TFCSampleUtils.getTreeSpeciesColor(i));
+            this.treeTexPalette[i] = tex;
+            this.treeTexPaletteGray[i] = grayScale(tex);
+        }
+
+        this.tfcWaterTex = textureColor(TFCSampleUtils.COLOR_WATER);
+        this.tfcWaterTexGray = grayScale(this.tfcWaterTex);
+        this.tfcInvalidTex = textureColor(TFCSampleUtils.COLOR_INVALID);
+        this.tfcInvalidTexGray = grayScale(this.tfcInvalidTex);
+
+        int rc = TFCSampleUtils.ROCK_COLORS.length;
+        this.rockTexPalette = new int[3][rc];
+        this.rockTexPaletteGray = new int[3][rc];
+        this.rockTexPaletteBright = new int[3][rc];
+        final int[] layerShift = {0, 20, 40}; // top / mid / bot
+        for (int layer = 0; layer < 3; layer++)
+        {
+            int shift = layerShift[layer];
+            for (short id = 0; id < rc; id++)
+            {
+                int argb = TFCSampleUtils.getRockColor(id);
+                int r = Math.max(0, ((argb >> 16) & 0xFF) - shift);
+                int g = Math.max(0, ((argb >> 8) & 0xFF) - shift);
+                int b = Math.max(0, (argb & 0xFF) - shift);
+                this.rockTexPalette[layer][id] = packTex(r, g, b);
+                int gray = (r * 30 + g * 59 + b * 11) / 100;
+                this.rockTexPaletteGray[layer][id] = packTex(gray, gray, gray);
+                this.rockTexPaletteBright[layer][id] = packTex(Math.min(255, r + 40), Math.min(255, g + 40), Math.min(255, b + 40));
+            }
+        }
+
+        int rtc = TFCSampleUtils.ROCK_TYPE_COLORS.length;
+        this.rockTypeTexPalette = new int[rtc];
+        this.rockTypeTexPaletteGray = new int[rtc];
+        this.rockTypeTexPaletteBright = new int[rtc];
+        for (short id = 0; id < rtc; id++)
+        {
+            int argb = TFCSampleUtils.getRockTypeColor(id);
+            int r = (argb >> 16) & 0xFF;
+            int g = (argb >> 8) & 0xFF;
+            int b = argb & 0xFF;
+            this.rockTypeTexPalette[id] = packTex(r, g, b);
+            int gray = (r * 30 + g * 59 + b * 11) / 100;
+            this.rockTypeTexPaletteGray[id] = packTex(gray, gray, gray);
+            this.rockTypeTexPaletteBright[id] = packTex(Math.min(255, r + 40), Math.min(255, g + 40), Math.min(255, b + 40));
         }
     }
 
@@ -484,6 +596,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int sectionStartTexX = 0;
         int sectionStartTexZ = 0;
 
+        // Modes that tint water (ocean) read the land/water section; attach it once per section so
+        // updateTexture never does a per-pixel storage lookup for the water mask.
+        boolean needsLandWater = needsLandWaterOverlay(this.renderSettings.mode);
         List<RenderHelper> res = new ArrayList<>((quartsInWidth / PreviewSection.SIZE + 2) * (quartsInHeight / PreviewSection.SIZE + 2));
         PreviewStorage storage = this.workManager.previewStorage();
         synchronized (storage)
@@ -494,8 +609,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 int useY = this.renderSettings.mode.useY ? quartY : 0;
                 PreviewSection dataSection = storage.section4(quartX, useY, quartZ, flag);
                 PreviewSection structureSection = storage.section4(quartX, 0, quartZ, 1L);
+                PreviewSection landWaterSection = needsLandWater
+                    ? storage.section4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_LAND_WATER.flag)
+                    : null;
                 PreviewSection.AccessData accessData = dataSection.calcQuartOffsetData(quartX, quartZ, maxQuartX, maxQuartZ);
-                res.add(new RenderHelper(dataSection, structureSection, accessData, sectionStartTexX, sectionStartTexZ));
+                res.add(new RenderHelper(dataSection, structureSection, landWaterSection, accessData, sectionStartTexX, sectionStartTexZ));
                 if (accessData.continueX())
                 {
                     int quartDiffX = accessData.maxX() - accessData.minX();
@@ -525,6 +643,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int texZ;
         int quartExpand = this.renderSettings.quartExpand();
         int quartStride = this.renderSettings.quartStride();
+        this.maybeRebuildTfcPalettes();
+        // Rock layer index (0 top / 1 mid / 2 bot), constant for the whole texture pass.
+        final int rockLayer = switch (this.renderSettings.mode)
+        {
+            case TFC_ROCK_MID -> 1;
+            case TFC_ROCK_BOT -> 2;
+            default -> 0;
+        };
 
         for (RenderHelper r : renderData)
         {
@@ -579,10 +705,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_TEMPERATURE:
                             if (rawData > -32768 && this.tfcTemperatureColorMap != null)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
+                                if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                                 {
                                     color = 0xFFAA4422;  // Blue
                                 }
@@ -597,10 +720,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_RAINFALL:
                             if (rawData > -32768 && this.tfcRainfallColorMap != null)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
+                                if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                                 {
                                     color = 0xFFAA4422;  // Blue
                                 }
@@ -629,38 +749,25 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_ROCK_TOP:
                         case TFC_ROCK_MID:
                         case TFC_ROCK_BOT:
+                            if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(
-                                    quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag
-                                );
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
-                                {
-                                    color = 0xFF8B0000;  // Ocean - Dark Blue
-                                    break;
-                                }
+                                color = 0xFF8B0000;  // Ocean - Dark Blue
                             }
-                            if (rawData >= 0 && rawData < TFCSampleUtils.ROCK_COLORS.length)
+                            else if (rawData >= 0 && rawData < this.rockTexPalette[rockLayer].length)
                             {
                                 this.workingVisibleRocks[rawData]++;
-                                int argbColor = TFCSampleUtils.getRockColor(rawData);
-                                int alpha = (argbColor >> 24) & 0xFF;
-                                int red = (argbColor >> 16) & 0xFF;
-                                int green = (argbColor >> 8) & 0xFF;
-                                int blue = argbColor & 0xFF;
-                                RenderSettings.RenderMode currentMode = this.renderSettings.mode;
-                                int layerShift = switch (currentMode)
+                                if (this.selectedRockId < 0)
                                 {
-                                    case TFC_ROCK_TOP -> 0;    // Full brightness
-                                    case TFC_ROCK_MID -> 20;   // Slightly darker
-                                    case TFC_ROCK_BOT -> 40;   // Darker
-                                    default -> 0;
-                                };
-                                red = Math.max(0, red - layerShift);
-                                green = Math.max(0, green - layerShift);
-                                blue = Math.max(0, blue - layerShift);
-                                color = this.applyRockSelectionTint(rawData, alpha, red, green, blue);
+                                    color = this.rockTexPalette[rockLayer][rawData];
+                                }
+                                else if (rawData == this.selectedRockId)
+                                {
+                                    color = this.rockTexPaletteBright[rockLayer][rawData];
+                                }
+                                else
+                                {
+                                    color = this.rockTexPaletteGray[rockLayer][rawData];
+                                }
                             }
                             else if (rawData == -1)
                             {
@@ -668,15 +775,21 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_ROCK_TYPE:
-                            if (rawData >= 0 && rawData < TFCSampleUtils.ROCK_TYPE_COLORS.length)
+                            if (rawData >= 0 && rawData < this.rockTypeTexPalette.length)
                             {
                                 this.workingVisibleRocks[rawData]++;
-                                int argbColor = TFCSampleUtils.getRockTypeColor(rawData);
-                                int alpha = (argbColor >> 24) & 0xFF;
-                                int red = (argbColor >> 16) & 0xFF;
-                                int green = (argbColor >> 8) & 0xFF;
-                                int blue = argbColor & 0xFF;
-                                color = this.applyRockSelectionTint(rawData, alpha, red, green, blue);
+                                if (this.selectedRockId < 0)
+                                {
+                                    color = this.rockTypeTexPalette[rawData];
+                                }
+                                else if (rawData == this.selectedRockId)
+                                {
+                                    color = this.rockTypeTexPaletteBright[rawData];
+                                }
+                                else
+                                {
+                                    color = this.rockTypeTexPaletteGray[rawData];
+                                }
                             }
                             break;
                         case TFC_KAOLINITE:
@@ -693,40 +806,38 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             break;
                         case TFC_FOREST_TYPE:
                         {
-                            int argb;
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
                             if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                argb = TFCSampleUtils.COLOR_WATER;
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
                             }
-                            else if (rawData >= 0 && rawData < TFCSampleUtils.forestTypeCount())
+                            else if (rawData >= 0 && rawData < this.forestTexPalette.length)
                             {
-                                argb = TFCSampleUtils.getForestTypeColor(rawData);
+                                color = hi ? this.forestTexPalette[rawData] : this.forestTexPaletteGray[rawData];
                             }
                             else
                             {
-                                argb = TFCSampleUtils.COLOR_INVALID;
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
                             }
-                            argb = this.applyTFCMapValueSelection(rawData, argb);
-                            color = textureColor(argb);
                             break;
                         }
                         case TFC_TREE_SPECIES:
                         {
-                            int argb;
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
                             if (TFCSampleUtils.isWaterValue(rawData))
                             {
-                                argb = TFCSampleUtils.COLOR_WATER;
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
                             }
-                            else if (rawData >= 0 && rawData < TFCSampleUtils.treeSpeciesCount())
+                            else if (rawData >= 0 && rawData < this.treeTexPalette.length)
                             {
-                                argb = TFCSampleUtils.getTreeSpeciesColor(rawData);
+                                color = hi ? this.treeTexPalette[rawData] : this.treeTexPaletteGray[rawData];
                             }
                             else
                             {
-                                argb = TFCSampleUtils.COLOR_INVALID;
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
                             }
-                            argb = this.applyTFCMapValueSelection(rawData, argb);
-                            color = textureColor(argb);
                             break;
                         }
                         case TFC_HOTSPOT:
@@ -738,9 +849,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 }
                                 else
                                 {
-                                    int quartXCoord = r.dataSection.quartX() + x;
-                                    int quartZCoord = r.dataSection.quartZ() + z;
-                                    short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
+                                    short landWater = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
                                     color = switch (landWater)
                                     {
                                         case TFCRegionWorkUnit.LAND_WATER_OCEAN -> 0xFF8B0000;  // Dark blue
@@ -1652,27 +1761,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return 0xFF000000 | gray << 16 | gray << 8 | gray;
     }
 
-    private int applyRockSelectionTint(short rawData, int alpha, int red, int green, int blue)
-    {
-        if (this.selectedRockId >= 0)
-        {
-            if (rawData != this.selectedRockId)
-            {
-                int gray = (red * 30 + green * 59 + blue * 11) / 100;
-                red = gray;
-                green = gray;
-                blue = gray;
-            }
-            else
-            {
-                red = Math.min(255, red + 40);
-                green = Math.min(255, green + 40);
-                blue = Math.min(255, blue + 40);
-            }
-        }
-        return (alpha << 24) | (blue << 16) | (green << 8) | red;
-    }
-
     public void setSelectedBiomeId(short biomeId)
     {
         this.selectedBiomeId = biomeId;
@@ -1686,19 +1774,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     public void setSelectedTFCMapValue(short value)
     {
         this.selectedTFCMapValue = value;
-    }
-
-    private int applyTFCMapValueSelection(short rawData, int argb)
-    {
-        if (this.selectedTFCMapValue == Short.MIN_VALUE)
-        {
-            return argb;
-        }
-        if (TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue)
-        {
-            return argb;
-        }
-        return grayScale(argb);
     }
 
     public void setHighlightCaves(boolean highlightCaves)
@@ -1784,7 +1859,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     }
 
     private record RenderHelper(
-        PreviewSection dataSection, PreviewSection structureSection, PreviewSection.AccessData accessData, int sectionStartTexX, int sectionStartTexZ
+        PreviewSection dataSection, PreviewSection structureSection, @Nullable PreviewSection landWaterSection,
+        PreviewSection.AccessData accessData, int sectionStartTexX, int sectionStartTexZ
     )
     {
     }
