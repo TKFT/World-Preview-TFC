@@ -1134,6 +1134,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             .stream()
             .sorted(Comparator.comparing(Entry::getLongValue).reversed())
             .map(Entry::getShortKey)
+            .filter(x -> x >= 0 && x < this.allBiomes.length)
             .map(x -> this.allBiomes[x])
             .toList();
         this.biomesList.replaceEntries(res);
@@ -1146,6 +1147,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             .stream()
             .sorted(Comparator.comparing(Entry::getLongValue))
             .map(Entry::getShortKey)
+            .filter(x -> x >= 0 && x < this.allStructures.length)
             .map(x -> this.allStructures[x])
             .toList();
         this.structuresList.replaceEntries(res);
@@ -1387,7 +1389,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     {
         if (screenRectangle == null)
         {
-            assert this.minecraft.screen != null;
+            if (this.minecraft.screen == null)
+            {
+                return;
+            }
             screenRectangle = this.minecraft.screen.getRectangle();
         }
 
@@ -1672,6 +1677,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public StructuresList.StructureEntry structure4Id(int id)
     {
+        if (id < 0 || id >= this.allStructures.length)
+        {
+            WorldPreview.LOGGER.warn("structure4Id called with out-of-range id {} (allStructures length {})", id, this.allStructures.length);
+            return null;
+        }
         return this.allStructures[id];
     }
 

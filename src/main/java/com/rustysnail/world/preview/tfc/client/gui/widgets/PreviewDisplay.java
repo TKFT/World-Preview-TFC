@@ -98,6 +98,27 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private boolean clicked = false;
     private long lastSpeciesChunkKey = Long.MIN_VALUE;
     private List<String> cachedPossibleSpecies = List.of();
+    private boolean loggedInvalidHeight = false;
+
+    // --- Texture dirty/revision tracking (rebuild the texture only when something actually changed) ---
+    private static final long DRAG_REBUILD_THROTTLE_MS = 60L;
+    private List<RenderHelper> cachedRenderData = null;
+    private long lastRenderedRevision = Long.MIN_VALUE;
+    private RenderSettings.RenderMode lastRenderedMode = null;
+    private short lastRenderedBiomeId = Short.MIN_VALUE;
+    private short lastRenderedRockId = Short.MIN_VALUE;
+    private short lastRenderedTFCMapValue = Short.MIN_VALUE;
+    private boolean lastRenderedHighlightCaves = false;
+    private int lastRenderedTexWidth = -1;
+    private int lastRenderedTexHeight = -1;
+    private int lastRenderedQuartStride = -1;
+    private long lastRenderedCenterX = Long.MIN_VALUE;
+    private long lastRenderedCenterZ = Long.MIN_VALUE;
+    private long lastRenderedCenterY = Long.MIN_VALUE;
+    private long lastTextureBuildAtMs = 0L;
+    private long textureBuildNanosTotal = 0L;
+    private int textureBuildCount = 0;
+    private long lastTextureStatsLogMs = 0L;
 
     public PreviewDisplay(Minecraft minecraft, PreviewDisplayDataProvider dataProvider, Component component)
     {
@@ -129,6 +150,22 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         for (int i = 0; i < this.hoverHelperGrid.length; i++)
         {
             this.hoverHelperGrid[i] = new StructHoverHelperCell(new ArrayList<>());
+        }
+
+        // The cached render data references sections sized for the old texture; force a rebuild.
+        this.cachedRenderData = null;
+    }
+
+    private void logTextureStatsPeriodically(long now)
+    {
+        if (now - this.lastTextureStatsLogMs >= 5000L && this.textureBuildCount > 0)
+        {
+            WorldPreview.LOGGER.debug("[Preview] texture rebuilds: {} in last {}s window, avg {} ms/rebuild",
+                this.textureBuildCount, (now - this.lastTextureStatsLogMs) / 1000,
+                (this.textureBuildNanosTotal / this.textureBuildCount) / 1_000_000.0);
+            this.textureBuildCount = 0;
+            this.textureBuildNanosTotal = 0L;
+            this.lastTextureStatsLogMs = now;
         }
     }
 
@@ -297,16 +334,68 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 int centerX = this.getX() + this.width / 2;
                 int centerY = this.getY() + this.height / 2;
                 guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.MSG_PREVIEW_SETUP_LOADING, centerX, centerY, 16777215);
+                // We overwrote the texture with the loading screen; force a rebuild once data is ready
+                // so the black loading fill can never persist into the normal render path.
+                this.cachedRenderData = null;
             }
             else
             {
-                Arrays.fill(this.workingVisibleBiomes, 0L);
+                // Rebuild the (expensive) preview texture only when something that affects it
+                // changed: viewport, mode, selection, cave highlight, texture size/resolution, or a
+                // new data revision. Otherwise keep showing the previous valid texture. While
+                // dragging, throttle rebuilds so continuous panning does not rebuild every frame.
+                BlockPos center = this.center();
+                long revision = this.workManager.dataRevision();
+                long now = System.currentTimeMillis();
+                boolean stateChanged =
+                    revision != this.lastRenderedRevision
+                        || this.renderSettings.mode != this.lastRenderedMode
+                        || this.selectedBiomeId != this.lastRenderedBiomeId
+                        || this.selectedRockId != this.lastRenderedRockId
+                        || this.selectedTFCMapValue != this.lastRenderedTFCMapValue
+                        || this.highlightCaves != this.lastRenderedHighlightCaves
+                        || this.texWidth != this.lastRenderedTexWidth
+                        || this.texHeight != this.lastRenderedTexHeight
+                        || this.renderSettings.quartStride() != this.lastRenderedQuartStride
+                        || center.getX() != this.lastRenderedCenterX
+                        || center.getZ() != this.lastRenderedCenterZ
+                        || center.getY() != this.lastRenderedCenterY;
+                boolean throttled = this.clicked && (now - this.lastTextureBuildAtMs) < DRAG_REBUILD_THROTTLE_MS;
+                boolean rebuild = this.cachedRenderData == null || (stateChanged && !throttled);
+
+                if (rebuild)
+                {
+                    Arrays.fill(this.workingVisibleBiomes, 0L);
+                    Arrays.fill(this.workingVisibleRocks, 0L);
+                    long buildStart = System.nanoTime();
+                    List<RenderHelper> renderData = this.generateRenderData();
+                    this.updateTexture(renderData);
+                    this.previewTexture.upload();
+                    this.cachedRenderData = renderData;
+                    this.textureBuildNanosTotal += System.nanoTime() - buildStart;
+                    this.textureBuildCount++;
+                    this.lastTextureBuildAtMs = now;
+                    this.lastRenderedRevision = revision;
+                    this.lastRenderedMode = this.renderSettings.mode;
+                    this.lastRenderedBiomeId = this.selectedBiomeId;
+                    this.lastRenderedRockId = this.selectedRockId;
+                    this.lastRenderedTFCMapValue = this.selectedTFCMapValue;
+                    this.lastRenderedHighlightCaves = this.highlightCaves;
+                    this.lastRenderedTexWidth = this.texWidth;
+                    this.lastRenderedTexHeight = this.texHeight;
+                    this.lastRenderedQuartStride = this.renderSettings.quartStride();
+                    this.lastRenderedCenterX = center.getX();
+                    this.lastRenderedCenterZ = center.getZ();
+                    this.lastRenderedCenterY = center.getY();
+                    this.logTextureStatsPeriodically(now);
+                }
+
+                // Overlays are re-drawn every frame; they use the same render data the current
+                // texture was built from, so their positions stay aligned with the texture.
+                List<RenderHelper> renderData = this.cachedRenderData;
                 Arrays.fill(this.workingVisibleStructures, 0L);
-                Arrays.fill(this.workingVisibleRocks, 0L);
                 Arrays.stream(this.hoverHelperGrid).forEach(cell -> cell.entries.clear());
-                List<RenderHelper> renderData = this.generateRenderData();
-                this.updateTexture(renderData);
-                this.previewTexture.upload();
+
                 WorldPreviewClient.renderTexture(this.previewTexture, xMin, yMin, xMax, yMax);
                 guiGraphics.enableScissor(xMin, yMin, xMax, yMax);
                 Matrix4f matrix4f = new Matrix4f().setOrtho(0.0F, (float) winWidth, (float) winHeight, 0.0F, 1000.0F, 21000.0F);
@@ -319,7 +408,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 guiGraphics.disableScissor();
                 double mouseX = this.minecraft.mouseHandler.xpos() * this.minecraft.getWindow().getGuiScaledWidth() / this.minecraft.getWindow().getScreenWidth();
                 double mouseZ = this.minecraft.mouseHandler.ypos() * this.minecraft.getWindow().getGuiScaledHeight() / this.minecraft.getWindow().getScreenHeight();
-                this.biomesChanged();
+                if (rebuild)
+                {
+                    this.biomesChanged();
+                }
                 this.updateTooltip(mouseX, mouseZ);
             }
         }
@@ -476,9 +568,19 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case HEIGHTMAP:
-                            if (rawData > -32768)
+                            if (rawData > -32768 && this.heightColorMap != null)
                             {
-                                color = this.heightColorMap[rawData - this.dataProvider.yMin()];
+                                int idx = rawData - this.dataProvider.yMin();
+                                if (idx >= 0 && idx < this.heightColorMap.length)
+                                {
+                                    color = this.heightColorMap[idx];
+                                }
+                                else if (!this.loggedInvalidHeight)
+                                {
+                                    WorldPreview.LOGGER.warn("Invalid height value {} (index {} out of heightColorMap length {})",
+                                        rawData, idx, this.heightColorMap.length);
+                                    this.loggedInvalidHeight = true;
+                                }
                             }
                             break;
                         case TFC_TEMPERATURE:
@@ -689,6 +791,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 for (PreviewSection.PreviewStruct structure : r.structureSection.structures())
                 {
                     short id = structure.structureId();
+                    if (id < 0 || id >= this.structureIcons.length)
+                    {
+                        continue; // stale/invalid structure id from cached data
+                    }
                     TextureCoordinate texCenter = this.blockToTexture(structure.center());
                     IconData iconData = this.structureIcons[id];
                     NativeImage icon = iconData.img;
@@ -1078,7 +1184,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private void setTooltipNow(Tooltip tooltip)
     {
-        assert this.minecraft.screen != null;
+        if (this.minecraft.screen == null)
+        {
+            return;
+        }
         this.minecraft.screen.setTooltipForNextRenderPass(tooltip, DefaultTooltipPositioner.INSTANCE, true);
     }
 
@@ -1103,7 +1212,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 }
                 else
                 {
-                    name = this.dataProvider.structure4Id(structId).name();
+                    var structEntry = this.dataProvider.structure4Id(structId);
+                    name = structEntry != null ? structEntry.name() : "Unknown Structure";
                 }
 
                 if (this.config.showControls)

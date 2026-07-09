@@ -36,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.LayeredRegistryAccess;
@@ -98,6 +99,10 @@ public class WorkManager
     // profiling. Smaller = faster cancellation and sooner partial results, more scheduling overhead.
     private static final int TFC_UNIT_CHUNKS = 16;
 
+    // Monotonic counter bumped whenever preview data changes (results applied, or sections
+    // invalidated). PreviewDisplay compares it to decide whether the texture must be rebuilt.
+    private final AtomicLong dataRevision = new AtomicLong(0);
+
     public WorkManager(RenderSettings renderSettings, WorldPreviewConfig config)
     {
         this.config = config;
@@ -156,6 +161,7 @@ public class WorkManager
         {
             this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_TEMPERATURE.flag, RenderSettings.RenderMode.TFC_RAINFALL.flag);
         }
+        this.bumpDataRevision();
 
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
@@ -180,6 +186,7 @@ public class WorkManager
         {
             this.previewStorage.invalidateAll();
         }
+        this.bumpDataRevision();
 
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
@@ -218,6 +225,7 @@ public class WorkManager
             {
                 this.previewStorage.invalidateFlags(mode.flag);
             }
+            this.bumpDataRevision();
         }
 
         this.lastQueuedTopLeft = null;
@@ -792,6 +800,18 @@ public class WorkManager
     public boolean isTFCEnabled()
     {
         return this.tfcSampleUtils != null;
+    }
+
+    /** Current preview-data revision; changes when results are applied or sections are invalidated. */
+    public long dataRevision()
+    {
+        return this.dataRevision.get();
+    }
+
+    /** Bump the revision so PreviewDisplay rebuilds its texture. Called after a batch applies results. */
+    public void bumpDataRevision()
+    {
+        this.dataRevision.incrementAndGet();
     }
 
     public ChunkGenerator chunkGenerator()

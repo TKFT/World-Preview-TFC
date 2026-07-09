@@ -67,6 +67,8 @@ public class WorkBatch
                 {
                     this.workUnits.forEach(WorkUnit::markCompleted);
                 }
+                // New data is now visible; bump the revision so PreviewDisplay rebuilds its texture.
+                WorldPreview.get().workManager().bumpDataRevision();
             }
         }
         catch (Exception e)
