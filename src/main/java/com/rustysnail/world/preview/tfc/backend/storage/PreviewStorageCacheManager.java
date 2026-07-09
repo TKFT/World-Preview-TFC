@@ -38,6 +38,11 @@ public interface PreviewStorageCacheManager
         flags |= 1536L;
         flags |= 20480L;
         flags |= cfg.enableCompression ? 65536L : 0L;
+        // Cache format bump: the combined TFC work unit now records completion on a dedicated flag
+        // (TFC_GENERATION_COMPLETE_FLAG) instead of the temperature section. Changing the cache key
+        // makes pre-bump caches (whose completion markers meant "temperature only") be ignored, so
+        // forest/tree sections are regenerated rather than served empty.
+        flags |= 131072L;
         return String.format("%s-%d-%d", settings.dimension, settings.pixelsPerChunk(), flags)
             .replace(":", "_")
             .replace(";", "_")

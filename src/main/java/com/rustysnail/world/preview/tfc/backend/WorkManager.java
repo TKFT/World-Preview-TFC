@@ -94,6 +94,10 @@ public class WorkManager
     private final AtomicBoolean queueIsRunning = new AtomicBoolean(false);
     private final AtomicBoolean shouldEarlyAbortQueuing = new AtomicBoolean(false);
 
+    // Chunks per side of a combined TFC work unit. Power of two; do not reduce below 8 without
+    // profiling. Smaller = faster cancellation and sooner partial results, more scheduling overhead.
+    private static final int TFC_UNIT_CHUNKS = 16;
+
     public WorkManager(RenderSettings renderSettings, WorldPreviewConfig config)
     {
         this.config = config;
@@ -157,8 +161,9 @@ public class WorkManager
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
 
+        // restartExecutors() -> shutdownExecutors() cancels and clears currentBatches; do not clear
+        // here first, or those batches would never get their isCanceled flag set.
         this.restartExecutors();
     }
 
@@ -180,8 +185,8 @@ public class WorkManager
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
 
+        // See onTFCSettingsChanged: let restartExecutors() cancel+clear currentBatches.
         this.restartExecutors();
 
         WorldPreview.LOGGER.info("Resolution changed to {} pixels per chunk", this.renderSettings.pixelsPerChunk());
@@ -192,6 +197,21 @@ public class WorkManager
         if (this.previewStorage == null) return;
 
         RenderSettings.RenderMode mode = this.renderSettings.mode;
+
+        // Display-only switch between combined-TFC modes (e.g. Forest Type <-> Tree Species): the
+        // one combined work unit already writes every TFC section, so keep running work and bounds
+        // instead of discarding and restarting generation. Kaolin is excluded (it gates an
+        // expensive computation), so switching to/from it still falls through to a full reset.
+        boolean displayOnlyTfcSwitch = mode != null
+            && mode.isTFC()
+            && this.lastQueuedWasTfc
+            && this.effectiveModeKey(mode) == this.lastQueuedModeFlag;
+        if (displayOnlyTfcSwitch)
+        {
+            WorldPreview.LOGGER.debug("Render mode -> {}: display-only TFC switch, keeping in-flight generation", mode);
+            return;
+        }
+
         if (mode != null && !mode.isTFC())
         {
             synchronized (this.previewStorageSynchro)
@@ -204,7 +224,14 @@ public class WorkManager
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
+
+        // Cancel obsolete work before dropping references (previously cleared without canceling,
+        // so orphaned batches kept running and blocked the thread pool).
+        synchronized (this.currentBatches)
+        {
+            this.currentBatches.forEach(WorkBatch::cancel);
+            this.currentBatches.clear();
+        }
     }
 
 
@@ -400,7 +427,7 @@ public class WorkManager
 
         final RenderSettings.RenderMode mode = this.renderSettings.mode;
         final boolean tfcMode = mode != null && mode.isTFC();
-        final long modeFlag = mode != null ? mode.flag : Long.MIN_VALUE;
+        final long modeFlag = this.effectiveModeKey(mode);
 
         if (this.executorService != null
             && this.sampleUtils != null
@@ -455,8 +482,15 @@ public class WorkManager
         Instant start = Instant.now();
         ChunkPos topLeft = new ChunkPos(topLeftBlock);
         ChunkPos bottomRight = new ChunkPos(bottomRightBlock);
+
+        // Cancel the previous viewport's work and interrupt its futures, but do NOT block waiting
+        // for large obsolete TFC units to finish — that is what left a moved viewport black. The
+        // canceled batches observe isCanceled and exit fast; canceled batches never apply or mark
+        // completed (see WorkBatch#process), so they cannot write stale data over the new range.
+        int canceledBatches;
         synchronized (this.currentBatches)
         {
+            canceledBatches = this.currentBatches.size();
             this.currentBatches.forEach(WorkBatch::cancel);
             this.currentBatches.clear();
         }
@@ -465,23 +499,14 @@ public class WorkManager
         {
             for (Future<?> f : this.futures)
             {
-                try
-                {
-                    f.get();
-                }
-                catch (InterruptedException e)
-                {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
+                f.cancel(true);
             }
-
             this.futures.clear();
         }
+
+        long cancelWaitMs = Duration.between(start, Instant.now()).abs().toMillis();
+        WorldPreview.LOGGER.debug("Queue replacement: canceled {} obsolete batches in {} ms (no blocking get)",
+            canceledBatches, cancelWaitMs);
 
         List<ChunkPos> chunks = ChunkPos.rangeClosed(topLeft, bottomRight).toList();
         int units = 0;
@@ -506,11 +531,15 @@ public class WorkManager
             LongSet queuedTFCChunks = new LongOpenHashSet(chunks.size());
             List<ChunkPos> tfcChunks = new ArrayList<>(chunks.size());
 
-            int numChunks = 32;
+            // Smaller units (16x16 chunks, was 32x32) so cancellation responds ~4x faster, partial
+            // results arrive sooner, and a moved viewport is black for less time. Must be a power of
+            // two: unit origins are aligned to numChunks so the units tile the range without gaps.
+            final int numChunks = TFC_UNIT_CHUNKS;
+            final int alignBits = Integer.numberOfTrailingZeros(numChunks);
 
             for (ChunkPos c : chunks)
             {
-                ChunkPos shifted = new ChunkPos(c.x >> 5 << 5, c.z >> 5 << 5);
+                ChunkPos shifted = new ChunkPos(c.x >> alignBits << alignBits, c.z >> alignBits << alignBits);
                 if (queuedTFCChunks.add(shifted.toLong()))
                 {
                     tfcChunks.add(shifted);
@@ -562,10 +591,38 @@ public class WorkManager
         }
 
         Instant end = Instant.now();
+        int pendingFutures;
+        synchronized (this.futures)
+        {
+            pendingFutures = this.futures.size();
+        }
         WorldPreview.LOGGER
             .info(
-                "Queued {} chunks for generation using {} batches [{} ms] {}",
-                units, this.currentBatches.size(), Duration.between(start, end).abs().toMillis(), this.shouldEarlyAbortQueuing.get() ? "{early abort}" : "");
+                "Queued {} chunks for generation using {} batches [{} ms] {} pending futures {}",
+                units, this.currentBatches.size(), Duration.between(start, end).abs().toMillis(), pendingFutures, this.shouldEarlyAbortQueuing.get() ? "{early abort}" : "");
+    }
+
+    /**
+     * Queue-identity key for a render mode. All non-kaolin TFC modes map to the single combined
+     * TFC unit's completion flag, so switching among Forest Type / Tree Species / Temperature / ...
+     * is a display-only change and does not re-queue or cancel in-flight TFC generation.
+     * TFC_KAOLINITE keeps its own key because it gates an expensive per-point computation.
+     */
+    private long effectiveModeKey(RenderSettings.RenderMode mode)
+    {
+        if (mode == null)
+        {
+            return Long.MIN_VALUE;
+        }
+        if (mode == RenderSettings.RenderMode.TFC_KAOLINITE)
+        {
+            return RenderSettings.RenderMode.TFC_KAOLINITE.flag;
+        }
+        if (mode.isTFC())
+        {
+            return TFCRegionWorkUnit.TFC_GENERATION_COMPLETE_FLAG;
+        }
+        return mode.flag;
     }
 
     private WorkUnit workUnitFactory(ChunkPos pos, int y)

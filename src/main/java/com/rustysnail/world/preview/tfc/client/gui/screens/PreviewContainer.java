@@ -148,6 +148,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final TFCMapValueList tfcMapValueList;
     private final List<TFCMapValueList.ValueEntry> forestTypeEntries;
     private final List<TFCMapValueList.ValueEntry> treeSpeciesEntries;
+    // The currently selected side-panel tab. Together with the render mode it decides which single
+    // side list is shown; see updateSidePanelVisibility().
+    private DisplayType currentDisplayType = DisplayType.BIOMES;
     private StructuresList.StructureEntry[] allStructures;
     private NativeImage[] allStructureIcons;
     private NativeImage[] allFeatureIcons;
@@ -527,8 +530,6 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
 
         boolean isBiomeMode = mode == RenderSettings.RenderMode.BIOMES;
-        this.searchBiomeButton.visible = isBiomeMode;
-        this.islandCheckbox.visible = isBiomeMode && this.workManager.isTFCEnabled();
         if (isBiomeMode)
         {
             this.biomesList.replaceEntries(this.filteredBiomes());
@@ -546,14 +547,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         boolean isSpeciesMode = mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
         boolean isTreeMode = isForestMode || isSpeciesMode;
 
-        this.rocksList.visible = isRockMode;
-        this.rocksList.active = isRockMode;
-        this.tfcMapValueList.visible = isTreeMode;
-        this.tfcMapValueList.active = isTreeMode;
-        if (this.lastScreenRectangle != null)
-        {
-            this.doLayout(this.lastScreenRectangle);
-        }
+        // Update entry sets while the lists are still hidden (visibility is applied last). Deactivate
+        // the tree list before swapping entries so the old ValueEntry can't be re-selected.
+        this.tfcMapValueList.visible = false;
+        this.tfcMapValueList.active = false;
+
         if (isRockMode)
         {
             this.rocksList.replaceEntries(new ArrayList<>());
@@ -566,19 +564,21 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
 
         // Always clear the tree-map selection on any (re)entry: this covers a forest<->species
-        // switch (where ids would otherwise carry over) and leaving either tree mode.
+        // switch (where ids would otherwise carry over) and leaving either tree mode. Clearing
+        // before replaceEntries prevents the old selected entry from being retained.
         this.tfcMapValueList.setSelected(null);
         if (isTreeMode)
         {
             this.tfcMapValueList.replaceEntries(isForestMode ? this.forestTypeEntries : this.treeSpeciesEntries);
+            this.tfcMapValueList.setScrollAmount(0.0); // reset scroll between the two entry sets
         }
         else
         {
             this.previewDisplay.setSelectedTFCMapValue(Short.MIN_VALUE);
         }
 
-        this.moveList(this.rocksList);
-        this.moveList(this.tfcMapValueList);
+        // Apply the single-active-list visibility for the new mode (also runs doLayout/moveList).
+        this.updateSidePanelVisibility();
     }
 
     private void onSearchBiomeClick(Button btn)
@@ -1260,20 +1260,96 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         }
     }
 
-    private void onTabButtonChange(Button btn, DisplayType type)
+    /**
+     * Single source of truth for side-panel list visibility. Hides and deactivates every list, then
+     * enables exactly one based on {@link #currentDisplayType} and the current render mode, so two
+     * lists can never render or receive input at the same coordinates. Both selectViewMode(...) and
+     * onTabButtonChange(...) call this instead of toggling lists independently.
+     */
+    private void updateSidePanelVisibility()
     {
+        // 1. Hide/deactivate all side lists and their tab-scoped satellite widgets.
         this.biomesList.visible = false;
         this.biomesList.active = false;
+        this.rocksList.visible = false;
+        this.rocksList.active = false;
+        this.tfcMapValueList.visible = false;
+        this.tfcMapValueList.active = false;
         this.structuresList.visible = false;
         this.structuresList.active = false;
         this.seedsList.visible = false;
         this.seedsList.active = false;
+        this.searchBiomeButton.visible = false;
+        this.islandCheckbox.visible = false;
+        this.resetDefaultStructureVisibility.visible = false;
+
+        // 2. Enable exactly one list.
+        RenderSettings.RenderMode mode = this.renderSettings.mode;
+        switch (this.currentDisplayType)
+        {
+            case BIOMES ->
+            {
+                boolean isTreeMode = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
+                    || mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
+                boolean isRockMode = mode == RenderSettings.RenderMode.TFC_ROCK_TOP
+                    || mode == RenderSettings.RenderMode.TFC_ROCK_MID
+                    || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
+                    || mode == RenderSettings.RenderMode.TFC_ROCK_TYPE;
+                if (isTreeMode)
+                {
+                    this.tfcMapValueList.visible = true;
+                    this.tfcMapValueList.active = true;
+                }
+                else if (isRockMode)
+                {
+                    this.rocksList.visible = true;
+                    this.rocksList.active = true;
+                }
+                else
+                {
+                    this.biomesList.visible = true;
+                    this.biomesList.active = true;
+                    boolean isBiomeMode = mode == RenderSettings.RenderMode.BIOMES;
+                    this.searchBiomeButton.visible = isBiomeMode;
+                    this.islandCheckbox.visible = isBiomeMode && this.workManager.isTFCEnabled();
+                }
+            }
+            case STRUCTURES ->
+            {
+                this.structuresList.visible = true;
+                this.structuresList.active = true;
+                this.resetDefaultStructureVisibility.visible = true;
+            }
+            case SEEDS ->
+            {
+                this.seedsList.visible = true;
+                this.seedsList.active = true;
+            }
+        }
+
+        // 3. Reposition: doLayout re-runs moveList for every list from the (now single-active) state.
+        if (this.lastScreenRectangle != null)
+        {
+            this.doLayout(this.lastScreenRectangle);
+        }
+        else
+        {
+            this.moveList(this.biomesList);
+            this.moveList(this.rocksList);
+            this.moveList(this.tfcMapValueList);
+            this.moveList(this.structuresList);
+            this.moveList(this.seedsList);
+        }
+    }
+
+    private void onTabButtonChange(Button btn, DisplayType type)
+    {
+        this.currentDisplayType = type;
+
+        // Tab button states (not list visibility — that is centralized in updateSidePanelVisibility).
         this.switchBiomes.active = true;
         this.switchStructures.active = true;
         this.switchSeeds.active = true;
-        this.resetDefaultStructureVisibility.visible = false;
-        this.searchBiomeButton.visible = false;
-        this.islandCheckbox.visible = false;
         if (this.cfg.sampleStructures)
         {
             this.switchStructures.setTooltip(null);
@@ -1283,36 +1359,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.switchStructures.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_SWITCH_STRUCT_DISABLED));
             this.switchStructures.active = false;
         }
-
         btn.active = false;
-        switch (type)
-        {
-            case BIOMES:
-            {
-                this.biomesList.visible = true;
-                this.biomesList.active = true;
-                boolean isBiomeMode = this.renderSettings.mode == RenderSettings.RenderMode.BIOMES;
-                this.searchBiomeButton.visible = isBiomeMode;
-                this.islandCheckbox.visible = isBiomeMode && this.workManager.isTFCEnabled();
-                break;
-            }
-            case STRUCTURES:
-                this.resetDefaultStructureVisibility.visible = true;
-                this.structuresList.visible = true;
-                this.structuresList.active = true;
-                break;
-            case SEEDS:
-                this.seedsList.visible = true;
-                this.seedsList.active = true;
-        }
 
-        if (this.lastScreenRectangle != null)
-        {
-            this.doLayout(this.lastScreenRectangle);
-        }
-        this.moveList(this.biomesList);
-        this.moveList(this.structuresList);
-        this.moveList(this.seedsList);
+        this.updateSidePanelVisibility();
     }
 
     public synchronized void start()

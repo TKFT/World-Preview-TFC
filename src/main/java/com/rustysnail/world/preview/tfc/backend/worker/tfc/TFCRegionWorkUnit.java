@@ -41,6 +41,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TFCRegionWorkUnit extends WorkUnit
 {
+    /**
+     * Dedicated completion marker for the combined TFC work unit. This unit writes many render
+     * sections (temperature, rainfall, rock, forest type, tree species, ...) in a single pass;
+     * completion means "all of those were written", so it must not be tracked on any single render
+     * section (previously TFC_TEMPERATURE) — that let forest/tree stay empty yet be treated as
+     * done. Value 4L is an unused storage flag (not a user render mode).
+     */
+    public static final long TFC_GENERATION_COMPLETE_FLAG = 4L;
+
     private final KaolinBiomeRules kaolinRules;
     private final boolean computeKaolin;
     public static final short LAND_WATER_OCEAN = 0;
@@ -567,6 +576,6 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public long flags()
     {
-        return RenderSettings.RenderMode.TFC_TEMPERATURE.flag;
+        return TFC_GENERATION_COMPLETE_FLAG;
     }
 }
