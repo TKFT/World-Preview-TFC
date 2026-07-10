@@ -185,6 +185,16 @@ public class TFCRegionWorkUnit extends WorkUnit
         long startTime = System.currentTimeMillis();
         final int[] gridCellsProcessed = {0};
 
+        // Per-unit soil timing breakdown (nanoseconds). Only accumulated / logged when this unit is
+        // a soil-type unit, so Forest Type / Tree Species work is unaffected. Never timed per pixel
+        // beyond the individual segment deltas below.
+        final boolean timeSoil = this.plan.soilType();
+        long soilChunkDataNanos = 0L;
+        long soilHeightNanos = 0L;
+        long soilBiomeNanos = 0L;
+        long soilClassifyNanos = 0L;
+        long soilExpandNanos = 0L;
+
         try
         {
             Map<Long, Region.Point> gridCache = new HashMap<>();
@@ -219,12 +229,13 @@ public class TFCRegionWorkUnit extends WorkUnit
 
                     PreviewSection structureSection = this.plan.features() ? this.storage.section4(cp, 0, 1L) : null;
 
-                    // ChunkData / forest type only when forest or tree species is requested.
+                    // ChunkData / forest type only when forest or tree species or soil is requested.
                     short forestTypeId = TFCSampleUtils.VALUE_INVALID;
                     ChunkData chunkData = null;
                     ForestType forestType = null;
                     if (this.plan.needsChunkData() && this.tfcSampleUtils != null)
                     {
+                        long tCd = timeSoil ? System.nanoTime() : 0L;
                         try
                         {
                             chunkData = this.tfcSampleUtils.sampleChunkData(cp);
@@ -235,6 +246,21 @@ public class TFCRegionWorkUnit extends WorkUnit
                         {
                             WorldPreview.LOGGER.debug("TFC chunk data sampling failed for chunk {}: {}", cp, e.getMessage());
                         }
+                        if (timeSoil) soilChunkDataNanos += System.nanoTime() - tCd;
+                    }
+
+                    // Soil elevation is approximated once per chunk (at the chunk center) instead of
+                    // per sample point: doHeightSlow / getBaseHeight is the dominant cost, and soil
+                    // classification only needs a coarse elevation-adjusted temperature. Water/biome
+                    // boundaries stay at full quart resolution (sampled per point below). Tree Species
+                    // deliberately keeps its per-point surface height until it gets its own review.
+                    int soilSurfaceY = 63; // TFC SEA_LEVEL_Y fallback
+                    if (this.plan.soilType())
+                    {
+                        long tH = System.nanoTime();
+                        BlockPos chunkCenter = new BlockPos(cp.getMiddleBlockX(), 0, cp.getMiddleBlockZ());
+                        soilSurfaceY = sampleSurfaceY(chunkCenter);
+                        soilHeightNanos += System.nanoTime() - tH;
                     }
 
                     final boolean needsPoint = this.plan.needsRegionPoint();
@@ -342,6 +368,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             BiomeExtension treeMapBiome = null;
                             if (this.tfcSampleUtils != null)
                             {
+                                long tB = timeSoil ? System.nanoTime() : 0L;
                                 try
                                 {
                                     treeMapBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
@@ -350,6 +377,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 {
                                     // fall through to non-water land
                                 }
+                                if (timeSoil) soilBiomeNanos += System.nanoTime() - tB;
                             }
 
                             short treeMapWater = classifyTreeMapWater(treeMapBiome);
@@ -384,6 +412,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             }
                             if (this.plan.soilType())
                             {
+                                long tC = System.nanoTime();
                                 short soilValue;
                                 if (isWaterPoint)
                                 {
@@ -391,15 +420,19 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 }
                                 else if (chunkData != null && forestType != null)
                                 {
-                                    int surfaceY = sampleSurfaceY(pos);
+                                    // Chunk-level elevation (soilSurfaceY), full-resolution biome/water.
                                     soilValue = TFCSampleUtils.resolveSoilType(
-                                        chunkData, treeMapBiome, forestType, pos, surfaceY, treeMapWater);
+                                        chunkData, treeMapBiome, forestType, pos, soilSurfaceY, treeMapWater);
                                 }
                                 else
                                 {
                                     soilValue = TFCSampleUtils.VALUE_INVALID;
                                 }
+                                soilClassifyNanos += System.nanoTime() - tC;
+
+                                long tE = System.nanoTime();
                                 this.sampler.expandRaw(pos, soilValue, soilTypeResult);
+                                soilExpandNanos += System.nanoTime() - tE;
                             }
                         }
                     }
@@ -425,6 +458,15 @@ public class TFCRegionWorkUnit extends WorkUnit
             WorldPreview.LOGGER.debug("[TFC] Unit ({},{}) plan[{}] {} chunks in {}ms (features={}, treeSpecies={})",
                 this.chunkPos.x, this.chunkPos.z, this.plan.describe(), this.numChunks * this.numChunks, elapsed,
                 this.plan.features(), this.plan.treeSpecies());
+
+            if (timeSoil)
+            {
+                WorldPreview.LOGGER.debug(
+                    "[TFC Soil] unit=({},{}) chunks={} chunkData={}ms height={}ms biome={}ms classify={}ms expand={}ms total={}ms",
+                    this.chunkPos.x, this.chunkPos.z, this.numChunks * this.numChunks,
+                    soilChunkDataNanos / 1_000_000L, soilHeightNanos / 1_000_000L, soilBiomeNanos / 1_000_000L,
+                    soilClassifyNanos / 1_000_000L, soilExpandNanos / 1_000_000L, elapsed);
+            }
 
             return allResults;
 
