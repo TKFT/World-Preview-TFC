@@ -44,6 +44,7 @@ public class WorkBatch
                 return;
             }
 
+            // 1. Compute all work results for this batch.
             List<WorkResult> res = new ArrayList<>();
 
             for (WorkUnit unit : this.workUnits)
@@ -55,12 +56,20 @@ public class WorkBatch
                 }
             }
 
-            synchronized (this.completedSynchro)
-            {
-                this.workUnits.forEach(WorkUnit::markCompleted);
-            }
+            // 2. Apply every result to its PreviewSection.
+            boolean applied = this.applyChunkResult(res);
 
-            this.applyChunkResult(res);
+            // 3. Only mark units completed after a fully successful apply. A section that could not
+            //    be written must not be flagged complete, or it would render permanently empty.
+            if (applied && !this.isCanceled())
+            {
+                synchronized (this.completedSynchro)
+                {
+                    this.workUnits.forEach(WorkUnit::markCompleted);
+                }
+                // New data is now visible; bump the revision so PreviewDisplay rebuilds its texture.
+                WorldPreview.get().workManager().bumpDataRevision();
+            }
         }
         catch (Exception e)
         {
@@ -68,7 +77,7 @@ public class WorkBatch
         }
     }
 
-    private void applyChunkResult(List<WorkResult> workResultList)
+    private boolean applyChunkResult(List<WorkResult> workResultList)
     {
         try
         {
@@ -76,7 +85,7 @@ public class WorkBatch
             {
                 if (workResult == null)
                 {
-                    return;
+                    continue;
                 }
 
                 PreviewSection section = getPreviewSection(workResult);
@@ -88,10 +97,12 @@ public class WorkBatch
                     section.addStructure(new PreviewSection.PreviewStruct(structureStart.getBoundingBox().getCenter(), id, structureStart.getBoundingBox()));
                 }
             }
+            return true;
         }
         catch (Throwable e)
         {
             WorldPreview.LOGGER.error("Error applying chunk result", e);
+            return false;
         }
     }
 

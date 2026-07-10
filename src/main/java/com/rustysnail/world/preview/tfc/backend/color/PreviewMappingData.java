@@ -249,7 +249,7 @@ public class PreviewMappingData
         public String texture = null;
         public String item = null;
         @Nullable
-        public Boolean showByDefault = null;
+        public final Boolean showByDefault = null;
     }
 
     public static class RockColorEntry

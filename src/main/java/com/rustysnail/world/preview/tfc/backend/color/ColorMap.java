@@ -197,7 +197,7 @@ public class ColorMap
 
     public static float clamp(float val, float min, float max)
     {
-        return Math.min(Math.max(val, min), max);
+        return Math.clamp(val, min, max);
     }
 
     public static float lerp(float low, float high, float amt)

@@ -43,6 +43,13 @@ public interface PreviewDisplayDataProvider
 
     void onVisibleRocksChanged(Short2LongMap visibleRocks);
 
+    /**
+     * A forest-type / tree-species category was selected by clicking the map. {@code value} is a
+     * forest ordinal, tree species id, or {@link com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils#VALUE_WATER};
+     * {@code Short.MIN_VALUE} clears the current selection.
+     */
+    void onTFCMapValueVisuallySelected(com.rustysnail.world.preview.tfc.RenderSettings.RenderMode mode, short value);
+
     StructureRenderInfo[] renderStructureMap();
 
     int[] heightColorMap();

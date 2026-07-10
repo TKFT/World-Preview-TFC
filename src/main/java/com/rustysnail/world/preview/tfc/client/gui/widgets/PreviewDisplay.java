@@ -68,6 +68,22 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] tfcTemperatureColorMap;
     private int[] tfcRainfallColorMap;
     private boolean[] cavesMap;
+    // Precomputed NativeImage-order TFC palettes (normal + grayscale for selection dimming).
+    private int[] forestTexPalette;
+    private int[] forestTexPaletteGray;
+    private int[] treeTexPalette;
+    private int[] treeTexPaletteGray;
+    private int[][] rockTexPalette;
+    private int[][] rockTexPaletteGray;
+    private int[][] rockTexPaletteBright;
+    private int[] rockTypeTexPalette;
+    private int[] rockTypeTexPaletteGray;
+    private int[] rockTypeTexPaletteBright;
+    private int tfcWaterTex;
+    private int tfcWaterTexGray;
+    private int tfcInvalidTex;
+    private int tfcInvalidTexGray;
+    private boolean loggedInvalidBiomeId = false;
     private IconData[] structureIcons;
     private IconData[] featureIcons;
     private IconData playerIcon;
@@ -82,6 +98,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int texHeight = 100;
     private short selectedBiomeId;
     private short selectedRockId;
+    private short selectedTFCMapValue = Short.MIN_VALUE;
     private boolean highlightCaves;
     private double totalDragX = 0.0;
     private double totalDragZ = 0.0;
@@ -91,6 +108,31 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int hoverHelperGridHeight;
     private final Queue<Long> frametimes = new ArrayDeque<>();
     private boolean clicked = false;
+    private boolean loggedUnknownTreeSpecies = false;
+    private long lastSpeciesChunkKey = Long.MIN_VALUE;
+    private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result cachedTreeResult =
+        com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result.NONE;
+    private boolean loggedInvalidHeight = false;
+
+    // --- Texture dirty/revision tracking (rebuild the texture only when something actually changed) ---
+    private static final long DRAG_REBUILD_THROTTLE_MS = 60L;
+    private List<RenderHelper> cachedRenderData = null;
+    private long lastRenderedRevision = Long.MIN_VALUE;
+    private RenderSettings.RenderMode lastRenderedMode = null;
+    private short lastRenderedBiomeId = Short.MIN_VALUE;
+    private short lastRenderedRockId = Short.MIN_VALUE;
+    private short lastRenderedTFCMapValue = Short.MIN_VALUE;
+    private boolean lastRenderedHighlightCaves = false;
+    private int lastRenderedTexWidth = -1;
+    private int lastRenderedTexHeight = -1;
+    private int lastRenderedQuartStride = -1;
+    private long lastRenderedCenterX = Long.MIN_VALUE;
+    private long lastRenderedCenterZ = Long.MIN_VALUE;
+    private long lastRenderedCenterY = Long.MIN_VALUE;
+    private long lastTextureBuildAtMs = 0L;
+    private long textureBuildNanosTotal = 0L;
+    private int textureBuildCount = 0;
+    private long lastTextureStatsLogMs = 0L;
 
     public PreviewDisplay(Minecraft minecraft, PreviewDisplayDataProvider dataProvider, Component component)
     {
@@ -122,6 +164,22 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         for (int i = 0; i < this.hoverHelperGrid.length; i++)
         {
             this.hoverHelperGrid[i] = new StructHoverHelperCell(new ArrayList<>());
+        }
+
+        // The cached render data references sections sized for the old texture; force a rebuild.
+        this.cachedRenderData = null;
+    }
+
+    private void logTextureStatsPeriodically(long now)
+    {
+        if (now - this.lastTextureStatsLogMs >= 5000L && this.textureBuildCount > 0)
+        {
+            WorldPreview.LOGGER.debug("[Preview] texture rebuilds: {} in last {}s window, avg {} ms/rebuild",
+                this.textureBuildCount, (now - this.lastTextureStatsLogMs) / 1000,
+                (this.textureBuildNanosTotal / this.textureBuildCount) / 1_000_000.0);
+            this.textureBuildCount = 0;
+            this.textureBuildNanosTotal = 0L;
+            this.lastTextureStatsLogMs = now;
         }
     }
 
@@ -185,6 +243,103 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.colorMap[i] = textureColor(rawBiomeMap[i].color());
             this.colorMapGrayScale[i] = grayScale(this.colorMap[i]);
             this.cavesMap[i] = rawBiomeMap[i].isCave();
+        }
+
+        this.buildTfcPalettes();
+    }
+
+    private static boolean needsLandWaterOverlay(RenderSettings.RenderMode mode)
+    {
+        return mode == RenderSettings.RenderMode.TFC_TEMPERATURE
+            || mode == RenderSettings.RenderMode.TFC_RAINFALL
+            || mode == RenderSettings.RenderMode.TFC_ROCK_TOP
+            || mode == RenderSettings.RenderMode.TFC_ROCK_MID
+            || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
+            || mode == RenderSettings.RenderMode.TFC_HOTSPOT;
+    }
+
+    private static int packTex(int r, int g, int b)
+    {
+        return 0xFF000000 | (b << 16) | (g << 8) | r;
+    }
+
+    /** Rebuild the TFC palettes if the tree-species registry changed (cheap no-op otherwise). */
+    private void maybeRebuildTfcPalettes()
+    {
+        if (this.treeTexPalette == null || this.treeTexPalette.length != TFCSampleUtils.treeSpeciesCount()
+            || this.forestTexPalette == null)
+        {
+            this.buildTfcPalettes();
+        }
+    }
+
+    /**
+     * Precomputes NativeImage-order color palettes for the categorical TFC maps, so updateTexture
+     * needs no per-pixel textureColor(...) conversion or getXxxColor(...) lookup. Rebuilt on data
+     * reload (rock colors / palette resources) and when the tree-species registry changes.
+     */
+    private void buildTfcPalettes()
+    {
+        int fc = TFCSampleUtils.forestTypeCount();
+        this.forestTexPalette = new int[fc];
+        this.forestTexPaletteGray = new int[fc];
+        for (short i = 0; i < fc; i++)
+        {
+            int tex = textureColor(TFCSampleUtils.getForestTypeColor(i));
+            this.forestTexPalette[i] = tex;
+            this.forestTexPaletteGray[i] = grayScale(tex);
+        }
+
+        int tc = TFCSampleUtils.treeSpeciesCount();
+        this.treeTexPalette = new int[tc];
+        this.treeTexPaletteGray = new int[tc];
+        for (short i = 0; i < tc; i++)
+        {
+            int tex = textureColor(TFCSampleUtils.getTreeSpeciesColor(i));
+            this.treeTexPalette[i] = tex;
+            this.treeTexPaletteGray[i] = grayScale(tex);
+        }
+
+        this.tfcWaterTex = textureColor(TFCSampleUtils.COLOR_WATER);
+        this.tfcWaterTexGray = grayScale(this.tfcWaterTex);
+        this.tfcInvalidTex = textureColor(TFCSampleUtils.COLOR_INVALID);
+        this.tfcInvalidTexGray = grayScale(this.tfcInvalidTex);
+
+        int rc = TFCSampleUtils.ROCK_COLORS.length;
+        this.rockTexPalette = new int[3][rc];
+        this.rockTexPaletteGray = new int[3][rc];
+        this.rockTexPaletteBright = new int[3][rc];
+        final int[] layerShift = {0, 20, 40}; // top / mid / bot
+        for (int layer = 0; layer < 3; layer++)
+        {
+            int shift = layerShift[layer];
+            for (short id = 0; id < rc; id++)
+            {
+                int argb = TFCSampleUtils.getRockColor(id);
+                int r = Math.max(0, ((argb >> 16) & 0xFF) - shift);
+                int g = Math.max(0, ((argb >> 8) & 0xFF) - shift);
+                int b = Math.max(0, (argb & 0xFF) - shift);
+                this.rockTexPalette[layer][id] = packTex(r, g, b);
+                int gray = (r * 30 + g * 59 + b * 11) / 100;
+                this.rockTexPaletteGray[layer][id] = packTex(gray, gray, gray);
+                this.rockTexPaletteBright[layer][id] = packTex(Math.min(255, r + 40), Math.min(255, g + 40), Math.min(255, b + 40));
+            }
+        }
+
+        int rtc = TFCSampleUtils.ROCK_TYPE_COLORS.length;
+        this.rockTypeTexPalette = new int[rtc];
+        this.rockTypeTexPaletteGray = new int[rtc];
+        this.rockTypeTexPaletteBright = new int[rtc];
+        for (short id = 0; id < rtc; id++)
+        {
+            int argb = TFCSampleUtils.getRockTypeColor(id);
+            int r = (argb >> 16) & 0xFF;
+            int g = (argb >> 8) & 0xFF;
+            int b = argb & 0xFF;
+            this.rockTypeTexPalette[id] = packTex(r, g, b);
+            int gray = (r * 30 + g * 59 + b * 11) / 100;
+            this.rockTypeTexPaletteGray[id] = packTex(gray, gray, gray);
+            this.rockTypeTexPaletteBright[id] = packTex(Math.min(255, r + 40), Math.min(255, g + 40), Math.min(255, b + 40));
         }
     }
 
@@ -290,29 +445,78 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 int centerX = this.getX() + this.width / 2;
                 int centerY = this.getY() + this.height / 2;
                 guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.MSG_PREVIEW_SETUP_LOADING, centerX, centerY, 16777215);
+                this.cachedRenderData = null;
             }
             else
             {
-                Arrays.fill(this.workingVisibleBiomes, 0L);
+                BlockPos center = this.center();
+                long revision = this.workManager.dataRevision();
+                long now = System.currentTimeMillis();
+                boolean stateChanged =
+                    revision != this.lastRenderedRevision
+                        || this.renderSettings.mode != this.lastRenderedMode
+                        || this.selectedBiomeId != this.lastRenderedBiomeId
+                        || this.selectedRockId != this.lastRenderedRockId
+                        || this.selectedTFCMapValue != this.lastRenderedTFCMapValue
+                        || this.highlightCaves != this.lastRenderedHighlightCaves
+                        || this.texWidth != this.lastRenderedTexWidth
+                        || this.texHeight != this.lastRenderedTexHeight
+                        || this.renderSettings.quartStride() != this.lastRenderedQuartStride
+                        || center.getX() != this.lastRenderedCenterX
+                        || center.getZ() != this.lastRenderedCenterZ
+                        || center.getY() != this.lastRenderedCenterY;
+                boolean throttled = this.clicked && (now - this.lastTextureBuildAtMs) < DRAG_REBUILD_THROTTLE_MS;
+                boolean rebuild = this.cachedRenderData == null || (stateChanged && !throttled);
+
+                if (rebuild)
+                {
+                    Arrays.fill(this.workingVisibleBiomes, 0L);
+                    Arrays.fill(this.workingVisibleRocks, 0L);
+                    long buildStart = System.nanoTime();
+                    List<RenderHelper> renderData = this.generateRenderData();
+                    this.updateTexture(renderData);
+                    this.previewTexture.upload();
+                    this.cachedRenderData = renderData;
+                    this.textureBuildNanosTotal += System.nanoTime() - buildStart;
+                    this.textureBuildCount++;
+                    this.lastTextureBuildAtMs = now;
+                    this.lastRenderedRevision = revision;
+                    this.lastRenderedMode = this.renderSettings.mode;
+                    this.lastRenderedBiomeId = this.selectedBiomeId;
+                    this.lastRenderedRockId = this.selectedRockId;
+                    this.lastRenderedTFCMapValue = this.selectedTFCMapValue;
+                    this.lastRenderedHighlightCaves = this.highlightCaves;
+                    this.lastRenderedTexWidth = this.texWidth;
+                    this.lastRenderedTexHeight = this.texHeight;
+                    this.lastRenderedQuartStride = this.renderSettings.quartStride();
+                    this.lastRenderedCenterX = center.getX();
+                    this.lastRenderedCenterZ = center.getZ();
+                    this.lastRenderedCenterY = center.getY();
+                    this.logTextureStatsPeriodically(now);
+                }
+
+                // Overlays are re-drawn every frame; they use the same render data the current
+                // texture was built from, so their positions stay aligned with the texture.
+                List<RenderHelper> renderData = this.cachedRenderData;
                 Arrays.fill(this.workingVisibleStructures, 0L);
-                Arrays.fill(this.workingVisibleRocks, 0L);
                 Arrays.stream(this.hoverHelperGrid).forEach(cell -> cell.entries.clear());
-                List<RenderHelper> renderData = this.generateRenderData();
-                this.updateTexture(renderData);
-                this.previewTexture.upload();
+
                 WorldPreviewClient.renderTexture(this.previewTexture, xMin, yMin, xMax, yMax);
                 guiGraphics.enableScissor(xMin, yMin, xMax, yMax);
                 Matrix4f matrix4f = new Matrix4f().setOrtho(0.0F, (float) winWidth, (float) winHeight, 0.0F, 1000.0F, 21000.0F);
                 RenderSystem.setProjectionMatrix(matrix4f, VertexSorting.ORTHOGRAPHIC_Z);
                 this.renderStructures(renderData, guiGraphics);
-                this.renderFeatures(renderData, guiGraphics);
+                this.renderFeatures(renderData);
                 this.renderPlayerAndSpawn(guiGraphics);
                 matrix4f = new Matrix4f().setOrtho(0.0F, (float) (winWidth / guiScale), (float) (winHeight / guiScale), 0.0F, 1000.0F, 21000.0F);
                 RenderSystem.setProjectionMatrix(matrix4f, VertexSorting.ORTHOGRAPHIC_Z);
                 guiGraphics.disableScissor();
                 double mouseX = this.minecraft.mouseHandler.xpos() * this.minecraft.getWindow().getGuiScaledWidth() / this.minecraft.getWindow().getScreenWidth();
                 double mouseZ = this.minecraft.mouseHandler.ypos() * this.minecraft.getWindow().getGuiScaledHeight() / this.minecraft.getWindow().getScreenHeight();
-                this.biomesChanged();
+                if (rebuild)
+                {
+                    this.biomesChanged();
+                }
                 this.updateTooltip(mouseX, mouseZ);
             }
         }
@@ -357,8 +561,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private void putHoverStructEntry(TextureCoordinate pos, StructHoverHelperEntry entry)
     {
-        int cellX = Math.max(0, Math.min(this.hoverHelperGridWidth - 1, pos.x / PreviewSection.SIZE));
-        int cellZ = Math.max(0, Math.min(this.hoverHelperGridHeight - 1, pos.z / PreviewSection.SIZE));
+        int cellX = Math.clamp(pos.x / PreviewSection.SIZE, 0, this.hoverHelperGridWidth - 1);
+        int cellZ = Math.clamp(pos.z / PreviewSection.SIZE, 0, this.hoverHelperGridHeight - 1);
         this.hoverHelperGrid[cellX * this.hoverHelperGridHeight + cellZ].entries.add(entry);
     }
 
@@ -392,6 +596,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int sectionStartTexX = 0;
         int sectionStartTexZ = 0;
 
+        // Modes that tint water (ocean) read the land/water section; attach it once per section so
+        // updateTexture never does a per-pixel storage lookup for the water mask.
+        boolean needsLandWater = needsLandWaterOverlay(this.renderSettings.mode);
         List<RenderHelper> res = new ArrayList<>((quartsInWidth / PreviewSection.SIZE + 2) * (quartsInHeight / PreviewSection.SIZE + 2));
         PreviewStorage storage = this.workManager.previewStorage();
         synchronized (storage)
@@ -402,8 +609,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 int useY = this.renderSettings.mode.useY ? quartY : 0;
                 PreviewSection dataSection = storage.section4(quartX, useY, quartZ, flag);
                 PreviewSection structureSection = storage.section4(quartX, 0, quartZ, 1L);
+                PreviewSection landWaterSection = needsLandWater
+                    ? storage.section4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_LAND_WATER.flag)
+                    : null;
                 PreviewSection.AccessData accessData = dataSection.calcQuartOffsetData(quartX, quartZ, maxQuartX, maxQuartZ);
-                res.add(new RenderHelper(dataSection, structureSection, accessData, sectionStartTexX, sectionStartTexZ));
+                res.add(new RenderHelper(dataSection, structureSection, landWaterSection, accessData, sectionStartTexX, sectionStartTexZ));
                 if (accessData.continueX())
                 {
                     int quartDiffX = accessData.maxX() - accessData.minX();
@@ -433,6 +643,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int texZ;
         int quartExpand = this.renderSettings.quartExpand();
         int quartStride = this.renderSettings.quartStride();
+        this.maybeRebuildTfcPalettes();
+        // Rock layer index (0 top / 1 mid / 2 bot), constant for the whole texture pass.
+        final int rockLayer = switch (this.renderSettings.mode)
+        {
+            case TFC_ROCK_MID -> 1;
+            case TFC_ROCK_BOT -> 2;
+            default -> 0;
+        };
 
         for (RenderHelper r : renderData)
         {
@@ -449,37 +667,52 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     switch (this.renderSettings.mode)
                     {
                         case BIOMES:
-                            if (rawData >= 0)
+                            if (rawData >= 0 && rawData < this.colorMap.length)
                             {
                                 color = this.selectedBiomeId < 0 && !this.highlightCaves ? this.colorMap[rawData] : this.colorMapGrayScale[rawData];
                                 if (this.selectedBiomeId == rawData || this.highlightCaves && this.cavesMap[rawData])
                                 {
                                     color = this.colorMap[rawData];
                                 }
-
                                 this.workingVisibleBiomes[rawData]++;
+                            }
+                            else if (rawData >= 0)
+                            {
+                                if (!this.loggedInvalidBiomeId)
+                                {
+                                    WorldPreview.LOGGER.warn("Invalid biome id {} out of range (colorMap length {})", rawData, this.colorMap.length);
+                                    this.loggedInvalidBiomeId = true;
+                                }
+                                color = 0xFFFF00FF;
                             }
                             break;
                         case HEIGHTMAP:
-                            if (rawData > -32768)
+                            if (rawData > -32768 && this.heightColorMap != null)
                             {
-                                color = this.heightColorMap[rawData - this.dataProvider.yMin()];
+                                int idx = rawData - this.dataProvider.yMin();
+                                if (idx >= 0 && idx < this.heightColorMap.length)
+                                {
+                                    color = this.heightColorMap[idx];
+                                }
+                                else if (!this.loggedInvalidHeight)
+                                {
+                                    WorldPreview.LOGGER.warn("Invalid height value {} (index {} out of heightColorMap length {})",
+                                        rawData, idx, this.heightColorMap.length);
+                                    this.loggedInvalidHeight = true;
+                                }
                             }
                             break;
                         case TFC_TEMPERATURE:
                             if (rawData > -32768 && this.tfcTemperatureColorMap != null)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
+                                if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                                 {
                                     color = 0xFFAA4422;  // Blue
                                 }
                                 else
                                 {
                                     float normalized = (rawData + 32768.0F) / 65535.0F;
-                                    int idx = Math.min(1023, Math.max(0, (int) (normalized * 1023.0F)));
+                                    int idx = Math.clamp((int) (normalized * 1023.0F), 0, 1023);
                                     color = this.tfcTemperatureColorMap[idx];
                                 }
                             }
@@ -487,17 +720,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_RAINFALL:
                             if (rawData > -32768 && this.tfcRainfallColorMap != null)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
+                                if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                                 {
                                     color = 0xFFAA4422;  // Blue
                                 }
                                 else
                                 {
                                     float normalized = rawData / 32767.0F;
-                                    int idx = Math.min(1023, Math.max(0, (int) (normalized * 1023.0F)));
+                                    int idx = Math.clamp((int) (normalized * 1023.0F), 0, 1023);
                                     color = this.tfcRainfallColorMap[idx];
                                 }
                             }
@@ -519,38 +749,25 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_ROCK_TOP:
                         case TFC_ROCK_MID:
                         case TFC_ROCK_BOT:
+                            if ((r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND) == TFCRegionWorkUnit.LAND_WATER_OCEAN)
                             {
-                                int quartXCoord = r.dataSection.quartX() + x;
-                                int quartZCoord = r.dataSection.quartZ() + z;
-                                short landWater = this.workManager.previewStorage().getRawData4(
-                                    quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag
-                                );
-                                if (landWater == TFCRegionWorkUnit.LAND_WATER_OCEAN)
-                                {
-                                    color = 0xFF8B0000;  // Ocean - Dark Blue
-                                    break;
-                                }
+                                color = 0xFF8B0000;  // Ocean - Dark Blue
                             }
-                            if (rawData >= 0 && rawData < TFCSampleUtils.ROCK_COLORS.length)
+                            else if (rawData >= 0 && rawData < this.rockTexPalette[rockLayer].length)
                             {
                                 this.workingVisibleRocks[rawData]++;
-                                int argbColor = TFCSampleUtils.getRockColor(rawData);
-                                int alpha = (argbColor >> 24) & 0xFF;
-                                int red = (argbColor >> 16) & 0xFF;
-                                int green = (argbColor >> 8) & 0xFF;
-                                int blue = argbColor & 0xFF;
-                                RenderSettings.RenderMode currentMode = this.renderSettings.mode;
-                                int layerShift = switch (currentMode)
+                                if (this.selectedRockId < 0)
                                 {
-                                    case TFC_ROCK_TOP -> 0;    // Full brightness
-                                    case TFC_ROCK_MID -> 20;   // Slightly darker
-                                    case TFC_ROCK_BOT -> 40;   // Darker
-                                    default -> 0;
-                                };
-                                red = Math.max(0, red - layerShift);
-                                green = Math.max(0, green - layerShift);
-                                blue = Math.max(0, blue - layerShift);
-                                color = this.applyRockSelectionTint(rawData, alpha, red, green, blue);
+                                    color = this.rockTexPalette[rockLayer][rawData];
+                                }
+                                else if (rawData == this.selectedRockId)
+                                {
+                                    color = this.rockTexPaletteBright[rockLayer][rawData];
+                                }
+                                else
+                                {
+                                    color = this.rockTexPaletteGray[rockLayer][rawData];
+                                }
                             }
                             else if (rawData == -1)
                             {
@@ -558,15 +775,21 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             }
                             break;
                         case TFC_ROCK_TYPE:
-                            if (rawData >= 0 && rawData < TFCSampleUtils.ROCK_TYPE_COLORS.length)
+                            if (rawData >= 0 && rawData < this.rockTypeTexPalette.length)
                             {
                                 this.workingVisibleRocks[rawData]++;
-                                int argbColor = TFCSampleUtils.getRockTypeColor(rawData);
-                                int alpha = (argbColor >> 24) & 0xFF;
-                                int red = (argbColor >> 16) & 0xFF;
-                                int green = (argbColor >> 8) & 0xFF;
-                                int blue = argbColor & 0xFF;
-                                color = this.applyRockSelectionTint(rawData, alpha, red, green, blue);
+                                if (this.selectedRockId < 0)
+                                {
+                                    color = this.rockTypeTexPalette[rawData];
+                                }
+                                else if (rawData == this.selectedRockId)
+                                {
+                                    color = this.rockTypeTexPaletteBright[rawData];
+                                }
+                                else
+                                {
+                                    color = this.rockTypeTexPaletteGray[rawData];
+                                }
                             }
                             break;
                         case TFC_KAOLINITE:
@@ -581,6 +804,42 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 };
                             }
                             break;
+                        case TFC_FOREST_TYPE:
+                        {
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
+                            if (TFCSampleUtils.isWaterValue(rawData))
+                            {
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
+                            }
+                            else if (rawData >= 0 && rawData < this.forestTexPalette.length)
+                            {
+                                color = hi ? this.forestTexPalette[rawData] : this.forestTexPaletteGray[rawData];
+                            }
+                            else
+                            {
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
+                            }
+                            break;
+                        }
+                        case TFC_TREE_SPECIES:
+                        {
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
+                            if (TFCSampleUtils.isWaterValue(rawData))
+                            {
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
+                            }
+                            else if (rawData >= 0 && rawData < this.treeTexPalette.length)
+                            {
+                                color = hi ? this.treeTexPalette[rawData] : this.treeTexPaletteGray[rawData];
+                            }
+                            else
+                            {
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
+                            }
+                            break;
+                        }
                         case TFC_HOTSPOT:
                             if (rawData > -32768)
                             {
@@ -590,9 +849,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 }
                                 else
                                 {
-                                    int quartXCoord = r.dataSection.quartX() + x;
-                                    int quartZCoord = r.dataSection.quartZ() + z;
-                                    short landWater = this.workManager.previewStorage().getRawData4(quartXCoord, 0, quartZCoord, RenderSettings.RenderMode.TFC_LAND_WATER.flag);
+                                    short landWater = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
                                     color = switch (landWater)
                                     {
                                         case TFCRegionWorkUnit.LAND_WATER_OCEAN -> 0xFF8B0000;  // Dark blue
@@ -636,6 +893,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 for (PreviewSection.PreviewStruct structure : r.structureSection.structures())
                 {
                     short id = structure.structureId();
+                    if (id < 0 || id >= this.structureIcons.length)
+                    {
+                        continue; // stale/invalid structure id from cached data
+                    }
                     TextureCoordinate texCenter = this.blockToTexture(structure.center());
                     IconData iconData = this.structureIcons[id];
                     NativeImage icon = iconData.img;
@@ -678,7 +939,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
     }
 
-    private void renderFeatures(List<RenderHelper> renderData, GuiGraphics guiGraphics)
+    private void renderFeatures(List<RenderHelper> renderData)
     {
         if (!this.showFeatures || this.featureIcons == null || this.featureIcons.length == 0)
         {
@@ -800,10 +1061,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int visMinZ = (int) (this.getY() * guiScale);
         int visMaxZ = (int) ((this.getY() + this.height) * guiScale);
 
-        screenMinX = Math.max(visMinX, Math.min(visMaxX, screenMinX));
-        screenMaxX = Math.max(visMinX, Math.min(visMaxX, screenMaxX));
-        screenMinZ = Math.max(visMinZ, Math.min(visMaxZ, screenMinZ));
-        screenMaxZ = Math.max(visMinZ, Math.min(visMaxZ, screenMaxZ));
+        screenMinX = Math.clamp(screenMinX, visMinX, visMaxX);
+        screenMaxX = Math.clamp(screenMaxX, visMinX, visMaxX);
+        screenMinZ = Math.clamp(screenMinZ, visMinZ, visMaxZ);
+        screenMaxZ = Math.clamp(screenMaxZ, visMinZ, visMaxZ);
 
         int borderColor = 0xAAFFAA00;
         int lineWidth = 2;
@@ -819,7 +1080,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         double guiScale = this.minecraft.getWindow().getGuiScale();
         NativeImage icon = iconData.img;
         TextureCoordinate texCenter = this.blockToTexture(pos);
-        texCenter = new TextureCoordinate(Math.max(0, Math.min(this.texWidth, texCenter.x)), Math.max(0, Math.min(this.texHeight, texCenter.z)));
+        texCenter = new TextureCoordinate(Math.clamp(texCenter.x, 0, this.texWidth), Math.clamp(texCenter.z, 0, this.texHeight));
         int texStartX = texCenter.x - icon.getWidth();
         int texStartZ = texCenter.z - icon.getHeight();
         int rXMin = (int) (texStartX + this.getX() * guiScale);
@@ -902,6 +1163,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             short tfcRockBot = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_ROCK_BOT.flag);
             short tfcRockType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_ROCK_TYPE.flag);
             short tfcHotspotAge = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_HOTSPOT.flag);
+            short tfcForestType = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag);
+            short tfcTreeSpecies = this.workManager.previewStorage().getRawData4(quartX, 0, quartZ, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag);
             float tfcTemp = tfcTempRaw > -32768 ? TFCSampleUtils.denormalizeTemperature(tfcTempRaw) : Float.NaN;
             float tfcRain = tfcRainRaw > -32768 ? TFCSampleUtils.denormalizeRainfall(tfcRainRaw) : Float.NaN;
 
@@ -909,7 +1172,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             {
                 return new HoverInfo(
                     xMin + xPos, center.getY(), zMin + zPos, null, height, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
-                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge
+                    tfcTemp, tfcRain, tfcLandWater, tfcRockTop, tfcRockMid, tfcRockBot, tfcRockType, tfcHotspotAge, tfcForestType, tfcTreeSpecies
                 );
             }
             else
@@ -941,7 +1204,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockMid,
                     tfcRockBot,
                     tfcRockType,
-                    tfcHotspotAge
+                    tfcHotspotAge,
+                    tfcForestType,
+                    tfcTreeSpecies
                 )
                     : new HoverInfo(
                     xMin + xPos,
@@ -955,7 +1220,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     erosion / 1.0 / 32767.0,
                     depth / 0.5 / 32767.0,
                     weirdness / 0.75 / 32767.0,
-                    NoiseRouterData.peaksAndValleys(Math.min(1.0F, Math.max(-1.0F, weirdness / 0.75F / 32767.0F))),
+                    NoiseRouterData.peaksAndValleys(Math.clamp(weirdness / 0.75F / 32767.0F, -1.0F, 1.0F)),
                     tfcTemp,
                     tfcRain,
                     tfcLandWater,
@@ -963,7 +1228,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                     tfcRockMid,
                     tfcRockBot,
                     tfcRockType,
-                    tfcHotspotAge
+                    tfcHotspotAge,
+                    tfcForestType,
+                    tfcTreeSpecies
                 );
             }
         }
@@ -1019,7 +1286,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     private void setTooltipNow(Tooltip tooltip)
     {
-        assert this.minecraft.screen != null;
+        if (this.minecraft.screen == null)
+        {
+            return;
+        }
         this.minecraft.screen.setTooltipForNextRenderPass(tooltip, DefaultTooltipPositioner.INSTANCE, true);
     }
 
@@ -1044,7 +1314,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 }
                 else
                 {
-                    name = this.dataProvider.structure4Id(structId).name();
+                    var structEntry = this.dataProvider.structure4Id(structId);
+                    name = structEntry != null ? structEntry.name() : "Unknown Structure";
                 }
 
                 if (this.config.showControls)
@@ -1165,6 +1436,62 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 tfcInfo.append("\n§3Hotspot Age:§r §b%d§r".formatted((int) hoverInfo.tfcHotspotAge));
                             }
                             break;
+                        case TFC_FOREST_TYPE:
+                            if (hoverInfo.entry != null)
+                                tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
+                            if (TFCSampleUtils.isWaterValue(hoverInfo.tfcForestType))
+                            {
+                                tfcInfo.append("\n§7Forest Type: None — %s§r".formatted(
+                                    TFCSampleUtils.getWaterTypeName(hoverInfo.tfcForestType).toLowerCase()));
+                            }
+                            else if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
+                            {
+                                tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
+                                String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
+                                if (densityLabel != null)
+                                    tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
+                            }
+                            else
+                            {
+                                tfcInfo.append("\n§3Forest Type:§r §bUnknown§r");
+                            }
+                            break;
+                        case TFC_TREE_SPECIES:
+                            if (hoverInfo.entry != null)
+                                tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
+                            if (TFCSampleUtils.isWaterValue(hoverInfo.tfcTreeSpecies))
+                            {
+                                tfcInfo.append("\n§7Trees: None — %s§r".formatted(
+                                    TFCSampleUtils.getWaterTypeName(hoverInfo.tfcTreeSpecies).toLowerCase()));
+                            }
+                            else
+                            {
+                                // Forest type first (matches the biome-map ordering), then tree details.
+                                if (hoverInfo.tfcForestType >= 0 && hoverInfo.tfcForestType < TFCSampleUtils.forestTypeCount())
+                                {
+                                    tfcInfo.append("\n§3Forest Type:§r §b%s§r".formatted(hoverInfo.getTfcForestTypeName()));
+                                    String densityLabel = TFCSampleUtils.getForestDensityLabel(hoverInfo.tfcForestType);
+                                    if (densityLabel != null)
+                                        tfcInfo.append("\n§3Density:§r §b%s§r".formatted(densityLabel));
+                                }
+                                else
+                                {
+                                    tfcInfo.append("\n§3Forest Type:§r §bUnknown§r");
+                                }
+
+                                String dominantName = hoverInfo.tfcTreeSpecies >= 0 && hoverInfo.tfcTreeSpecies < TFCSampleUtils.treeSpeciesCount()
+                                    ? treeSpeciesDisplayName(hoverInfo.tfcTreeSpecies) : "None";
+                                tfcInfo.append("\n§3Most Likely Tree:§r §b%s§r".formatted(dominantName));
+
+                                var treeResult = resolvedTreeAt(hoverInfo.blockX, hoverInfo.blockZ);
+                                tfcInfo.append("\n§3Possible Trees:§r §b%s§r".formatted(formatPossibleTrees(treeResult.possibleIds())));
+
+                                if (treeResult.sourceConfig() != null)
+                                {
+                                    tfcInfo.append("\n§3Source:§r §b%s§r".formatted(treeResult.sourceConfig()));
+                                }
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -1224,6 +1551,61 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return tfcClimate;
     }
 
+    /** Registry display name for a species id, or "Unknown Tree #id" (logged once) if not registered. */
+    private String treeSpeciesDisplayName(short id)
+    {
+        if (id >= 0 && id < TFCSampleUtils.treeSpeciesCount())
+        {
+            return TFCSampleUtils.getTreeSpeciesName(id);
+        }
+        if (!this.loggedUnknownTreeSpecies)
+        {
+            this.loggedUnknownTreeSpecies = true;
+            WorldPreview.LOGGER.warn("Tree species id {} not in runtime registry (count {})", id, TFCSampleUtils.treeSpeciesCount());
+        }
+        return "Unknown Tree #" + id;
+    }
+
+    /** Comma-joined species names, capped at 5 with a "+N more" suffix to keep the tooltip short. */
+    private String formatPossibleTrees(List<Short> ids)
+    {
+        if (ids.isEmpty())
+        {
+            return "None";
+        }
+        int shown = Math.min(5, ids.size());
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < shown; i++)
+        {
+            if (i > 0) sb.append(", ");
+            sb.append(treeSpeciesDisplayName(ids.get(i)));
+        }
+        int more = ids.size() - shown;
+        if (more > 0)
+        {
+            sb.append(" +").append(more).append(" more");
+        }
+        return sb.toString();
+    }
+
+    private com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result resolvedTreeAt(int blockX, int blockZ)
+    {
+        // Cache per quart position: the dominant/possible set now varies within a chunk (elevation
+        // and per-point climate), so a per-chunk cache key would be wrong.
+        long quartKey = ((long) (blockX >> 2) << 32) | ((blockZ >> 2) & 0xFFFFFFFFL);
+        if (quartKey == this.lastSpeciesChunkKey) return this.cachedTreeResult;
+        this.lastSpeciesChunkKey = quartKey;
+        try
+        {
+            this.cachedTreeResult = this.workManager.resolveTreeAt(blockX, blockZ);
+        }
+        catch (Exception e)
+        {
+            this.cachedTreeResult = com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver.Result.NONE;
+        }
+        return this.cachedTreeResult;
+    }
+
     public void playDownSound(@NotNull SoundManager handler)
     {
     }
@@ -1253,25 +1635,73 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             if (Math.abs(this.totalDragX) <= 4.0 && Math.abs(this.totalDragZ) <= 4.0)
             {
                 HoverInfo hoverInfo = this.hoveredBiome(mouseX, mouseY);
-                if (hoverInfo == null || hoverInfo.entry == null)
+                if (hoverInfo != null)
                 {
-                    return;
-                }
-
-                super.playDownSound(this.minecraft.getSoundManager());
-                if (this.selectedBiomeId == hoverInfo.entry.id())
-                {
-                    this.dataProvider.onBiomeVisuallySelected(null);
-                }
-                else
-                {
-                    this.dataProvider.onBiomeVisuallySelected(hoverInfo.entry);
+                    switch (this.renderSettings.mode)
+                    {
+                        case BIOMES:
+                            if (hoverInfo.entry != null)
+                            {
+                                super.playDownSound(this.minecraft.getSoundManager());
+                                if (this.selectedBiomeId == hoverInfo.entry.id())
+                                {
+                                    this.dataProvider.onBiomeVisuallySelected(null);
+                                }
+                                else
+                                {
+                                    this.dataProvider.onBiomeVisuallySelected(hoverInfo.entry);
+                                }
+                            }
+                            break;
+                        case TFC_FOREST_TYPE:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_FOREST_TYPE, hoverInfo.tfcForestType);
+                            break;
+                        case TFC_TREE_SPECIES:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_TREE_SPECIES, hoverInfo.tfcTreeSpecies);
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
 
             this.renderSettings.setCenter(this.center());
             this.totalDragX = 0.0;
             this.totalDragZ = 0.0;
+        }
+    }
+
+    private void handleTFCMapValueClick(RenderSettings.RenderMode mode, short rawValue)
+    {
+        if (rawValue == TFCSampleUtils.VALUE_INVALID)
+        {
+            return;
+        }
+        short value;
+        if (TFCSampleUtils.isWaterValue(rawValue))
+        {
+            value = TFCSampleUtils.VALUE_WATER;
+        }
+        else
+        {
+            int count = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
+                ? TFCSampleUtils.forestTypeCount()
+                : TFCSampleUtils.treeSpeciesCount();
+            if (rawValue < 0 || rawValue >= count)
+            {
+                return;
+            }
+            value = rawValue;
+        }
+
+        super.playDownSound(this.minecraft.getSoundManager());
+        if (this.selectedTFCMapValue == value)
+        {
+            this.dataProvider.onTFCMapValueVisuallySelected(mode, Short.MIN_VALUE);
+        }
+        else
+        {
+            this.dataProvider.onTFCMapValueVisuallySelected(mode, value);
         }
     }
 
@@ -1327,29 +1757,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int R = orig >> 16 & 0xFF;
         int G = orig >> 8 & 0xFF;
         int B = orig & 0xFF;
-        int gray = Math.max(32, Math.min(224, (R + G + B) / 3));
+        int gray = Math.clamp((R + G + B) / 3, 32, 224);
         return 0xFF000000 | gray << 16 | gray << 8 | gray;
-    }
-
-    private int applyRockSelectionTint(short rawData, int alpha, int red, int green, int blue)
-    {
-        if (this.selectedRockId >= 0)
-        {
-            if (rawData != this.selectedRockId)
-            {
-                int gray = (red * 30 + green * 59 + blue * 11) / 100;
-                red = gray;
-                green = gray;
-                blue = gray;
-            }
-            else
-            {
-                red = Math.min(255, red + 40);
-                green = Math.min(255, green + 40);
-                blue = Math.min(255, blue + 40);
-            }
-        }
-        return (alpha << 24) | (blue << 16) | (green << 8) | red;
     }
 
     public void setSelectedBiomeId(short biomeId)
@@ -1360,6 +1769,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     public void setSelectedRockId(short rockId)
     {
         this.selectedRockId = rockId;
+    }
+
+    public void setSelectedTFCMapValue(short value)
+    {
+        this.selectedTFCMapValue = value;
     }
 
     public void setHighlightCaves(boolean highlightCaves)
@@ -1396,9 +1810,21 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         short tfcRockMid,
         short tfcRockBot,
         short tfcRockType,
-        short tfcHotspotAge
+        short tfcHotspotAge,
+        short tfcForestType,
+        short tfcTreeSpecies
     )
     {
+        public String getTfcForestTypeName()
+        {
+            return TFCSampleUtils.getForestTypeName(tfcForestType);
+        }
+
+        public String getTfcTreeSpeciesName()
+        {
+            return TFCSampleUtils.getTreeSpeciesName(tfcTreeSpecies);
+        }
+
         public String getTfcLandWaterName()
         {
             return switch (tfcLandWater)
@@ -1433,7 +1859,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     }
 
     private record RenderHelper(
-        PreviewSection dataSection, PreviewSection structureSection, PreviewSection.AccessData accessData, int sectionStartTexX, int sectionStartTexZ
+        PreviewSection dataSection, PreviewSection structureSection, @Nullable PreviewSection landWaterSection,
+        PreviewSection.AccessData accessData, int sectionStartTexX, int sectionStartTexZ
     )
     {
     }

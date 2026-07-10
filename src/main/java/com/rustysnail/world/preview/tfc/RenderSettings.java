@@ -17,6 +17,9 @@ public class RenderSettings
     public ResourceLocation dimension = null;
     public boolean hideAllStructures = false;
     public transient RenderMode mode = RenderMode.BIOMES;
+    // True when the feature-icon overlay is shown; lets WorkManager queue TFC feature detection
+    // even in non-TFC modes (and skip it otherwise).
+    public transient boolean featureOverlay = false;
 
 
     public BlockPos center()
@@ -91,12 +94,14 @@ public class RenderSettings
         TFC_ROCK_BOT(10L, false),    // Bottom rock layer
         TFC_ROCK_TYPE(11L, false),   // Rock type category (Ocean/Volcanic/Land/Uplift)
         TFC_KAOLINITE(12L, false),   // Kaolin Clay Spawning Areas
-        TFC_HOTSPOT(14L, false);     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
+        TFC_FOREST_TYPE(13L, false), //TFC forest type/density
+        TFC_HOTSPOT(14L, false),     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
+        TFC_TREE_SPECIES(15L, false);
 
         public final long flag;
         public final boolean useY;
 
-        RenderMode(long flag, boolean useY)
+        RenderMode(long flag, @SuppressWarnings("SameParameterValue") boolean useY)
         {
             this.flag = flag;
             this.useY = useY;

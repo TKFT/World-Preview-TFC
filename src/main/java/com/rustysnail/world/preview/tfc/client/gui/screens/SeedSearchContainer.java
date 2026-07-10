@@ -303,7 +303,7 @@ public class SeedSearchContainer implements AutoCloseable
         {
             if (!value.isEmpty())
             {
-                this.maxSeeds = Math.max(1, Math.min(100000, Integer.parseInt(value)));
+                this.maxSeeds = Math.clamp(Integer.parseInt(value), 1, 100000);
             }
         }
         catch (NumberFormatException ignored)
@@ -569,7 +569,7 @@ public class SeedSearchContainer implements AutoCloseable
         int bottom = rect.bottom() - 8;
         int gap = 4;
 
-        int btnW = Math.max(120, Math.min(160, totalWidth / 4));
+        int btnW = Math.clamp(totalWidth / 4, 120, 160);
         int criteriaWidth = totalWidth - btnW - gap * 3;
 
         int biomeWidth;

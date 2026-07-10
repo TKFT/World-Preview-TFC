@@ -398,7 +398,7 @@ public class SampleUtils implements AutoCloseable
 
     private static short doubleToShort(double val, double factor)
     {
-        return (short) Math.min(32767L, Math.max(-32768L, (long) (val * factor * 32767.0)));
+        return (short) Math.clamp((long) (val * factor * 32767.0), -32768L, 32767L);
     }
 
     public boolean hasRawNoiseInfo()

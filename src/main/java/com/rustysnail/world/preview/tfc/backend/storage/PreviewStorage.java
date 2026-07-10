@@ -40,11 +40,11 @@ public class PreviewStorage implements Serializable
         {
             long wanted = f & FLAG_MASK;
 
-            for (int i = 0; i < this.blocks.length; i++)
+            for (Long2ObjectMap<PreviewBlock> block : this.blocks)
             {
-                synchronized (this.blocks[i])
+                synchronized (block)
                 {
-                    Long2ObjectMap<PreviewBlock> yMap = this.blocks[i];
+                    Long2ObjectMap<PreviewBlock> yMap = block;
                     var it = yMap.keySet().longIterator();
                     while (it.hasNext())
                     {
@@ -61,11 +61,11 @@ public class PreviewStorage implements Serializable
 
     public void invalidateAll()
     {
-        for (int i = 0; i < this.blocks.length; i++)
+        for (Long2ObjectMap<PreviewBlock> block : this.blocks)
         {
-            synchronized (this.blocks[i])
+            synchronized (block)
             {
-                Long2ObjectMap<PreviewBlock> yMap = this.blocks[i];
+                Long2ObjectMap<PreviewBlock> yMap = block;
                 yMap.clear();
             }
         }

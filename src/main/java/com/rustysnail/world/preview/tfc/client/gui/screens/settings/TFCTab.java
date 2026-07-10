@@ -115,9 +115,9 @@ public class TFCTab extends GridLayoutTab
             spawnRadiusValues.add(new ScaleValue(v));
         }
 
-        this.spawnDistance = Math.max(SPAWN_RADIUS_MIN, Math.min(SPAWN_RADIUS_MAX, this.spawnDistance));
+        this.spawnDistance = Math.clamp(this.spawnDistance, SPAWN_RADIUS_MIN, SPAWN_RADIUS_MAX);
         int spawnRadiusIdx = Math.round((this.spawnDistance - SPAWN_RADIUS_MIN) / (float) DISTANCE_STEP);
-        spawnRadiusIdx = Math.max(0, Math.min(spawnRadiusValues.size() - 1, spawnRadiusIdx));
+        spawnRadiusIdx = Math.clamp(spawnRadiusIdx, 0, spawnRadiusValues.size() - 1);
 
         this.spawnRadiusSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, spawnRadiusValues,
@@ -134,9 +134,9 @@ public class TFCTab extends GridLayoutTab
         }
 
         // X
-        this.spawnCenterX = Math.max(CENTER_MIN, Math.min(CENTER_MAX, this.spawnCenterX));
+        this.spawnCenterX = Math.clamp(this.spawnCenterX, CENTER_MIN, CENTER_MAX);
         int centerXIdx = Math.round((this.spawnCenterX - CENTER_MIN) / (float) DISTANCE_STEP);
-        centerXIdx = Math.max(0, Math.min(spawnCenterValues.size() - 1, centerXIdx));
+        centerXIdx = Math.clamp(centerXIdx, 0, spawnCenterValues.size() - 1);
 
         this.spawnCenterXSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, spawnCenterValues,
@@ -146,9 +146,9 @@ public class TFCTab extends GridLayoutTab
         this.spawnCenterXSlider.setTooltip(Tooltip.create(WorldPreviewComponents.TFC_SPAWN_CENTER_X_TOOLTIP));
 
         // Z
-        this.spawnCenterZ = Math.max(CENTER_MIN, Math.min(CENTER_MAX, this.spawnCenterZ));
+        this.spawnCenterZ = Math.clamp(this.spawnCenterZ, CENTER_MIN, CENTER_MAX);
         int centerZIdx = Math.round((this.spawnCenterZ - CENTER_MIN) / (float) DISTANCE_STEP);
-        centerZIdx = Math.max(0, Math.min(spawnCenterValues.size() - 1, centerZIdx));
+        centerZIdx = Math.clamp(centerZIdx, 0, spawnCenterValues.size() - 1);
 
         this.spawnCenterZSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, spawnCenterValues,
@@ -165,7 +165,7 @@ public class TFCTab extends GridLayoutTab
         }
 
         int tempScaleIdx = Math.round(this.temperatureScale / (float) DISTANCE_STEP);
-        tempScaleIdx = Math.max(0, Math.min(SCALE_MAX_STEPS, tempScaleIdx));
+        tempScaleIdx = Math.clamp(tempScaleIdx, 0, SCALE_MAX_STEPS);
 
         this.tempScaleSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, tempScaleValues,
@@ -182,7 +182,7 @@ public class TFCTab extends GridLayoutTab
         int tempConstIdx = Math.round((this.temperatureConstant + 1.0f) * CONSTANT_STEPS);
         this.tempConstSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, tempConstValues,
-            tempConstValues.get(Math.max(0, Math.min(2 * CONSTANT_STEPS, tempConstIdx))),
+            tempConstValues.get(Math.clamp(tempConstIdx, 0, 2 * CONSTANT_STEPS)),
             val -> this.temperatureConstant = val.value
         );
         this.tempConstSlider.setTooltip(Tooltip.create(WorldPreviewComponents.TFC_TEMP_CONST_TOOLTIP));
@@ -194,7 +194,7 @@ public class TFCTab extends GridLayoutTab
         }
 
         int rainScaleIdx = Math.round(this.rainfallScale / (float) DISTANCE_STEP);
-        rainScaleIdx = Math.max(0, Math.min(SCALE_MAX_STEPS, rainScaleIdx));
+        rainScaleIdx = Math.clamp(rainScaleIdx, 0, SCALE_MAX_STEPS);
 
         this.rainScaleSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, rainScaleValues,
@@ -211,7 +211,7 @@ public class TFCTab extends GridLayoutTab
         int rainConstIdx = Math.round((this.rainfallConstant + 1.0f) * CONSTANT_STEPS);
         this.rainConstSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15, rainConstValues,
-            rainConstValues.get(Math.max(0, Math.min(2 * CONSTANT_STEPS, rainConstIdx))),
+            rainConstValues.get(Math.clamp(rainConstIdx, 0, 2 * CONSTANT_STEPS)),
             val -> this.rainfallConstant = val.value
         );
         this.rainConstSlider.setTooltip(Tooltip.create(WorldPreviewComponents.TFC_RAIN_CONST_TOOLTIP));
@@ -227,7 +227,7 @@ public class TFCTab extends GridLayoutTab
         this.continentalnessSlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15,
             continentalnessValues,
-            continentalnessValues.get(Math.max(0, Math.min(2 * PERCENT_STEPS, contIdx))),
+            continentalnessValues.get(Math.clamp(contIdx, 0, 2 * PERCENT_STEPS)),
             val -> this.continentalness = val.value
         );
 
@@ -246,7 +246,7 @@ public class TFCTab extends GridLayoutTab
         this.grassDensitySlider = new SelectionSlider<>(
             0, 0, HALF_WIDTH, 15,
             grassDensityValues,
-            grassDensityValues.get(Math.max(0, Math.min(2 * PERCENT_STEPS, grassIdx))),
+            grassDensityValues.get(Math.clamp(grassIdx, 0, 2 * PERCENT_STEPS)),
             val -> this.grassDensity = val.value
         );
 
@@ -423,7 +423,7 @@ public class TFCTab extends GridLayoutTab
         final int OUTER_PAD = 16;
         final int MAX_WIDTH = 360;
 
-        int lineWidth = Math.max(220, Math.min(MAX_WIDTH, screenRectangle.width() - OUTER_PAD));
+        int lineWidth = Math.clamp(screenRectangle.width() - OUTER_PAD, 220, MAX_WIDTH);
         int halfWidth = Math.max(100, (lineWidth - 4) / 2);
 
         this.layout.rowSpacing(screenRectangle.height() < 260 ? 3 : 6);

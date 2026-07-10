@@ -15,6 +15,8 @@ import com.rustysnail.world.preview.tfc.backend.worker.StructStartWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCWorkPlan;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -35,6 +37,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.LayeredRegistryAccess;
@@ -51,6 +54,9 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
 
 import net.dries007.tfc.world.ChunkGeneratorExtension;
+import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.chunkdata.ChunkData;
+import net.dries007.tfc.world.chunkdata.ForestType;
 import net.dries007.tfc.world.settings.Settings;
 
 import org.jetbrains.annotations.Nullable;
@@ -69,6 +75,7 @@ public class WorkManager
     private PreviewStorage previewStorage;
     private PreviewStorageCacheManager previewStorageCacheManager;
     private TFCSampleUtils tfcSampleUtils;
+    private TFCTreeResolver tfcTreeResolver;
     private final KaolinBiomeRules kaolinRules = new KaolinBiomeRules();
 
     @Nullable
@@ -88,6 +95,14 @@ public class WorkManager
     private long lastQueuedModeFlag = Long.MIN_VALUE;
     private final AtomicBoolean queueIsRunning = new AtomicBoolean(false);
     private final AtomicBoolean shouldEarlyAbortQueuing = new AtomicBoolean(false);
+
+    // Chunks per side of a combined TFC work unit. Power of two; do not reduce below 8 without
+    // profiling. Smaller = faster cancellation and sooner partial results, more scheduling overhead.
+    private static final int TFC_UNIT_CHUNKS = 16;
+
+    // Monotonic counter bumped whenever preview data changes (results applied, or sections
+    // invalidated). PreviewDisplay compares it to decide whether the texture must be rebuilt.
+    private final AtomicLong dataRevision = new AtomicLong(0);
 
     public WorkManager(RenderSettings renderSettings, WorldPreviewConfig config)
     {
@@ -138,20 +153,37 @@ public class WorkManager
             }
         }
 
-        this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.worldOptions.seed());
+        this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.sampleUtils.registryAccess(), this.worldOptions.seed());
+        this.tfcTreeResolver = this.tfcSampleUtils != null
+            ? TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings())
+            : null;
 
         synchronized (this.previewStorageSynchro)
         {
             this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_TEMPERATURE.flag, RenderSettings.RenderMode.TFC_RAINFALL.flag);
         }
+        this.bumpDataRevision();
 
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
 
+        // restartExecutors() -> shutdownExecutors() cancels and clears currentBatches; do not clear
+        // here first, or those batches would never get their isCanceled flag set.
         this.restartExecutors();
+    }
+
+    /**
+     * Called when the feature-icon overlay is toggled. Forces the next queueRange to re-evaluate,
+     * so TFC feature detection is queued when the overlay turns on (and not otherwise).
+     */
+    public synchronized void onFeatureOverlayChanged()
+    {
+        this.lastQueuedTopLeft = null;
+        this.lastQueuedBotRight = null;
+        this.lastQueuedWasTfc = false;
+        this.lastQueuedModeFlag = Long.MIN_VALUE;
     }
 
     public synchronized void onResolutionChanged()
@@ -167,13 +199,14 @@ public class WorkManager
         {
             this.previewStorage.invalidateAll();
         }
+        this.bumpDataRevision();
 
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
 
+        // See onTFCSettingsChanged: let restartExecutors() cancel+clear currentBatches.
         this.restartExecutors();
 
         WorldPreview.LOGGER.info("Resolution changed to {} pixels per chunk", this.renderSettings.pixelsPerChunk());
@@ -184,19 +217,42 @@ public class WorkManager
         if (this.previewStorage == null) return;
 
         RenderSettings.RenderMode mode = this.renderSettings.mode;
+
+        // Display-only switch between combined-TFC modes (e.g. Forest Type <-> Tree Species): the
+        // one combined work unit already writes every TFC section, so keep running work and bounds
+        // instead of discarding and restarting generation. Kaolin is excluded (it gates an
+        // expensive computation), so switching to/from it still falls through to a full reset.
+        boolean displayOnlyTfcSwitch = mode != null
+            && mode.isTFC()
+            && this.lastQueuedWasTfc
+            && this.effectiveModeKey(mode) == this.lastQueuedModeFlag;
+        if (displayOnlyTfcSwitch)
+        {
+            WorldPreview.LOGGER.debug("Render mode -> {}: display-only TFC switch, keeping in-flight generation", mode);
+            return;
+        }
+
         if (mode != null && !mode.isTFC())
         {
             synchronized (this.previewStorageSynchro)
             {
                 this.previewStorage.invalidateFlags(mode.flag);
             }
+            this.bumpDataRevision();
         }
 
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
         this.lastQueuedWasTfc = false;
         this.lastQueuedModeFlag = Long.MIN_VALUE;
-        this.currentBatches.clear();
+
+        // Cancel obsolete work before dropping references (previously cleared without canceling,
+        // so orphaned batches kept running and blocked the thread pool).
+        synchronized (this.currentBatches)
+        {
+            this.currentBatches.forEach(WorkBatch::cancel);
+            this.currentBatches.clear();
+        }
     }
 
 
@@ -268,11 +324,16 @@ public class WorkManager
                 this.sampleUtils = new SampleUtils(server, biomeSource, this.chunkGenerator, this.worldOptions, this.levelStem, levelHeightAccessor);
             }
 
-            this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.worldOptions.seed());
+            this.tfcSampleUtils = TFCSampleUtils.create(this.chunkGenerator, this.sampleUtils.registryAccess(), this.worldOptions.seed());
             if (this.tfcSampleUtils != null)
             {
                 this.kaolinRules.rebuild(this.sampleUtils.resourceManager());
+                this.tfcTreeResolver = TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings());
                 WorldPreview.LOGGER.info("TFC-compatible chunk generator detected, TFC sampling enabled");
+            }
+            else
+            {
+                this.tfcTreeResolver = null;
             }
         }
         catch (IOException e)
@@ -367,6 +428,7 @@ public class WorkManager
         this.chunkGenerator = null;
         this.sampleUtils = null;
         this.tfcSampleUtils = null;
+        this.tfcTreeResolver = null;
         this.previewStorage = null;
         this.lastQueuedTopLeft = null;
         this.lastQueuedBotRight = null;
@@ -386,7 +448,7 @@ public class WorkManager
 
         final RenderSettings.RenderMode mode = this.renderSettings.mode;
         final boolean tfcMode = mode != null && mode.isTFC();
-        final long modeFlag = mode != null ? mode.flag : Long.MIN_VALUE;
+        final long modeFlag = this.effectiveModeKey(mode);
 
         if (this.executorService != null
             && this.sampleUtils != null
@@ -441,8 +503,15 @@ public class WorkManager
         Instant start = Instant.now();
         ChunkPos topLeft = new ChunkPos(topLeftBlock);
         ChunkPos bottomRight = new ChunkPos(bottomRightBlock);
+
+        // Cancel the previous viewport's work and interrupt its futures, but do NOT block waiting
+        // for large obsolete TFC units to finish — that is what left a moved viewport black. The
+        // canceled batches observe isCanceled and exit fast; canceled batches never apply or mark
+        // completed (see WorkBatch#process), so they cannot write stale data over the new range.
+        int canceledBatches;
         synchronized (this.currentBatches)
         {
+            canceledBatches = this.currentBatches.size();
             this.currentBatches.forEach(WorkBatch::cancel);
             this.currentBatches.clear();
         }
@@ -451,23 +520,14 @@ public class WorkManager
         {
             for (Future<?> f : this.futures)
             {
-                try
-                {
-                    f.get();
-                }
-                catch (InterruptedException e)
-                {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
-                }
-                catch (ExecutionException e)
-                {
-                    throw new RuntimeException(e);
-                }
+                f.cancel(true);
             }
-
             this.futures.clear();
         }
+
+        long cancelWaitMs = Duration.between(start, Instant.now()).abs().toMillis();
+        WorldPreview.LOGGER.debug("Queue replacement: canceled {} obsolete batches in {} ms (no blocking get)",
+            canceledBatches, cancelWaitMs);
 
         List<ChunkPos> chunks = ChunkPos.rangeClosed(topLeft, bottomRight).toList();
         int units = 0;
@@ -482,21 +542,28 @@ public class WorkManager
             units += this.queueForLevel(chunks, 0, 256, (pos, yx) -> new StructStartWorkUnit(this.sampleUtils, pos, this.previewData));
         }
 
-        // TFC data is queued before height so that a height-induced early abort cannot prevent
-        // TFC climate/feature data from being computed (needed for biome map tooltip and icons).
-        if (this.tfcSampleUtils != null && !this.shouldEarlyAbortQueuing.get())
+        // Only queue TFC work for TFC modes, or when the feature overlay explicitly needs TFC feature
+        // icons — the normal biome map no longer triggers full TFC generation. The plan makes each
+        // mode compute only what it needs (e.g. Temperature does not sample rocks or resolve trees).
+        final boolean featureOverlay = this.renderSettings.featureOverlay;
+        final TFCWorkPlan tfcPlan = TFCWorkPlan.forMode(this.renderSettings.mode, featureOverlay);
+        final boolean queueTfc = tfcMode || (featureOverlay && tfcPlan.anyOutput());
+        if (this.tfcSampleUtils != null && queueTfc && tfcPlan.anyOutput() && !this.shouldEarlyAbortQueuing.get())
         {
-            final boolean computeKaolin = this.renderSettings.mode == RenderSettings.RenderMode.TFC_KAOLINITE;
             TFCRegionWorkUnit.resetStats();
 
             LongSet queuedTFCChunks = new LongOpenHashSet(chunks.size());
             List<ChunkPos> tfcChunks = new ArrayList<>(chunks.size());
 
-            int numChunks = 32;
+            // Smaller units (16x16 chunks, was 32x32) so cancellation responds ~4x faster, partial
+            // results arrive sooner, and a moved viewport is black for less time. Must be a power of
+            // two: unit origins are aligned to numChunks so the units tile the range without gaps.
+            final int numChunks = TFC_UNIT_CHUNKS;
+            final int alignBits = Integer.numberOfTrailingZeros(numChunks);
 
             for (ChunkPos c : chunks)
             {
-                ChunkPos shifted = new ChunkPos(c.x >> 5 << 5, c.z >> 5 << 5);
+                ChunkPos shifted = new ChunkPos(c.x >> alignBits << alignBits, c.z >> alignBits << alignBits);
                 if (queuedTFCChunks.add(shifted.toLong()))
                 {
                     tfcChunks.add(shifted);
@@ -504,6 +571,8 @@ public class WorkManager
             }
 
             TFCRegionWorkUnit.setTotalUnits(tfcChunks.size());
+            WorldPreview.LOGGER.debug("[TFC] Queuing {} TFC units, plan[{}] for mode {}",
+                tfcChunks.size(), tfcPlan.describe(), this.renderSettings.mode);
 
             final long worldSeed = this.worldOptions.seed();
             units += this.queueForLevel(
@@ -518,8 +587,9 @@ public class WorkManager
                     this.previewData,
                     this.tfcSampleUtils.regionGenerator(),
                     this.tfcSampleUtils,
+                    this.tfcTreeResolver,
                     this.kaolinRules,
-                    computeKaolin,
+                    tfcPlan,
                     worldSeed
                 )
             );
@@ -547,10 +617,26 @@ public class WorkManager
         }
 
         Instant end = Instant.now();
+        int pendingFutures;
+        synchronized (this.futures)
+        {
+            pendingFutures = this.futures.size();
+        }
         WorldPreview.LOGGER
             .info(
-                "Queued {} chunks for generation using {} batches [{} ms] {}",
-                units, this.currentBatches.size(), Duration.between(start, end).abs().toMillis(), this.shouldEarlyAbortQueuing.get() ? "{early abort}" : "");
+                "Queued {} chunks for generation using {} batches [{} ms] {} pending futures {}",
+                units, this.currentBatches.size(), Duration.between(start, end).abs().toMillis(), pendingFutures, this.shouldEarlyAbortQueuing.get() ? "{early abort}" : "");
+    }
+
+    /**
+     * Queue-identity key for a render mode. Each mode now has its own key: TFC generation is
+     * mode-specific (see TFCWorkPlan), so switching modes must re-queue to compute the new mode's
+     * data. Per-group completion tracking then skips chunks whose data already exists, so re-queuing
+     * an already-generated mode is cheap.
+     */
+    private long effectiveModeKey(RenderSettings.RenderMode mode)
+    {
+        return mode == null ? Long.MIN_VALUE : mode.flag;
     }
 
     private WorkUnit workUnitFactory(ChunkPos pos, int y)
@@ -588,7 +674,7 @@ public class WorkManager
                 toQueue[i] = temp;
             }
 
-            int batchSize = maxBatchSize == 1 ? 1 : Math.max(8, Math.min(maxBatchSize, size / 4096));
+            int batchSize = maxBatchSize == 1 ? 1 : Math.clamp(maxBatchSize, 8, size / 4096);
             WorkBatch[] batches = new WorkBatch[batchSize == 1 ? size : size / batchSize + 1];
             if (batchSize > 1)
             {
@@ -669,9 +755,56 @@ public class WorkManager
         return this.tfcSampleUtils;
     }
 
+    /**
+     * Resolves the dominant-tree result at a block position for UI (hover tooltip). Samples the
+     * containing chunk's data, forest type, biome (for salt_marsh) and surface height, then runs
+     * the shared resolver. Returns {@link TFCTreeResolver.Result#NONE} if TFC data is unavailable.
+     */
+    public TFCTreeResolver.Result resolveTreeAt(int blockX, int blockZ)
+    {
+        TFCSampleUtils tfcSu = this.tfcSampleUtils;
+        TFCTreeResolver resolver = this.tfcTreeResolver;
+        if (tfcSu == null || resolver == null)
+        {
+            return TFCTreeResolver.Result.NONE;
+        }
+        try
+        {
+            ChunkData chunkData = tfcSu.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
+            ForestType forestType = chunkData.getForestType();
+            BiomeExtension biome = tfcSu.sampleBiomeExtension(blockX, blockZ);
+            int surfaceY;
+            try
+            {
+                surfaceY = this.sampleUtils.doHeightSlow(new BlockPos(blockX, 0, blockZ));
+            }
+            catch (Exception e)
+            {
+                surfaceY = 63;
+            }
+            return resolver.resolve(chunkData, forestType, biome, blockX, blockZ, surfaceY);
+        }
+        catch (Exception e)
+        {
+            return TFCTreeResolver.Result.NONE;
+        }
+    }
+
     public boolean isTFCEnabled()
     {
         return this.tfcSampleUtils != null;
+    }
+
+    /** Current preview-data revision; changes when results are applied or sections are invalidated. */
+    public long dataRevision()
+    {
+        return this.dataRevision.get();
+    }
+
+    /** Bump the revision so PreviewDisplay rebuilds its texture. Called after a batch applies results. */
+    public void bumpDataRevision()
+    {
+        this.dataRevision.incrementAndGet();
     }
 
     public ChunkGenerator chunkGenerator()
