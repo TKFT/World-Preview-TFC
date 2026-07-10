@@ -85,6 +85,9 @@ public class RenderSettings
     {
         BIOMES(0L, false),
         HEIGHTMAP(2L, false),
+        // Ecological map modes. Flag 3L is the last free storage flag (flags are 4-bit, 0..15;
+        // 1 = structures, 4 = TFC feature-completion, 5..15 = the other TFC modes).
+        TFC_SOIL_TYPE(3L, false),    // Predicted TFC soil order
         // TFC-specific render modes
         TFC_TEMPERATURE(5L, false),  // Mapping Temperature
         TFC_RAINFALL(6L, false),     // Mapping Rainfall

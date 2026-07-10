@@ -21,7 +21,9 @@ import net.dries007.tfc.world.settings.Settings;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
 import net.dries007.tfc.world.chunkdata.ForestType;
+import net.dries007.tfc.util.EnvironmentHelpers;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceLocation;
@@ -505,6 +507,233 @@ public class TFCSampleUtils
             case "sparse" -> "Sparse Trees";
             default -> "No Trees"; // grassland, clearing
         };
+    }
+
+    // --------------- TFC Soil Type (ecological preview map) ---------------
+    // A deterministic classification map: it predicts a soil order from climate, water, volcanic
+    // influence, forest type, and biome context. It does not claim exact surface-block placement.
+    // Soil orders use plain positive short ids (0..7); water/invalid reuse the shared reserved
+    // values above (VALUE_WATER_* / VALUE_INVALID). Palette constants are normal ARGB - GUI legend
+    // swatches use them directly; PreviewDisplay converts via textureColor(...) before writing pixels.
+
+    public static final short SOIL_ENTISOL  = 0;
+    public static final short SOIL_ARIDISOL = 1;
+    public static final short SOIL_OXISOL   = 2;
+    public static final short SOIL_FLUVISOL = 3;
+    public static final short SOIL_ANDISOL  = 4;
+    public static final short SOIL_PODZOL   = 5;
+    public static final short SOIL_ALFISOL  = 6;
+    public static final short SOIL_MOLLISOL = 7;
+
+    private static final String[] SOIL_NAMES = {
+        "Entisol", "Aridisol", "Oxisol", "Fluvisol", "Andisol", "Podzol", "Alfisol", "Mollisol"
+    };
+
+    private static final int[] SOIL_COLORS = {
+        0xFFB89A6A,  // Entisol  - pale tan
+        0xFFD6A24C,  // Aridisol - desert ochre
+        0xFFB85A32,  // Oxisol   - tropical red
+        0xFF6D8F75,  // Fluvisol - alluvial green-grey
+        0xFF4E4A44,  // Andisol  - volcanic dark
+        0xFF6B5A7A,  // Podzol   - boreal purple-grey
+        0xFF8A6E45,  // Alfisol  - temperate brown
+        0xFF4F6F3A   // Mollisol - grassland dark green
+    };
+
+    // Classification thresholds. Named so they can be tuned later. Groundwater is on TFC's
+    // 0-500 scale (rivers + rainfall); temperature is in degrees C (elevation-adjusted).
+    public static final float SOIL_HOT_TEMP = 20.0f;
+    public static final float SOIL_COOL_TEMP = 5.0f;
+    public static final float SOIL_DRY_GROUNDWATER = 80.0f;
+    public static final float SOIL_WET_GROUNDWATER = 220.0f;
+    public static final float SOIL_MODERATE_GROUNDWATER = 150.0f;
+    public static final float SOIL_FLUVISOL_RAIN_VARIANCE = 0.45f;
+
+    public static int soilTypeCount()
+    {
+        return SOIL_NAMES.length;
+    }
+
+    public static boolean isSoilTypeValue(short value)
+    {
+        return value >= 0 && value < SOIL_NAMES.length;
+    }
+
+    public static String getSoilTypeName(short value)
+    {
+        if (isSoilTypeValue(value))
+        {
+            return SOIL_NAMES[value];
+        }
+        if (isWaterValue(value))
+        {
+            return "Water";
+        }
+        return "Unknown / No Soil";
+    }
+
+    public static int getSoilTypeColor(short value)
+    {
+        if (isSoilTypeValue(value))
+        {
+            return SOIL_COLORS[value];
+        }
+        if (isWaterValue(value))
+        {
+            return COLOR_WATER;
+        }
+        return COLOR_INVALID;
+    }
+
+    /** ForestType values that place woody vegetation (trees or shrubs) - used for Alfisol/Podzol. */
+    private static boolean isForested(ForestType forestType)
+    {
+        return forestType != null && forestTypeHasVegetation(forestType);
+    }
+
+    /** Open, grass-dominated contexts: no forest, or an explicitly grassy/plains-like biome path. */
+    private static boolean isGrasslandLike(ForestType forestType, String biomePath)
+    {
+        if (forestType != null && !forestTypeHasVegetation(forestType))
+        {
+            return true;
+        }
+        if (biomePath == null)
+        {
+            return false;
+        }
+        return biomePath.contains("plains")
+            || biomePath.contains("grass")
+            || biomePath.contains("meadow")
+            || biomePath.contains("prairie")
+            || biomePath.contains("steppe");
+    }
+
+    /** Volcanic-influenced biomes (Andisol parent material). Deliberately kept version-agnostic. */
+    private static boolean isVolcanicSoilBiome(String path)
+    {
+        if (path == null)
+        {
+            return false;
+        }
+        return path.contains("volcanic")
+            || path.contains("volcano")
+            || path.contains("shield_volcano")
+            || path.contains("tuyas");
+    }
+
+    /** River/lake/alluvial-flat contexts that deposit Fluvisols. */
+    private static boolean isFluvisolBiome(String path)
+    {
+        if (path == null)
+        {
+            return false;
+        }
+        return path.equals("river")
+            || path.equals("lake")
+            || path.endsWith("_lake")
+            || path.equals("tower_karst_bay")
+            || path.contains("flats");
+    }
+
+    /** Conservative "no soil" contexts: ice sheets, glaciers, bare rock. Kept narrow on purpose. */
+    private static boolean isNoSoilBiome(String path)
+    {
+        if (path == null)
+        {
+            return false;
+        }
+        return path.contains("ice")
+            || path.contains("glacier")
+            || path.contains("bare_rock");
+    }
+
+    /**
+     * Deterministically predicts a TFC soil order for a sampled point from climate, water, volcanic
+     * influence, forest type and biome context. Returns a soil id (0..7), a reserved water value
+     * (when {@code waterValue} is ocean/lake/river), or {@link #VALUE_INVALID} for no-soil contexts.
+     * This is a preview/classification map - it does not resolve the exact surface block.
+     */
+    public static short resolveSoilType(
+        ChunkData chunkData,
+        @Nullable BiomeExtension biome,
+        ForestType forestType,
+        BlockPos pos,
+        int surfaceY,
+        short waterValue
+    )
+    {
+        // 1. Water: reuse the shared water classification (ocean/lake/river).
+        if (isWaterValue(waterValue))
+        {
+            return waterValue;
+        }
+
+        // 2. Unknown / No Soil.
+        if (biome == null)
+        {
+            return VALUE_INVALID;
+        }
+        String path = biome.key().location().getPath();
+        if (isNoSoilBiome(path))
+        {
+            return VALUE_INVALID;
+        }
+
+        // Climate inputs at the sampled position, temperature adjusted for elevation.
+        float groundwater = chunkData.getAverageGroundwater(pos);
+        float seaLevelTemp = chunkData.getAverageSeaLevelTemp(pos);
+        float rainVariance = chunkData.getRainVariance(pos);
+        float adjustedTemp = EnvironmentHelpers.adjustAvgTempForElev(surfaceY, seaLevelTemp);
+
+        // 3. Andisol - volcanic parent material.
+        if (isVolcanicSoilBiome(path))
+        {
+            return SOIL_ANDISOL;
+        }
+
+        // 4. Fluvisol - rivers, lakes, alluvial flats, or wet + high rain variance.
+        if (isFluvisolBiome(path)
+            || (groundwater > SOIL_WET_GROUNDWATER && Math.abs(rainVariance) > SOIL_FLUVISOL_RAIN_VARIANCE))
+        {
+            return SOIL_FLUVISOL;
+        }
+
+        // 5. Aridisol - dry, or hot and not moist.
+        if (groundwater < SOIL_DRY_GROUNDWATER
+            || (adjustedTemp > SOIL_HOT_TEMP && groundwater < SOIL_MODERATE_GROUNDWATER))
+        {
+            return SOIL_ARIDISOL;
+        }
+
+        // 6. Oxisol - hot and wet (tropical weathering).
+        if (adjustedTemp > SOIL_HOT_TEMP && groundwater >= SOIL_WET_GROUNDWATER)
+        {
+            return SOIL_OXISOL;
+        }
+
+        // 7. Podzol - cold, forested, moist (boreal).
+        if (adjustedTemp < SOIL_COOL_TEMP
+            && isForested(forestType)
+            && groundwater >= SOIL_MODERATE_GROUNDWATER)
+        {
+            return SOIL_PODZOL;
+        }
+
+        // 8. Mollisol - grassland-like with at least some moisture.
+        if (isGrasslandLike(forestType, path) && groundwater >= SOIL_DRY_GROUNDWATER)
+        {
+            return SOIL_MOLLISOL;
+        }
+
+        // 9. Alfisol - temperate forested.
+        if (isForested(forestType))
+        {
+            return SOIL_ALFISOL;
+        }
+
+        // 10. Fallback.
+        return SOIL_ENTISOL;
     }
 
 }

@@ -215,6 +215,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     WorkResult hotspotResult = this.plan.hotspot() ? newResult(cp, RenderSettings.RenderMode.TFC_HOTSPOT.flag) : null;
                     WorkResult forestTypeResult = this.plan.forestType() ? newResult(cp, RenderSettings.RenderMode.TFC_FOREST_TYPE.flag) : null;
                     WorkResult treeSpeciesResult = this.plan.treeSpecies() ? newResult(cp, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag) : null;
+                    WorkResult soilTypeResult = this.plan.soilType() ? newResult(cp, RenderSettings.RenderMode.TFC_SOIL_TYPE.flag) : null;
 
                     PreviewSection structureSection = this.plan.features() ? this.storage.section4(cp, 0, 1L) : null;
 
@@ -238,6 +239,9 @@ public class TFCRegionWorkUnit extends WorkUnit
 
                     final boolean needsPoint = this.plan.needsRegionPoint();
                     final boolean needsTreeMap = this.plan.forestType() || this.plan.treeSpecies();
+                    // Soil, like the tree maps, needs the effective biome sampled per point (for water
+                    // classification and biome-based soil rules) - share that sampling below.
+                    final boolean needsBiomeSample = needsTreeMap || this.plan.soilType();
 
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
@@ -332,8 +336,8 @@ public class TFCRegionWorkUnit extends WorkUnit
                             this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         }
 
-                        // Forest type / tree species: water via classifyTreeMapWater (no river fractal).
-                        if (needsTreeMap)
+                        // Forest type / tree species / soil: water via classifyTreeMapWater (no river fractal).
+                        if (needsBiomeSample)
                         {
                             BiomeExtension treeMapBiome = null;
                             if (this.tfcSampleUtils != null)
@@ -378,6 +382,25 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 }
                                 this.sampler.expandRaw(pos, treeSpeciesValue, treeSpeciesResult);
                             }
+                            if (this.plan.soilType())
+                            {
+                                short soilValue;
+                                if (isWaterPoint)
+                                {
+                                    soilValue = treeMapWater;
+                                }
+                                else if (chunkData != null && forestType != null)
+                                {
+                                    int surfaceY = sampleSurfaceY(pos);
+                                    soilValue = TFCSampleUtils.resolveSoilType(
+                                        chunkData, treeMapBiome, forestType, pos, surfaceY, treeMapWater);
+                                }
+                                else
+                                {
+                                    soilValue = TFCSampleUtils.VALUE_INVALID;
+                                }
+                                this.sampler.expandRaw(pos, soilValue, soilTypeResult);
+                            }
                         }
                     }
 
@@ -391,6 +414,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     addIfPresent(allResults, kaolinResult);
                     addIfPresent(allResults, forestTypeResult);
                     addIfPresent(allResults, treeSpeciesResult);
+                    addIfPresent(allResults, soilTypeResult);
                     addIfPresent(allResults, hotspotResult);
                 }
             }

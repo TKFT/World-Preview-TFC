@@ -73,6 +73,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] forestTexPaletteGray;
     private int[] treeTexPalette;
     private int[] treeTexPaletteGray;
+    private int[] soilTexPalette;
+    private int[] soilTexPaletteGray;
     private int[][] rockTexPalette;
     private int[][] rockTexPaletteGray;
     private int[][] rockTexPaletteBright;
@@ -298,6 +300,16 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             int tex = textureColor(TFCSampleUtils.getTreeSpeciesColor(i));
             this.treeTexPalette[i] = tex;
             this.treeTexPaletteGray[i] = grayScale(tex);
+        }
+
+        int sc = TFCSampleUtils.soilTypeCount();
+        this.soilTexPalette = new int[sc];
+        this.soilTexPaletteGray = new int[sc];
+        for (short i = 0; i < sc; i++)
+        {
+            int tex = textureColor(TFCSampleUtils.getSoilTypeColor(i));
+            this.soilTexPalette[i] = tex;
+            this.soilTexPaletteGray[i] = grayScale(tex);
         }
 
         this.tfcWaterTex = textureColor(TFCSampleUtils.COLOR_WATER);
@@ -833,6 +845,24 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             else if (rawData >= 0 && rawData < this.treeTexPalette.length)
                             {
                                 color = hi ? this.treeTexPalette[rawData] : this.treeTexPaletteGray[rawData];
+                            }
+                            else
+                            {
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
+                            }
+                            break;
+                        }
+                        case TFC_SOIL_TYPE:
+                        {
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
+                            if (TFCSampleUtils.isWaterValue(rawData))
+                            {
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
+                            }
+                            else if (rawData >= 0 && rawData < this.soilTexPalette.length)
+                            {
+                                color = hi ? this.soilTexPalette[rawData] : this.soilTexPaletteGray[rawData];
                             }
                             else
                             {
@@ -1492,6 +1522,24 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 }
                             }
                             break;
+                        case TFC_SOIL_TYPE:
+                            if (hoverInfo.entry != null)
+                                tfcInfo.append("\n§3Biome:§r §b%s§r".formatted(hoverInfo.entry.name()));
+                            short soil = this.readSoilRawAt(hoverInfo.blockX, hoverInfo.blockZ);
+                            if (TFCSampleUtils.isWaterValue(soil))
+                            {
+                                tfcInfo.append("\n§7Soil Type: None — %s§r".formatted(
+                                    TFCSampleUtils.getWaterTypeName(soil).toLowerCase()));
+                            }
+                            else if (TFCSampleUtils.isSoilTypeValue(soil))
+                            {
+                                tfcInfo.append("\n§3Soil Type:§r §b%s§r".formatted(TFCSampleUtils.getSoilTypeName(soil)));
+                            }
+                            else
+                            {
+                                tfcInfo.append("\n§3Soil Type:§r §bUnknown / No Soil§r");
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -1659,6 +1707,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_TREE_SPECIES:
                             this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_TREE_SPECIES, hoverInfo.tfcTreeSpecies);
                             break;
+                        case TFC_SOIL_TYPE:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_SOIL_TYPE, this.readSoilRawAt(hoverInfo.blockX, hoverInfo.blockZ));
+                            break;
                         default:
                             break;
                     }
@@ -1669,6 +1720,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.totalDragX = 0.0;
             this.totalDragZ = 0.0;
         }
+    }
+
+    /** Reads the stored soil-type value for a block position (soil embeds its own water values). */
+    private short readSoilRawAt(int blockX, int blockZ)
+    {
+        return this.workManager.previewStorage().getRawData4(
+            QuartPos.fromBlock(blockX), 0, QuartPos.fromBlock(blockZ),
+            RenderSettings.RenderMode.TFC_SOIL_TYPE.flag);
     }
 
     private void handleTFCMapValueClick(RenderSettings.RenderMode mode, short rawValue)
@@ -1684,9 +1743,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
         else
         {
-            int count = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
-                ? TFCSampleUtils.forestTypeCount()
-                : TFCSampleUtils.treeSpeciesCount();
+            int count = switch (mode)
+            {
+                case TFC_FOREST_TYPE -> TFCSampleUtils.forestTypeCount();
+                case TFC_TREE_SPECIES -> TFCSampleUtils.treeSpeciesCount();
+                case TFC_SOIL_TYPE -> TFCSampleUtils.soilTypeCount();
+                default -> 0;
+            };
             if (rawValue < 0 || rawValue >= count)
             {
                 return;

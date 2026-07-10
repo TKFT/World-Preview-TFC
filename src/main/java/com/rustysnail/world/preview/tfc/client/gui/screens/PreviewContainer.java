@@ -131,6 +131,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final ToggleButton toggleKaolinClay;
     private final ToggleButton toggleTFCForestType;
     private final ToggleButton toggleTFCTreeSpecies;
+    private final ToggleButton toggleTFCSoilType;
     private final ToggleButton toggleTFCHotspot;
     private final Button cycleResolutionButton;
     private final Button resetDefaultStructureVisibility;
@@ -147,6 +148,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final RocksList.RockEntry[] allRockTypes;
     private final TFCMapValueList tfcMapValueList;
     private final List<TFCMapValueList.ValueEntry> forestTypeEntries;
+    private final List<TFCMapValueList.ValueEntry> soilTypeEntries;
     // Rebuilt from the runtime tree-species registry each time Tree Species mode is entered, so
     // addon species that only appear once a world is loaded are included.
     private List<TFCMapValueList.ValueEntry> treeSpeciesEntries = new ArrayList<>();
@@ -192,15 +194,15 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.seedEdit.setTooltip(Tooltip.create(WorldPreviewComponents.SEED_LABEL));
         this.seedEdit.active = this.dataProvider.seedIsEditable();
         this.toRender.add(this.seedEdit);
-        this.randomSeedButton = new OldStyleImageButton(0, 0, 20, 20, 0, 20, 20, BUTTONS_TEXTURE, 840, 60, this::randomizeSeed);
+        this.randomSeedButton = new OldStyleImageButton(0, 0, 20, 20, 0, 20, 20, BUTTONS_TEXTURE, 880, 60, this::randomizeSeed);
         this.randomSeedButton.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_RANDOM));
         this.randomSeedButton.active = this.dataProvider.seedIsEditable();
         this.toRender.add(this.randomSeedButton);
-        this.saveSeed = new OldStyleImageButton(0, 0, 20, 20, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, this::saveCurrentSeed);
+        this.saveSeed = new OldStyleImageButton(0, 0, 20, 20, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, this::saveCurrentSeed);
         this.saveSeed.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_SAVE_SEED));
         this.saveSeed.active = false;
         this.toRender.add(this.saveSeed);
-        this.settings = new OldStyleImageButton(0, 0, 20, 20, 60, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> {
+        this.settings = new OldStyleImageButton(0, 0, 20, 20, 60, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> {
             ChunkGeneratorExtension vanillaExt = this.dataProvider.vanillaTFCExtension();
             boolean tfcReadOnly = (vanillaExt == null);
             ChunkGeneratorExtension ext = vanillaExt;
@@ -214,7 +216,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.settings.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_SETTINGS));
         this.settings.active = false;
         this.toRender.add(this.settings);
-        this.resetToZeroZero = new OldStyleImageButton(0, 0, 20, 20, 120, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.renderSettings.resetCenter());
+        this.resetToZeroZero = new OldStyleImageButton(0, 0, 20, 20, 120, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.renderSettings.resetCenter());
         this.resetToZeroZero.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_HOME));
         this.toRender.add(this.resetToZeroZero);
         this.resetDefaultStructureVisibility = Button.builder(
@@ -283,6 +285,16 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.forestTypeEntries.add(this.tfcMapValueList.createEntry(
                 fi, TFCSampleUtils.getForestTypeName(fi), TFCSampleUtils.getForestTypeColor(fi)));
         }
+
+        // Soil type legend: Water first, then every soil order (fixed set, so built once here).
+        this.soilTypeEntries = new ArrayList<>();
+        this.soilTypeEntries.add(this.tfcMapValueList.createEntry(
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+        for (short si = 0; si < TFCSampleUtils.soilTypeCount(); si++)
+        {
+            this.soilTypeEntries.add(this.tfcMapValueList.createEntry(
+                si, TFCSampleUtils.getSoilTypeName(si), TFCSampleUtils.getSoilTypeColor(si)));
+        }
         this.structuresList = new StructuresList(this.minecraft, 200, 300, 4, 100);
         this.toRender.add(this.structuresList);
         this.seedsList = new SeedsList(this.minecraft, this);
@@ -291,13 +303,13 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.previewDisplay = new PreviewDisplay(this.minecraft, this, WorldPreviewComponents.TITLE);
         this.toRender.add(this.previewDisplay);
         this.toggleShowStructures = new ToggleButton(
-            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.renderSettings.hideAllStructures = !((ToggleButton) x).selected
+            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.renderSettings.hideAllStructures = !((ToggleButton) x).selected
         );
         this.toggleShowStructures.selected = !this.renderSettings.hideAllStructures;
         this.toggleShowStructures.active = false;
         this.toRender.add(this.toggleShowStructures);
         this.toggleShowFeatures = new ToggleButton(
-            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> {
+            0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> {
                 boolean selected = ((ToggleButton) x).selected;
                 this.previewDisplay.setShowFeatures(selected);
                 this.renderSettings.featureOverlay = selected;
@@ -308,74 +320,74 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleShowFeatures.active = true;
         this.toggleShowFeatures.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TOGGLE_FEATURES));
         this.toRender.add(this.toggleShowFeatures);
-        this.toggleBiomes = new ToggleButton(0, 0, 20, 20, 360, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.BIOMES));
+        this.toggleBiomes = new ToggleButton(0, 0, 20, 20, 360, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.BIOMES));
         this.toggleBiomes.visible = true;
         this.toggleBiomes.active = true;
         this.toggleBiomes.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TOGGLE_BIOMES));
         this.toRender.add(this.toggleBiomes);
         this.toggleHeightmap = new ToggleButton(
-            0, 0, 20, 20, 200, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.HEIGHTMAP)
+            0, 0, 20, 20, 200, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.HEIGHTMAP)
         );
         this.toggleHeightmap.visible = true;
         this.toggleHeightmap.active = false;
         this.toRender.add(this.toggleHeightmap);
         this.toggleTFCTemperature = new ToggleButton(
-            0, 0, 20, 20, 400, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_TEMPERATURE)
+            0, 0, 20, 20, 400, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_TEMPERATURE)
         );
         this.toggleTFCTemperature.visible = false;
         this.toggleTFCTemperature.active = false;
         this.toggleTFCTemperature.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_TEMPERATURE));
         this.toRender.add(this.toggleTFCTemperature);
         this.toggleTFCRainfall = new ToggleButton(
-            0, 0, 20, 20, 440, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_RAINFALL)
+            0, 0, 20, 20, 440, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_RAINFALL)
         );
         this.toggleTFCRainfall.visible = false;
         this.toggleTFCRainfall.active = false;
         this.toggleTFCRainfall.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_RAINFALL));
         this.toRender.add(this.toggleTFCRainfall);
         this.toggleTFCLandWater = new ToggleButton(
-            0, 0, 20, 20, 480, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_LAND_WATER)
+            0, 0, 20, 20, 480, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_LAND_WATER)
         );
         this.toggleTFCLandWater.visible = false;
         this.toggleTFCLandWater.active = false;
         this.toggleTFCLandWater.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_LAND_WATER));
         this.toRender.add(this.toggleTFCLandWater);
         this.toggleTFCRockTop = new ToggleButton(
-            0, 0, 20, 20, 520, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_TOP)
+            0, 0, 20, 20, 520, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_TOP)
         );
         this.toggleTFCRockTop.visible = false;
         this.toggleTFCRockTop.active = false;
         this.toggleTFCRockTop.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_ROCK_TOP));
         this.toRender.add(this.toggleTFCRockTop);
         this.toggleTFCRockMid = new ToggleButton(
-            0, 0, 20, 20, 560, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_MID)
+            0, 0, 20, 20, 560, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_MID)
         );
         this.toggleTFCRockMid.visible = false;
         this.toggleTFCRockMid.active = false;
         this.toggleTFCRockMid.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_ROCK_MID));
         this.toRender.add(this.toggleTFCRockMid);
         this.toggleTFCRockBot = new ToggleButton(
-            0, 0, 20, 20, 600, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_BOT)
+            0, 0, 20, 20, 600, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_BOT)
         );
         this.toggleTFCRockBot.visible = false;
         this.toggleTFCRockBot.active = false;
         this.toggleTFCRockBot.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_ROCK_BOT));
         this.toRender.add(this.toggleTFCRockBot);
         this.toggleTFCRockType = new ToggleButton(
-            0, 0, 20, 20, 640, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_TYPE)
+            0, 0, 20, 20, 640, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_ROCK_TYPE)
         );
         this.toggleTFCRockType.visible = false;
         this.toggleTFCRockType.active = false;
         this.toggleTFCRockType.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_ROCK_TYPE));
         this.toRender.add(this.toggleTFCRockType);
-        this.toggleKaolinClay = new ToggleButton(0, 0, 20, 20, 680, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_KAOLINITE));
+        this.toggleKaolinClay = new ToggleButton(0, 0, 20, 20, 680, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_KAOLINITE));
         this.toggleKaolinClay.visible = false;
         this.toggleKaolinClay.active = false;
         this.toggleKaolinClay.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_KAOLINITE));
         this.toRender.add(this.toggleKaolinClay);
 
         this.toggleTFCForestType = new ToggleButton(
-            0, 0, 20, 20, 760, 20, 20, 20, BUTTONS_TEXTURE, 840, 60,
+            0, 0, 20, 20, 760, 20, 20, 20, BUTTONS_TEXTURE, 880, 60,
             x -> this.selectViewMode(RenderSettings.RenderMode.TFC_FOREST_TYPE)
         );
         this.toggleTFCForestType.visible = false;
@@ -384,7 +396,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toRender.add(this.toggleTFCForestType);
 
         this.toggleTFCTreeSpecies = new ToggleButton(
-            0, 0, 20, 20, 800, 20, 20, 20, BUTTONS_TEXTURE, 840, 60,
+            0, 0, 20, 20, 800, 20, 20, 20, BUTTONS_TEXTURE, 880, 60,
             x -> this.selectViewMode(RenderSettings.RenderMode.TFC_TREE_SPECIES)
         );
         this.toggleTFCTreeSpecies.visible = false;
@@ -392,7 +404,17 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleTFCTreeSpecies.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_TREE_SPECIES));
         this.toRender.add(this.toggleTFCTreeSpecies);
 
-        this.toggleTFCHotspot = new ToggleButton(0, 0, 20, 20, 720, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_HOTSPOT));
+        // Soil icon lives in the widened button atlas (selected column x=840, unselected x=860).
+        this.toggleTFCSoilType = new ToggleButton(
+            0, 0, 20, 20, 840, 20, 20, 20, BUTTONS_TEXTURE, 880, 60,
+            x -> this.selectViewMode(RenderSettings.RenderMode.TFC_SOIL_TYPE)
+        );
+        this.toggleTFCSoilType.visible = false;
+        this.toggleTFCSoilType.active = false;
+        this.toggleTFCSoilType.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_SOIL_TYPE));
+        this.toRender.add(this.toggleTFCSoilType);
+
+        this.toggleTFCHotspot = new ToggleButton(0, 0, 20, 20, 720, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_HOTSPOT));
         this.toggleTFCHotspot.visible = false;
         this.toggleTFCHotspot.active = false;
         this.toggleTFCHotspot.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_HOTSPOT));
@@ -404,7 +426,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.cycleResolutionButton.active = true;
         this.cycleResolutionButton.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_RESOLUTION_TOOLTIP));
         this.toRender.add(this.cycleResolutionButton);
-        this.toggleExpand = new ToggleButton(0, 0, 20, 20, 320, 20, 20, 20, BUTTONS_TEXTURE, 840, 60, x -> {
+        this.toggleExpand = new ToggleButton(0, 0, 20, 20, 320, 20, 20, 20, BUTTONS_TEXTURE, 880, 60, x -> {
             boolean expanded = ((ToggleButton) x).selected;
             this.cycleResolutionButton.visible = expanded;
             boolean isTFC = this.workManager.isTFCEnabled();
@@ -418,6 +440,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleKaolinClay.visible = expanded && isTFC;
             this.toggleTFCForestType.visible = expanded && isTFC;
             this.toggleTFCTreeSpecies.visible = expanded && isTFC;
+            this.toggleTFCSoilType.visible = expanded && isTFC;
             this.toggleTFCHotspot.visible = expanded && isTFC;
             this.doLayout(this.lastScreenRectangle);
         });
@@ -478,6 +501,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleKaolinClay.selected = false;
         this.toggleTFCForestType.selected = false;
         this.toggleTFCTreeSpecies.selected = false;
+        this.toggleTFCSoilType.selected = false;
         this.toggleTFCHotspot.selected = false;
         synchronized (this.renderSettings)
         {
@@ -519,6 +543,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 case TFC_TREE_SPECIES:
                     this.toggleTFCTreeSpecies.selected = true;
                     break;
+                case TFC_SOIL_TYPE:
+                    this.toggleTFCSoilType.selected = true;
+                    break;
                 case TFC_HOTSPOT:
                     this.toggleTFCHotspot.selected = true;
                     break;
@@ -544,7 +571,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             || mode == RenderSettings.RenderMode.TFC_ROCK_TYPE;
         boolean isForestMode = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE;
         boolean isSpeciesMode = mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
-        boolean isTreeMode = isForestMode || isSpeciesMode;
+        boolean isSoilMode = mode == RenderSettings.RenderMode.TFC_SOIL_TYPE;
+        // Modes backed by the shared tfcMapValueList side legend.
+        boolean isMapValueMode = isForestMode || isSpeciesMode || isSoilMode;
 
         // Update entry sets while the lists are still hidden (visibility is applied last). Deactivate
         // the tree list before swapping entries so the old ValueEntry can't be re-selected.
@@ -566,15 +595,25 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         // switch (where ids would otherwise carry over) and leaving either tree mode. Clearing
         // before replaceEntries prevents the old selected entry from being retained.
         this.tfcMapValueList.setSelected(null);
-        if (isTreeMode)
+        if (isMapValueMode)
         {
-            if (isSpeciesMode)
+            List<TFCMapValueList.ValueEntry> entries;
+            if (isForestMode)
+            {
+                entries = this.forestTypeEntries;
+            }
+            else if (isSpeciesMode)
             {
                 // Rebuild from the current runtime registry so addon species are present.
                 this.treeSpeciesEntries = this.buildTreeSpeciesEntries();
+                entries = this.treeSpeciesEntries;
             }
-            this.tfcMapValueList.replaceEntries(isForestMode ? this.forestTypeEntries : this.treeSpeciesEntries);
-            this.tfcMapValueList.setScrollAmount(0.0); // reset scroll between the two entry sets
+            else
+            {
+                entries = this.soilTypeEntries;
+            }
+            this.tfcMapValueList.replaceEntries(entries);
+            this.tfcMapValueList.setScrollAmount(0.0); // reset scroll between the entry sets
         }
         else
         {
@@ -1102,6 +1141,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCTreeSpecies.active = true;
             this.toggleTFCTreeSpecies.visible = expanded;
             this.toggleTFCTreeSpecies.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_TREE_SPECIES));
+            this.toggleTFCSoilType.active = true;
+            this.toggleTFCSoilType.visible = expanded;
+            this.toggleTFCSoilType.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_SOIL_TYPE));
             this.toggleTFCHotspot.active = true;
             this.toggleTFCHotspot.visible = expanded;
             this.toggleTFCHotspot.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_HOTSPOT));
@@ -1128,6 +1170,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCForestType.visible = false;
             this.toggleTFCTreeSpecies.active = false;
             this.toggleTFCTreeSpecies.visible = false;
+            this.toggleTFCSoilType.active = false;
+            this.toggleTFCSoilType.visible = false;
             this.toggleTFCHotspot.active = false;
             this.toggleTFCHotspot.visible = false;
             if (this.renderSettings.mode.isTFC())
@@ -1311,7 +1355,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             case BIOMES ->
             {
                 boolean isTreeMode = mode == RenderSettings.RenderMode.TFC_FOREST_TYPE
-                    || mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
+                    || mode == RenderSettings.RenderMode.TFC_TREE_SPECIES
+                    || mode == RenderSettings.RenderMode.TFC_SOIL_TYPE;
                 boolean isRockMode = mode == RenderSettings.RenderMode.TFC_ROCK_TOP
                     || mode == RenderSettings.RenderMode.TFC_ROCK_MID
                     || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
@@ -1451,7 +1496,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleKaolinClay.setPosition(previewLeft + width * 7, top);
         this.toggleTFCForestType.setPosition(previewLeft + width * 8, top);
         this.toggleTFCTreeSpecies.setPosition(previewLeft + width * 9, top);
-        this.toggleTFCHotspot.setPosition(previewLeft + width * 10, top);
+        this.toggleTFCSoilType.setPosition(previewLeft + width * 10, top);
+        this.toggleTFCHotspot.setPosition(previewLeft + width * 11, top);
         int resolutionBtnRight = screenRectangle.right() - 8;
         this.cycleResolutionButton.setPosition(resolutionBtnRight - 50, top);
         top += 24;
