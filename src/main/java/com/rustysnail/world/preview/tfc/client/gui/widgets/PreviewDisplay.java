@@ -101,6 +101,12 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private boolean showFeatures = false;
     private Component coordinatesCopiedMsg = null;
     private Instant coordinatesCopiedTime = null;
+    // Crop-hover detail debounce: only compute the detailed breakdown after the cursor has rested on
+    // the same quart for CROP_HOVER_DETAIL_MS, so panning across quarts never triggers per-frame work.
+    private static final long CROP_HOVER_DETAIL_MS = 90L;
+    private int lastCropHoverQuartX = Integer.MIN_VALUE;
+    private int lastCropHoverQuartZ = Integer.MIN_VALUE;
+    private long cropHoverSinceMs = 0L;
     private int texWidth = 100;
     private int texHeight = 100;
     private short selectedBiomeId;
@@ -1777,7 +1783,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
     }
 
-    /** Builds the crop-suitability hover text; the detailed result is recomputed for this quart only. */
+    /**
+     * Builds the crop-suitability hover text. Basic lines (crop, stored suitability category, water
+     * mode) show immediately from the map's stored value - no computation. Detailed climate lines are
+     * only requested after the cursor has settled on the same quart for {@link #CROP_HOVER_DETAIL_MS};
+     * the WorkManager then serves them from a bounded LRU cache, so the same quart is never recomputed
+     * every frame.
+     */
     private void appendCropTooltip(StringBuilder tfcInfo, HoverInfo hoverInfo)
     {
         var cropId = this.workManager.selectedCropId();
@@ -1796,30 +1808,54 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             return;
         }
 
-        TFCCropSuitability.CropSuitabilityResult result = this.workManager.resolveCropAt(hoverInfo.blockX, hoverInfo.blockZ);
         String waterMode = this.workManager.cropWaterMode() == TFCCropSuitability.CropWaterMode.IRRIGATED ? "Irrigated" : "Rain-Fed";
 
-        if (TFCCropSuitability.isSuitabilityValue(result.suitability()))
+        // Basic lines from the stored map value (always available, no compute).
+        if (TFCCropSuitability.isSuitabilityValue(raw))
         {
-            tfcInfo.append("\n§3Suitability:§r §b%s§r".formatted(TFCCropSuitability.getSuitabilityName(result.suitability())));
-            tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
-            if (entry.flooded())
-            {
-                tfcInfo.append("\n§3Special Requirement:§r §bFlooded farmland§r");
-            }
-            tfcInfo.append("\n§3Growing Window:§r §b~%d days§r".formatted(result.growingWindowDays()));
-            tfcInfo.append("\n§3Temperature:§r §b%s§r".formatted(cropAxisStatus(result.tooColdSamples(), result.tooHotSamples(), "Cold", "Hot")));
-            tfcInfo.append("\n§3Hydration:§r §b%s§r".formatted(cropAxisStatus(result.tooDrySamples(), result.tooWetSamples(), "Dry", "Wet")));
-            tfcInfo.append("\n§3Limiting Factor:§r §b%s§r".formatted(cropLimitingName(result.limitingFactor())));
+            tfcInfo.append("\n§3Suitability:§r §b%s§r".formatted(TFCCropSuitability.getSuitabilityName(raw)));
         }
         else
         {
             tfcInfo.append("\n§3Suitability:§r §bNo Data§r");
-            tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
-            if (entry.flooded())
+        }
+        tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
+        if (entry.flooded())
+        {
+            tfcInfo.append("\n§3Special Requirement:§r §bFlooded farmland§r");
+        }
+
+        // Debounce: only compute detail once the cursor has rested on this quart.
+        int qx = hoverInfo.blockX >> 2;
+        int qz = hoverInfo.blockZ >> 2;
+        long now = System.currentTimeMillis();
+        if (qx != this.lastCropHoverQuartX || qz != this.lastCropHoverQuartZ)
+        {
+            this.lastCropHoverQuartX = qx;
+            this.lastCropHoverQuartZ = qz;
+            this.cropHoverSinceMs = now;
+        }
+        boolean detailReady = (now - this.cropHoverSinceMs) >= CROP_HOVER_DETAIL_MS;
+
+        if (!detailReady)
+        {
+            if (entry.hasClimateData())
             {
-                tfcInfo.append("\n§3Special Requirement:§r §bFlooded farmland§r");
+                var cr = entry.climateRange();
+                tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
+                tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
             }
+            tfcInfo.append("\n§8Hold to show growing details…§r");
+            return;
+        }
+
+        TFCCropSuitability.CropSuitabilityResult result = this.workManager.resolveCropAt(hoverInfo.blockX, hoverInfo.blockZ);
+        if (TFCCropSuitability.isSuitabilityValue(result.suitability()))
+        {
+            tfcInfo.append("\n§3Growing Window:§r §b~%d days§r".formatted(result.growingWindowDays()));
+            tfcInfo.append("\n§3Temperature:§r §b%s§r".formatted(cropAxisStatus(result.tooColdSamples(), result.tooHotSamples(), result.samplesPerYear(), "Cold", "Hot")));
+            tfcInfo.append("\n§3Hydration:§r §b%s§r".formatted(cropAxisStatus(result.tooDrySamples(), result.tooWetSamples(), result.samplesPerYear(), "Dry", "Wet")));
+            tfcInfo.append("\n§3Limiting Factor:§r §b%s§r".formatted(cropLimitingName(result.limitingFactor())));
         }
 
         if (entry.hasClimateData())
@@ -1828,11 +1864,15 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
         }
         tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+        if (result.daysInMonth() > 0)
+        {
+            tfcInfo.append("\n§8Calendar: %d days/month§r".formatted(result.daysInMonth()));
+        }
     }
 
-    private static String cropAxisStatus(int lowCount, int highCount, String lowWord, String highWord)
+    private static String cropAxisStatus(int lowCount, int highCount, int samplesPerYear, String lowWord, String highWord)
     {
-        int n = TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
+        int n = samplesPerYear > 0 ? samplesPerYear : TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
         if (lowCount == 0 && highCount == 0) return "Suitable";
         if (lowCount >= highCount) return lowCount > n / 2 ? "Too " + lowWord : "Marginal (" + lowWord.toLowerCase() + ")";
         return highCount > n / 2 ? "Too " + highWord : "Marginal (" + highWord.toLowerCase() + ")";

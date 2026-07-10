@@ -18,6 +18,8 @@ public record TFCCropContext(
     @Nullable ResourceLocation cropId,
     @Nullable TFCCropRegistry.Entry crop,
     TFCCropSuitability.CropWaterMode waterMode,
+    CropCalendarSettings calendar,
+    AnnualClimateSchedule schedule,
     int revision,
     IntSupplier currentRevision
 )

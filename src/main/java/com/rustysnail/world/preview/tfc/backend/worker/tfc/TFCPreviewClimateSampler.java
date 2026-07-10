@@ -33,12 +33,11 @@ public class TFCPreviewClimateSampler extends OverworldClimateModel
     /** Salt TFC uses to derive its climate seed from the world seed (OverworldClimateModel ctor). */
     private static final long CLIMATE_SEED_SALT = 719283741234L;
 
-    // Annual sampling resolution. 24 samples = two per month over the default TFC calendar. Kept as
-    // named constants so later work can make the calendar / sample count configurable.
+    // Annual sampling resolution. 24 samples = two per month. This is a count of samples over the
+    // year (fractions of the year), independent of the calendar's day/month length - the actual day
+    // math lives in CropCalendarSettings, driven by the live TFC calendar.
     public static final int SAMPLES_PER_YEAR = 24;
     public static final int MONTHS_PER_YEAR = 12;
-    public static final int DEFAULT_DAYS_PER_MONTH = 8;
-    public static final int DEFAULT_DAYS_PER_YEAR = DEFAULT_DAYS_PER_MONTH * MONTHS_PER_YEAR; // 96
 
     private static final Month[] MONTHS = Month.values();
 
@@ -61,26 +60,16 @@ public class TFCPreviewClimateSampler extends OverworldClimateModel
         return Mth.lerp(delta, m.getTemperatureModifier(), m.next().getTemperatureModifier());
     }
 
-    /** Per-sample fraction-of-year [0,1) for the annual schedule (constant; safe to reuse). */
-    public static float[] annualFractionOfYear()
+    /**
+     * The normalized seasonal-rainfall triangle value in [-1,1] for a sample at {@code fractionOfYear},
+     * matching {@code OverworldClimateModel.getInstantRainfall}'s phase {@code fractionOfYear + 0.75}.
+     * Seasonal rainfall is then {@code rainAverage * (1 + rainVariance * factor)}, which equals TFC's
+     * {@code Helpers.triangle(rainVariance*rainAverage, rainAverage, 1, fractionOfYear+0.75)}.
+     */
+    public static float rainfallTriangleFactor(float fractionOfYear)
     {
-        float[] a = new float[SAMPLES_PER_YEAR];
-        for (int i = 0; i < SAMPLES_PER_YEAR; i++)
-        {
-            a[i] = (float) i / SAMPLES_PER_YEAR;
-        }
-        return a;
-    }
-
-    /** Per-sample month temperature factor for the annual schedule (constant; safe to reuse). */
-    public static float[] annualMonthFactors()
-    {
-        float[] a = new float[SAMPLES_PER_YEAR];
-        for (int i = 0; i < SAMPLES_PER_YEAR; i++)
-        {
-            a[i] = monthFactorForFraction((float) i / SAMPLES_PER_YEAR);
-        }
-        return a;
+        // Helpers.triangle(amplitude=1, midpoint=0, frequency=1, value=phase) gives the [-1,1] wave.
+        return Helpers.triangle(1f, 0f, 1f, fractionOfYear + 0.75f);
     }
 
     /**
@@ -104,5 +93,28 @@ public class TFCPreviewClimateSampler extends OverworldClimateModel
         return rainVariance == 0f
             ? rainAverage
             : Helpers.triangle(rainVariance * rainAverage, rainAverage, 1f, fractionOfYear + 0.75f);
+    }
+
+    // ---------------- Per-point temperature fast path ----------------
+    // getInstantTemperature (sans daily variation) is affine in the month factor:
+    //   temp(mf) = adjustTemperatureByElevation(y, avg, calculateMonthlyTemperature(z, mf), 0)
+    // and calculateMonthlyTemperature(z, mf) = mf * calculateMonthlyTemperature(z, 1) (it is mf times
+    // a z-only latitude term), and adjustTemperatureByElevation is affine in its monthTemperature arg.
+    // Hence temp(mf) = base + slope * mf, where base and slope depend only on (z, y, avg). Computing
+    // them once per point lets the 24-sample loop do a single multiply-add per sample instead of a
+    // full monthly + elevation recomputation. This is algebraically exact (not an approximation).
+
+    /** Constant term of {@code temp(monthFactor) = base + slope*monthFactor} for a point. */
+    public float temperatureBase(int surfaceY, float avgSeaLevelTemp)
+    {
+        return adjustTemperatureByElevation(surfaceY, avgSeaLevelTemp, 0f, 0f);
+    }
+
+    /** Slope term of {@code temp(monthFactor) = base + slope*monthFactor} for a point. */
+    public float temperatureSlope(int z, int surfaceY, float avgSeaLevelTemp)
+    {
+        float latitude = calculateMonthlyTemperature(z, 1f); // z-only latitude term (mf = 1)
+        return adjustTemperatureByElevation(surfaceY, avgSeaLevelTemp, latitude, 0f)
+            - adjustTemperatureByElevation(surfaceY, avgSeaLevelTemp, 0f, 0f);
     }
 }

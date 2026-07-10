@@ -38,16 +38,10 @@ public final class TFCCropSuitability
         0xFF32A852  // Ideal
     };
 
-    // Classification thresholds (in samples). One sample ~= 4 days on the default 96-day year, so a
-    // 6-sample run ~= 24 days (~one crop cycle). Kept as tunable named constants.
-    public static final int CROP_POOR_CORE_SAMPLES = 3;
-    public static final int CROP_GOOD_CORE_SAMPLES = 6;
-    public static final int CROP_IDEAL_CORE_SAMPLES = 10;
-    public static final int CROP_IDEAL_CORE_COVERAGE = TFCPreviewClimateSampler.SAMPLES_PER_YEAR / 2; // half the year
+    // Sample-count classification thresholds (poor/good/ideal core-run lengths and ideal coverage) are
+    // now derived from the live calendar in CropCalendarSettings, so they scale with month length and
+    // the crop-growth modifier. Only the closeness gate (not calendar-dependent) stays a constant.
     public static final float CROP_IDEAL_CLOSENESS = 0.70f;
-
-    // Days represented by one annual sample, for the "growing window" tooltip.
-    public static final int DAYS_PER_SAMPLE = TFCPreviewClimateSampler.DEFAULT_DAYS_PER_YEAR / TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
 
     // Irrigation assumes a standard nearby freshwater source: +40 farmland hydration (TFC's water
     // boost), neutral soil multiplier. Matches FarmlandBlock#getInstantHydrationFromRainHydration.
@@ -79,20 +73,23 @@ public final class TFCCropSuitability
         int tooColdSamples,
         int tooHotSamples,
         int tooDrySamples,
-        int tooWetSamples
+        int tooWetSamples,
+        float daysPerSample,
+        int daysInMonth,
+        int samplesPerYear
     )
     {
         public int growingWindowDays()
         {
-            return longestCoreRun * DAYS_PER_SAMPLE;
+            return Math.round(longestCoreRun * daysPerSample);
         }
     }
 
     public static final CropSuitabilityResult NO_DATA_RESULT =
-        new CropSuitabilityResult(TFCSampleUtils.VALUE_INVALID, 0, 0, 0, 0, 0f, LimitingFactor.NO_DATA, 0, 0, 0, 0);
+        new CropSuitabilityResult(TFCSampleUtils.VALUE_INVALID, 0, 0, 0, 0, 0f, LimitingFactor.NO_DATA, 0, 0, 0, 0, 0f, 0, 0);
 
     public static final CropSuitabilityResult WATER_RESULT =
-        new CropSuitabilityResult(TFCSampleUtils.VALUE_WATER, 0, 0, 0, 0, 0f, LimitingFactor.WATER, 0, 0, 0, 0);
+        new CropSuitabilityResult(TFCSampleUtils.VALUE_WATER, 0, 0, 0, 0, 0f, LimitingFactor.WATER, 0, 0, 0, 0, 0f, 0, 0);
 
     public static boolean isSuitabilityValue(short value)
     {
@@ -132,11 +129,11 @@ public final class TFCCropSuitability
     }
 
     /**
-     * Evaluates a land point. {@code monthFactors} and {@code fractionOfYear} are precomputed once per
-     * work unit (length {@link TFCPreviewClimateSampler#SAMPLES_PER_YEAR}); nothing here allocates
-     * arrays or strings. Water points are handled by the caller (this is land only).
+     * Map-generation entry point: returns only the suitability short and allocates nothing (no record,
+     * list, array, Component or string). Reads the cached {@link AnnualClimateSchedule} arrays and the
+     * dynamic {@link CropCalendarSettings} thresholds. Water points are handled by the caller (land only).
      */
-    public static CropSuitabilityResult evaluate(
+    public static short evaluateValue(
         TFCCropRegistry.Entry crop,
         TFCPreviewClimateSampler sampler,
         ChunkData chunkData,
@@ -144,79 +141,149 @@ public final class TFCCropSuitability
         int blockZ,
         int surfaceY,
         CropWaterMode waterMode,
-        float[] monthFactors,
-        float[] fractionOfYear
+        AnnualClimateSchedule schedule,
+        CropCalendarSettings calendar
+    )
+    {
+        if (crop == null || !crop.hasClimateData())
+        {
+            return TFCSampleUtils.VALUE_INVALID;
+        }
+        long packed = sampleYear(crop, sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, null);
+        int coreMask = (int) (packed & 0xFFFFFFFFL);
+        int wiggleMask = (int) (packed >>> 32);
+        int coreCount = Integer.bitCount(coreMask);
+        int wiggleCount = Integer.bitCount(wiggleMask);
+        int longestCore = longestCircularRun(coreMask, schedule.samplesPerYear());
+        return classify(wiggleCount, coreCount, longestCore, CLOSENESS_BOX.get()[0], calendar);
+    }
+
+    /**
+     * Hover entry point: full breakdown (counts, runs, closeness, limiting factor, calendar). Allocates
+     * one result record; only ever called for a single hovered quart, never in the map loop.
+     */
+    public static CropSuitabilityResult evaluateDetailed(
+        TFCCropRegistry.Entry crop,
+        TFCPreviewClimateSampler sampler,
+        ChunkData chunkData,
+        int blockX,
+        int blockZ,
+        int surfaceY,
+        CropWaterMode waterMode,
+        AnnualClimateSchedule schedule,
+        CropCalendarSettings calendar
     )
     {
         if (crop == null || !crop.hasClimateData())
         {
             return NO_DATA_RESULT;
         }
+        int[] tallies = new int[4]; // tooCold, tooHot, tooDry, tooWet
+        long packed = sampleYear(crop, sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, tallies);
+        int coreMask = (int) (packed & 0xFFFFFFFFL);
+        int wiggleMask = (int) (packed >>> 32);
+        int n = schedule.samplesPerYear();
 
+        int coreCount = Integer.bitCount(coreMask);
+        int wiggleCount = Integer.bitCount(wiggleMask);
+        int longestCore = longestCircularRun(coreMask, n);
+        int longestWiggle = longestCircularRun(wiggleMask, n);
+        float avgCloseness = CLOSENESS_BOX.get()[0];
+
+        short suitability = classify(wiggleCount, coreCount, longestCore, avgCloseness, calendar);
+        LimitingFactor lf = limitingFactor(suitability, tallies[0], tallies[1], tallies[2], tallies[3], n);
+
+        return new CropSuitabilityResult(
+            suitability, coreCount, wiggleCount, longestCore, longestWiggle, avgCloseness, lf,
+            tallies[0], tallies[1], tallies[2], tallies[3],
+            calendar.daysPerSample(), calendar.daysInMonth(), n);
+    }
+
+    // Per-thread scratch for the average-closeness output of sampleYear (parallel work units each run
+    // on their own thread). Kept off the returned packed long, which only carries the two bitmasks.
+    private static final ThreadLocal<float[]> CLOSENESS_BOX = ThreadLocal.withInitial(() -> new float[1]);
+
+    /**
+     * Runs the annual sample loop, returning core/wiggle bitmasks packed into a long
+     * (core in low 32 bits, wiggle in high 32). Optionally fills {@code tallies}
+     * [tooCold, tooHot, tooDry, tooWet]. The average closeness is stored in a per-thread box and read
+     * back by the caller. Allocates nothing when {@code tallies == null}.
+     */
+    private static long sampleYear(
+        TFCCropRegistry.Entry crop,
+        TFCPreviewClimateSampler sampler,
+        ChunkData chunkData,
+        int blockX,
+        int blockZ,
+        int surfaceY,
+        CropWaterMode waterMode,
+        AnnualClimateSchedule schedule,
+        int[] tallies
+    )
+    {
         final ClimateRange range = crop.climateRange();
         final boolean flooded = crop.flooded();
         final float avgSeaLevelTemp = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
         final float rainAverage = chunkData.getAverageRainfall(blockX, blockZ);
         final float rainVariance = chunkData.getRainVariance(blockX, blockZ);
 
-        final int n = monthFactors.length;
-        int coreMask = 0;
-        int wiggleMask = 0;
-        float closenessSum = 0f;
-        int tooCold = 0, tooHot = 0, tooDry = 0, tooWet = 0;
+        // Per-point temperature linear terms: temp = base + slope * monthFactor (exact; see sampler).
+        final float tempBase = sampler.temperatureBase(surfaceY, avgSeaLevelTemp);
+        final float tempSlope = sampler.temperatureSlope(blockZ, surfaceY, avgSeaLevelTemp);
 
         final float minT = range.getMinTemperature(false);
         final float maxT = range.getMaxTemperature(false);
         final int minH = range.getMinHydration(false);
         final int maxH = range.getMaxHydration(false);
 
+        final float[] monthFactors = schedule.monthFactors;
+        final float[] rainFactors = schedule.rainTriangleFactors;
+        final int n = schedule.samplesPerYear();
+
+        int coreMask = 0;
+        int wiggleMask = 0;
+        float closenessSum = 0f;
+
         for (int i = 0; i < n; i++)
         {
-            float temp = sampler.previewTemperature(blockZ, surfaceY, avgSeaLevelTemp, monthFactors[i]);
-            float rainfall = sampler.previewSeasonalRainfall(rainAverage, rainVariance, fractionOfYear[i]);
+            float temp = tempBase + tempSlope * monthFactors[i];
+            float rainfall = rainVariance == 0f ? rainAverage : rainAverage * (1f + rainVariance * rainFactors[i]);
             int hydration = hydrationFor(rainfall, waterMode, flooded);
 
             if (range.checkBoth(hydration, temp, false)) coreMask |= (1 << i);
             if (range.checkBoth(hydration, temp, true)) wiggleMask |= (1 << i);
 
-            if (temp < minT) tooCold++;
-            else if (temp > maxT) tooHot++;
-            if (hydration < minH) tooDry++;
-            else if (hydration > maxH) tooWet++;
+            if (tallies != null)
+            {
+                if (temp < minT) tallies[0]++;
+                else if (temp > maxT) tallies[1]++;
+                if (hydration < minH) tallies[2]++;
+                else if (hydration > maxH) tallies[3]++;
+            }
 
             closenessSum += 0.5f * (axisCloseness(temp, minT, maxT) + axisCloseness(hydration, minH, maxH));
         }
 
-        int coreCount = Integer.bitCount(coreMask);
-        int wiggleCount = Integer.bitCount(wiggleMask);
-        int longestCore = longestCircularRun(coreMask, n);
-        int longestWiggle = longestCircularRun(wiggleMask, n);
-        float avgCloseness = closenessSum / n;
-
-        short suitability = classify(wiggleCount, coreCount, longestCore, avgCloseness);
-        LimitingFactor lf = limitingFactor(suitability, tooCold, tooHot, tooDry, tooWet, n);
-
-        return new CropSuitabilityResult(
-            suitability, coreCount, wiggleCount, longestCore, longestWiggle, avgCloseness, lf,
-            tooCold, tooHot, tooDry, tooWet);
+        CLOSENESS_BOX.get()[0] = closenessSum / n;
+        return (coreMask & 0xFFFFFFFFL) | ((long) wiggleMask << 32);
     }
 
-    private static short classify(int wiggleCount, int coreCount, int longestCore, float avgCloseness)
+    private static short classify(int wiggleCount, int coreCount, int longestCore, float avgCloseness, CropCalendarSettings calendar)
     {
         if (wiggleCount == 0)
         {
             return CROP_IMPOSSIBLE;
         }
-        if (coreCount == 0 || longestCore < CROP_POOR_CORE_SAMPLES)
+        if (coreCount == 0 || longestCore < calendar.poorCoreSamples())
         {
             return CROP_POOR;
         }
-        if (longestCore < CROP_GOOD_CORE_SAMPLES)
+        if (longestCore < calendar.goodCoreSamples())
         {
             return CROP_MARGINAL;
         }
-        if (longestCore >= CROP_IDEAL_CORE_SAMPLES
-            && coreCount >= CROP_IDEAL_CORE_COVERAGE
+        if (longestCore >= calendar.idealCoreSamples()
+            && coreCount >= calendar.idealCoverageSamples()
             && avgCloseness >= CROP_IDEAL_CLOSENESS)
         {
             return CROP_IDEAL;

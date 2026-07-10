@@ -41,6 +41,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TFCRegionWorkUnit extends WorkUnit
 {
+    // Opt-in detailed profiling. Off in production so no System.nanoTime() runs in the per-pixel loop;
+    // when true, the soil/crop per-segment breakdown is measured and logged.
+    private static final boolean PROFILE_TIMING = false;
+
     private final KaolinBiomeRules kaolinRules;
     public static final short LAND_WATER_OCEAN = 0;
     public static final short LAND_WATER_LAND = 1;
@@ -201,34 +205,23 @@ public class TFCRegionWorkUnit extends WorkUnit
         long startTime = System.currentTimeMillis();
         final int[] gridCellsProcessed = {0};
 
-        // Per-unit soil timing breakdown (nanoseconds). Only accumulated / logged when this unit is
-        // a soil-type unit, so Forest Type / Tree Species work is unaffected. Never timed per pixel
-        // beyond the individual segment deltas below.
-        final boolean timeSoil = this.plan.soilType();
+        // Detailed per-segment timing is opt-in (PROFILE_TIMING). In production it stays off, so no
+        // System.nanoTime() is called per pixel; only coarse per-chunk (chunkData/height) and per-unit
+        // totals are measured. Flip PROFILE_TIMING to profile the soil/crop breakdown.
+        final boolean timeSoil = PROFILE_TIMING && this.plan.soilType();
         long soilChunkDataNanos = 0L;
         long soilHeightNanos = 0L;
         long soilBiomeNanos = 0L;
         long soilClassifyNanos = 0L;
         long soilExpandNanos = 0L;
 
-        // Per-unit crop timing breakdown (nanoseconds), analogous to soil. Only for crop units.
-        final boolean timeCrop = this.plan.cropSuitability();
+        final boolean timeCrop = PROFILE_TIMING && this.plan.cropSuitability();
         long cropChunkDataNanos = 0L;
         long cropHeightNanos = 0L;
-        long cropBiomeNanos = 0L;
-        long cropClassifyNanos = 0L;
-        long cropExpandNanos = 0L;
+        long cropLoopNanos = 0L;
 
-        // Annual climate schedule precomputed once per work unit (crop mode only): the month
-        // temperature factor and fraction-of-year for each of the 24 samples are constant across all
-        // points, so only the per-point temperature/rainfall evaluation happens in the pixel loop.
-        float[] cropMonthFactors = null;
-        float[] cropFractionOfYear = null;
-        if (this.plan.cropSuitability())
-        {
-            cropMonthFactors = TFCPreviewClimateSampler.annualMonthFactors();
-            cropFractionOfYear = TFCPreviewClimateSampler.annualFractionOfYear();
-        }
+        // Shared, cached annual schedule (constant across all points and units; not per-unit allocated).
+        final AnnualClimateSchedule cropSchedule = this.cropContext != null ? this.cropContext.schedule() : null;
 
         try
         {
@@ -277,7 +270,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                     ForestType forestType = null;
                     if (this.plan.needsChunkData() && this.tfcSampleUtils != null)
                     {
-                        long tCd = timeSoil ? System.nanoTime() : 0L;
+                        long tCd = (timeSoil || timeCrop) ? System.nanoTime() : 0L;
                         try
                         {
                             chunkData = this.tfcSampleUtils.sampleChunkData(cp);
@@ -288,8 +281,12 @@ public class TFCRegionWorkUnit extends WorkUnit
                         {
                             WorldPreview.LOGGER.debug("TFC chunk data sampling failed for chunk {}: {}", cp, e.getMessage());
                         }
-                        if (timeSoil) soilChunkDataNanos += System.nanoTime() - tCd;
-                        if (timeCrop) cropChunkDataNanos += System.nanoTime() - tCd;
+                        if (timeSoil || timeCrop)
+                        {
+                            long dtCd = System.nanoTime() - tCd;
+                            if (timeSoil) soilChunkDataNanos += dtCd;
+                            if (timeCrop) cropChunkDataNanos += dtCd;
+                        }
                     }
 
                     // Soil / crop elevation is approximated once per chunk (at the chunk center)
@@ -300,12 +297,15 @@ public class TFCRegionWorkUnit extends WorkUnit
                     int chunkSurfaceY = 63; // TFC SEA_LEVEL_Y fallback
                     if (this.plan.soilType() || this.plan.cropSuitability())
                     {
-                        long tH = System.nanoTime();
+                        long tH = (timeSoil || timeCrop) ? System.nanoTime() : 0L;
                         BlockPos chunkCenter = new BlockPos(cp.getMiddleBlockX(), 0, cp.getMiddleBlockZ());
                         chunkSurfaceY = sampleSurfaceY(chunkCenter);
-                        long dtH = System.nanoTime() - tH;
-                        if (timeSoil) soilHeightNanos += dtH;
-                        if (timeCrop) cropHeightNanos += dtH;
+                        if (timeSoil || timeCrop)
+                        {
+                            long dtH = System.nanoTime() - tH;
+                            if (timeSoil) soilHeightNanos += dtH;
+                            if (timeCrop) cropHeightNanos += dtH;
+                        }
                     }
 
                     final boolean needsPoint = this.plan.needsRegionPoint();
@@ -314,6 +314,8 @@ public class TFCRegionWorkUnit extends WorkUnit
                     // water classification and biome-based rules) - share that sampling below.
                     final boolean needsBiomeSample = needsTreeMap || this.plan.soilType() || this.plan.cropSuitability();
 
+                    // Coarse crop timing: measure the whole per-point loop once per chunk (not per pixel).
+                    long tCropLoop = timeCrop ? System.nanoTime() : 0L;
                     for (BlockPos pos : this.sampler.blocksForChunk(cp, 0))
                     {
                         if (this.isCanceled()) break;
@@ -413,7 +415,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             BiomeExtension treeMapBiome = null;
                             if (this.tfcSampleUtils != null)
                             {
-                                long tB = (timeSoil || timeCrop) ? System.nanoTime() : 0L;
+                                long tB = timeSoil ? System.nanoTime() : 0L;
                                 try
                                 {
                                     treeMapBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
@@ -422,12 +424,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 {
                                     // fall through to non-water land
                                 }
-                                if (timeSoil || timeCrop)
-                                {
-                                    long dtB = System.nanoTime() - tB;
-                                    if (timeSoil) soilBiomeNanos += dtB;
-                                    if (timeCrop) cropBiomeNanos += dtB;
-                                }
+                                if (timeSoil) soilBiomeNanos += System.nanoTime() - tB;
                             }
 
                             short treeMapWater = classifyTreeMapWater(treeMapBiome);
@@ -462,7 +459,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             }
                             if (this.plan.soilType())
                             {
-                                long tC = System.nanoTime();
+                                long tC = timeSoil ? System.nanoTime() : 0L;
                                 short soilValue;
                                 if (isWaterPoint)
                                 {
@@ -478,15 +475,14 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 {
                                     soilValue = TFCSampleUtils.VALUE_INVALID;
                                 }
-                                soilClassifyNanos += System.nanoTime() - tC;
+                                if (timeSoil) soilClassifyNanos += System.nanoTime() - tC;
 
-                                long tE = System.nanoTime();
+                                long tE = timeSoil ? System.nanoTime() : 0L;
                                 this.sampler.expandRaw(pos, soilValue, soilTypeResult);
-                                soilExpandNanos += System.nanoTime() - tE;
+                                if (timeSoil) soilExpandNanos += System.nanoTime() - tE;
                             }
                             if (this.plan.cropSuitability())
                             {
-                                long tC = System.nanoTime();
                                 short cropValue;
                                 if (isWaterPoint)
                                 {
@@ -496,29 +492,28 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 else if (chunkData != null
                                     && this.cropContext != null
                                     && this.cropContext.crop() != null
+                                    && cropSchedule != null
                                     && this.tfcSampleUtils != null)
                                 {
-                                    cropValue = TFCCropSuitability.evaluate(
+                                    // No allocation: evaluateValue returns just the suitability short.
+                                    cropValue = TFCCropSuitability.evaluateValue(
                                         this.cropContext.crop(),
                                         this.tfcSampleUtils.climateSampler(),
                                         chunkData,
                                         pos.getX(), pos.getZ(), chunkSurfaceY,
                                         this.cropContext.waterMode(),
-                                        cropMonthFactors, cropFractionOfYear
-                                    ).suitability();
+                                        cropSchedule, this.cropContext.calendar()
+                                    );
                                 }
                                 else
                                 {
                                     cropValue = TFCSampleUtils.VALUE_INVALID;
                                 }
-                                cropClassifyNanos += System.nanoTime() - tC;
-
-                                long tE = System.nanoTime();
                                 this.sampler.expandRaw(pos, cropValue, cropResult);
-                                cropExpandNanos += System.nanoTime() - tE;
                             }
                         }
                     }
+                    if (timeCrop) cropLoopNanos += System.nanoTime() - tCropLoop;
 
                     addIfPresent(allResults, tempResult);
                     addIfPresent(allResults, rainResult);
@@ -562,12 +557,11 @@ public class TFCRegionWorkUnit extends WorkUnit
             if (timeCrop)
             {
                 WorldPreview.LOGGER.debug(
-                    "[TFC Crop] unit=({},{}) chunks={} crop={} water={} chunkData={}ms height={}ms biome={}ms classify={}ms expand={}ms total={}ms",
+                    "[TFC Crop] unit=({},{}) chunks={} crop={} water={} chunkData={}ms height={}ms pointLoop={}ms total={}ms",
                     this.chunkPos.x, this.chunkPos.z, this.numChunks * this.numChunks,
                     this.cropContext != null ? this.cropContext.cropId() : "none",
                     this.cropContext != null ? this.cropContext.waterMode() : "?",
-                    cropChunkDataNanos / 1_000_000L, cropHeightNanos / 1_000_000L, cropBiomeNanos / 1_000_000L,
-                    cropClassifyNanos / 1_000_000L, cropExpandNanos / 1_000_000L, elapsed);
+                    cropChunkDataNanos / 1_000_000L, cropHeightNanos / 1_000_000L, cropLoopNanos / 1_000_000L, elapsed);
             }
 
             return allResults;
