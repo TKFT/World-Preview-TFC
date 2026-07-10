@@ -13,10 +13,15 @@ import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.SlowHeightmapWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.StructStartWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropContext;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCWorkPlan;
+import net.minecraft.resources.ResourceLocation;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
 import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -77,6 +82,15 @@ public class WorkManager
     private TFCSampleUtils tfcSampleUtils;
     private TFCTreeResolver tfcTreeResolver;
     private final KaolinBiomeRules kaolinRules = new KaolinBiomeRules();
+
+    // Crop-suitability state. The registry is rebuilt when the world-gen state changes; the selected
+    // crop + water mode drive the TFC_CROP_SUITABILITY map, and cropRevision guards against stale work
+    // (see TFCCropContext): it is bumped whenever the selection changes so in-flight units discard.
+    private TFCCropRegistry cropRegistry = TFCCropRegistry.active();
+    @Nullable
+    private ResourceLocation selectedCropId;
+    private TFCCropSuitability.CropWaterMode cropWaterMode = TFCCropSuitability.CropWaterMode.RAIN_FED;
+    private final java.util.concurrent.atomic.AtomicInteger cropRevision = new java.util.concurrent.atomic.AtomicInteger(0);
 
     @Nullable
     private Settings tfcSettingsOverride;
@@ -157,6 +171,7 @@ public class WorkManager
         this.tfcTreeResolver = this.tfcSampleUtils != null
             ? TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings())
             : null;
+        this.rebuildCropRegistry();
 
         synchronized (this.previewStorageSynchro)
         {
@@ -329,6 +344,7 @@ public class WorkManager
             {
                 this.kaolinRules.rebuild(this.sampleUtils.resourceManager());
                 this.tfcTreeResolver = TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings());
+                this.rebuildCropRegistry();
                 WorldPreview.LOGGER.info("TFC-compatible chunk generator detected, TFC sampling enabled");
             }
             else
@@ -575,6 +591,9 @@ public class WorkManager
                 tfcChunks.size(), tfcPlan.describe(), this.renderSettings.mode);
 
             final long worldSeed = this.worldOptions.seed();
+            // Snapshot the crop selection for this queue pass. Units capture the crop revision so that
+            // a later crop/water-mode change makes them stale (results discarded); see TFCCropContext.
+            final TFCCropContext cropContext = tfcPlan.cropSuitability() ? this.buildCropContext() : null;
             units += this.queueForLevel(
                 tfcChunks,
                 0,
@@ -590,6 +609,7 @@ public class WorkManager
                     this.tfcTreeResolver,
                     this.kaolinRules,
                     tfcPlan,
+                    cropContext,
                     worldSeed
                 )
             );
@@ -753,6 +773,152 @@ public class WorkManager
     public TFCSampleUtils tfcSampleUtils()
     {
         return this.tfcSampleUtils;
+    }
+
+    // ----------------------------- Crop suitability -----------------------------
+
+    /** Rebuilds the crop registry from the current block registry + datapack, keeping a valid selection. */
+    private void rebuildCropRegistry()
+    {
+        if (this.tfcSampleUtils != null)
+        {
+            this.cropRegistry = TFCCropRegistry.build(this.sampleUtils.resourceManager());
+        }
+        TFCCropRegistry.setActive(this.cropRegistry);
+        if (this.selectedCropId == null || this.cropRegistry.get(this.selectedCropId) == null)
+        {
+            TFCCropRegistry.Entry first = this.cropRegistry.first();
+            this.selectedCropId = first != null ? first.id() : null;
+        }
+    }
+
+    public TFCCropRegistry cropRegistry()
+    {
+        return this.cropRegistry;
+    }
+
+    @Nullable
+    public ResourceLocation selectedCropId()
+    {
+        return this.selectedCropId;
+    }
+
+    public TFCCropSuitability.CropWaterMode cropWaterMode()
+    {
+        return this.cropWaterMode;
+    }
+
+    public int cropRevision()
+    {
+        return this.cropRevision.get();
+    }
+
+    private TFCCropContext buildCropContext()
+    {
+        TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
+        return new TFCCropContext(this.selectedCropId, entry, this.cropWaterMode, this.cropRevision.get(), this.cropRevision::get);
+    }
+
+    /** Selects a crop; regenerates only the crop-suitability map (flag 16), leaving other maps intact. */
+    public synchronized void setSelectedCrop(@Nullable ResourceLocation cropId)
+    {
+        if (java.util.Objects.equals(cropId, this.selectedCropId))
+        {
+            return;
+        }
+        this.selectedCropId = cropId;
+        this.regenerateCropMap();
+    }
+
+    /** Switches rain-fed / irrigated hydration; regenerates only the crop-suitability map. */
+    public synchronized void setCropWaterMode(TFCCropSuitability.CropWaterMode mode)
+    {
+        if (mode == null || mode == this.cropWaterMode)
+        {
+            return;
+        }
+        this.cropWaterMode = mode;
+        this.regenerateCropMap();
+    }
+
+    /**
+     * Bumps the crop revision (so in-flight units go stale), invalidates only flag-16 sections, cancels
+     * running batches, and forces the next queue pass to regenerate. All other cached maps (biome, soil,
+     * forest, rocks, ...) are untouched. Safe to call outside crop mode - it just clears flag-16 so the
+     * next entry into crop mode regenerates for the new selection instead of showing another crop's data.
+     */
+    private void regenerateCropMap()
+    {
+        this.cropRevision.incrementAndGet();
+        if (this.previewStorage == null)
+        {
+            return;
+        }
+        synchronized (this.previewStorageSynchro)
+        {
+            this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
+        }
+        synchronized (this.currentBatches)
+        {
+            this.currentBatches.forEach(WorkBatch::cancel);
+            this.currentBatches.clear();
+        }
+        // Force requeue for the current viewport on the next frame.
+        this.lastQueuedTopLeft = null;
+        this.lastQueuedBotRight = null;
+        this.lastQueuedWasTfc = false;
+        this.lastQueuedModeFlag = Long.MIN_VALUE;
+        this.bumpDataRevision();
+    }
+
+    /**
+     * Recomputes the full crop-suitability breakdown for a single quart (hover only). Samples the
+     * biome (water short-circuit), chunk data and surface height, then evaluates the selected crop.
+     */
+    public TFCCropSuitability.CropSuitabilityResult resolveCropAt(int blockX, int blockZ)
+    {
+        if (this.tfcSampleUtils == null)
+        {
+            return TFCCropSuitability.NO_DATA_RESULT;
+        }
+        TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
+        if (entry == null)
+        {
+            return TFCCropSuitability.NO_DATA_RESULT;
+        }
+        BiomeExtension biome = null;
+        try
+        {
+            biome = this.tfcSampleUtils.sampleBiomeExtension(blockX, blockZ);
+        }
+        catch (Exception ignored)
+        {
+        }
+        if (TFCSampleUtils.isTreeMapWaterBiome(biome))
+        {
+            return TFCCropSuitability.WATER_RESULT;
+        }
+        try
+        {
+            ChunkData chunkData = this.tfcSampleUtils.sampleChunkData(new ChunkPos(blockX >> 4, blockZ >> 4));
+            int surfaceY;
+            try
+            {
+                surfaceY = this.sampleUtils.doHeightSlow(new BlockPos(blockX, 0, blockZ));
+            }
+            catch (Exception e)
+            {
+                surfaceY = 63;
+            }
+            return TFCCropSuitability.evaluate(
+                entry, this.tfcSampleUtils.climateSampler(), chunkData,
+                blockX, blockZ, surfaceY, this.cropWaterMode,
+                TFCPreviewClimateSampler.annualMonthFactors(), TFCPreviewClimateSampler.annualFractionOfYear());
+        }
+        catch (Exception e)
+        {
+            return TFCCropSuitability.NO_DATA_RESULT;
+        }
     }
 
     /**

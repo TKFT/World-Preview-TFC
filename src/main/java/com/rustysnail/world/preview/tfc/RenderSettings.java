@@ -85,8 +85,9 @@ public class RenderSettings
     {
         BIOMES(0L, false),
         HEIGHTMAP(2L, false),
-        // Ecological map modes. Flag 3L is the last free storage flag (flags are 4-bit, 0..15;
-        // 1 = structures, 4 = TFC feature-completion, 5..15 = the other TFC modes).
+        // Each value's flag is the PreviewStorage section-flag namespace (now 8-bit, 0..255 - see
+        // PreviewStorage.FLAG_MASK). Reserved non-render-mode flags: 1 = structures,
+        // 4 = TFC feature-completion. 3, 5..15 are current modes; 16..255 are free for future modes.
         TFC_SOIL_TYPE(3L, false),    // Predicted TFC soil order
         // TFC-specific render modes
         TFC_TEMPERATURE(5L, false),  // Mapping Temperature
@@ -99,7 +100,9 @@ public class RenderSettings
         TFC_KAOLINITE(12L, false),   // Kaolin Clay Spawning Areas
         TFC_FOREST_TYPE(13L, false), //TFC forest type/density
         TFC_HOTSPOT(14L, false),     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
-        TFC_TREE_SPECIES(15L, false);
+        TFC_TREE_SPECIES(15L, false),
+        // Ecological suitability maps (8-bit flag namespace; 16..255 free - see PreviewStorage.FLAG_MASK)
+        TFC_CROP_SUITABILITY(16L, false); // Annual growing suitability for the selected crop
 
         public final long flag;
         public final boolean useY;

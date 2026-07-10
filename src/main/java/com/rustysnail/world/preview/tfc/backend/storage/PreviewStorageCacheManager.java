@@ -47,6 +47,15 @@ public interface PreviewStorageCacheManager
         // (ResourceLocation-sorted) and special water/invalid values moved to 32760-32763, so stored
         // tree-species values from older caches are no longer meaningful.
         flags |= 262144L;
+        // Third bump (Commit H0): the PreviewStorage section-flag namespace widened from 4 to 8 bits
+        // and the packed section-key layout changed (28-bit sX << 36 | 28-bit sZ << 8 | 8-bit flag,
+        // was 30-bit sX << 34 | 30-bit sZ << 4 | 4-bit flag). Old serialized keys are incompatible,
+        // so pre-bump caches must be ignored (we do not migrate them).
+        flags |= 524288L;
+        // Fourth bump (Commit H1): new TFC_CROP_SUITABILITY section (flag 16). Crop sections are
+        // crop-specific and session-only (invalidated whenever the selected crop / water mode changes),
+        // so they must never be reinterpreted across a format change.
+        flags |= 1048576L;
         return String.format("%s-%d-%d", settings.dimension, settings.pixelsPerChunk(), flags)
             .replace(":", "_")
             .replace(";", "_")

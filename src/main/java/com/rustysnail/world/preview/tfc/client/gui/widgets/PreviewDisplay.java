@@ -9,6 +9,9 @@ import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
@@ -75,6 +78,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] treeTexPaletteGray;
     private int[] soilTexPalette;
     private int[] soilTexPaletteGray;
+    private int[] cropTexPalette;
+    private int[] cropTexPaletteGray;
     private int[][] rockTexPalette;
     private int[][] rockTexPaletteGray;
     private int[][] rockTexPaletteBright;
@@ -310,6 +315,16 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             int tex = textureColor(TFCSampleUtils.getSoilTypeColor(i));
             this.soilTexPalette[i] = tex;
             this.soilTexPaletteGray[i] = grayScale(tex);
+        }
+
+        int cc = TFCCropSuitability.suitabilityCount();
+        this.cropTexPalette = new int[cc];
+        this.cropTexPaletteGray = new int[cc];
+        for (short i = 0; i < cc; i++)
+        {
+            int tex = textureColor(TFCCropSuitability.getSuitabilityColor(i));
+            this.cropTexPalette[i] = tex;
+            this.cropTexPaletteGray[i] = grayScale(tex);
         }
 
         this.tfcWaterTex = textureColor(TFCSampleUtils.COLOR_WATER);
@@ -863,6 +878,24 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             else if (rawData >= 0 && rawData < this.soilTexPalette.length)
                             {
                                 color = hi ? this.soilTexPalette[rawData] : this.soilTexPaletteGray[rawData];
+                            }
+                            else
+                            {
+                                color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
+                            }
+                            break;
+                        }
+                        case TFC_CROP_SUITABILITY:
+                        {
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
+                            if (TFCSampleUtils.isWaterValue(rawData))
+                            {
+                                color = hi ? this.tfcWaterTex : this.tfcWaterTexGray;
+                            }
+                            else if (rawData >= 0 && rawData < this.cropTexPalette.length)
+                            {
+                                color = hi ? this.cropTexPalette[rawData] : this.cropTexPaletteGray[rawData];
                             }
                             else
                             {
@@ -1540,6 +1573,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                 tfcInfo.append("\n§3Soil Type:§r §bUnknown / No Soil§r");
                             }
                             break;
+                        case TFC_CROP_SUITABILITY:
+                            this.appendCropTooltip(tfcInfo, hoverInfo);
+                            break;
                         default:
                             break;
                     }
@@ -1710,6 +1746,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_SOIL_TYPE:
                             this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_SOIL_TYPE, this.readSoilRawAt(hoverInfo.blockX, hoverInfo.blockZ));
                             break;
+                        case TFC_CROP_SUITABILITY:
+                            this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_CROP_SUITABILITY, this.readCropRawAt(hoverInfo.blockX, hoverInfo.blockZ));
+                            break;
                         default:
                             break;
                     }
@@ -1730,6 +1769,100 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             RenderSettings.RenderMode.TFC_SOIL_TYPE.flag);
     }
 
+    /** Reads the stored crop-suitability value for a block position (embeds its own water values). */
+    private short readCropRawAt(int blockX, int blockZ)
+    {
+        return this.workManager.previewStorage().getRawData4(
+            QuartPos.fromBlock(blockX), 0, QuartPos.fromBlock(blockZ),
+            RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
+    }
+
+    /** Builds the crop-suitability hover text; the detailed result is recomputed for this quart only. */
+    private void appendCropTooltip(StringBuilder tfcInfo, HoverInfo hoverInfo)
+    {
+        var cropId = this.workManager.selectedCropId();
+        TFCCropRegistry.Entry entry = cropId != null ? this.workManager.cropRegistry().get(cropId) : null;
+        if (entry == null)
+        {
+            tfcInfo.append("\n§3Crop:§r §bNone selected§r");
+            return;
+        }
+        tfcInfo.append("\n§3Crop:§r §b%s§r".formatted(entry.displayName()));
+
+        short raw = this.readCropRawAt(hoverInfo.blockX, hoverInfo.blockZ);
+        if (TFCSampleUtils.isWaterValue(raw))
+        {
+            tfcInfo.append("\n§7Suitability: None — open water§r");
+            return;
+        }
+
+        TFCCropSuitability.CropSuitabilityResult result = this.workManager.resolveCropAt(hoverInfo.blockX, hoverInfo.blockZ);
+        String waterMode = this.workManager.cropWaterMode() == TFCCropSuitability.CropWaterMode.IRRIGATED ? "Irrigated" : "Rain-Fed";
+
+        if (TFCCropSuitability.isSuitabilityValue(result.suitability()))
+        {
+            tfcInfo.append("\n§3Suitability:§r §b%s§r".formatted(TFCCropSuitability.getSuitabilityName(result.suitability())));
+            tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
+            if (entry.flooded())
+            {
+                tfcInfo.append("\n§3Special Requirement:§r §bFlooded farmland§r");
+            }
+            tfcInfo.append("\n§3Growing Window:§r §b~%d days§r".formatted(result.growingWindowDays()));
+            tfcInfo.append("\n§3Temperature:§r §b%s§r".formatted(cropAxisStatus(result.tooColdSamples(), result.tooHotSamples(), "Cold", "Hot")));
+            tfcInfo.append("\n§3Hydration:§r §b%s§r".formatted(cropAxisStatus(result.tooDrySamples(), result.tooWetSamples(), "Dry", "Wet")));
+            tfcInfo.append("\n§3Limiting Factor:§r §b%s§r".formatted(cropLimitingName(result.limitingFactor())));
+        }
+        else
+        {
+            tfcInfo.append("\n§3Suitability:§r §bNo Data§r");
+            tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
+            if (entry.flooded())
+            {
+                tfcInfo.append("\n§3Special Requirement:§r §bFlooded farmland§r");
+            }
+        }
+
+        if (entry.hasClimateData())
+        {
+            var cr = entry.climateRange();
+            tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
+        }
+        tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+    }
+
+    private static String cropAxisStatus(int lowCount, int highCount, String lowWord, String highWord)
+    {
+        int n = TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
+        if (lowCount == 0 && highCount == 0) return "Suitable";
+        if (lowCount >= highCount) return lowCount > n / 2 ? "Too " + lowWord : "Marginal (" + lowWord.toLowerCase() + ")";
+        return highCount > n / 2 ? "Too " + highWord : "Marginal (" + highWord.toLowerCase() + ")";
+    }
+
+    private static String cropLimitingName(TFCCropSuitability.LimitingFactor lf)
+    {
+        return switch (lf)
+        {
+            case NONE -> "None";
+            case TOO_COLD, TOO_HOT -> "Temperature";
+            case TOO_DRY, TOO_WET -> "Hydration";
+            case SHORT_SEASON -> "Season Length";
+            case NO_DATA -> "No Data";
+            case WATER -> "Water";
+        };
+    }
+
+    private static String cropTempRange(net.dries007.tfc.util.climate.ClimateRange cr)
+    {
+        float min = cr.minTemperature();
+        float max = cr.maxTemperature();
+        boolean noMin = Float.isInfinite(min);
+        boolean noMax = Float.isInfinite(max);
+        if (noMin && noMax) return "any temp";
+        if (noMin) return "≤%.0f°C".formatted(max);
+        if (noMax) return "≥%.0f°C".formatted(min);
+        return "%.0f–%.0f°C".formatted(min, max);
+    }
+
     private void handleTFCMapValueClick(RenderSettings.RenderMode mode, short rawValue)
     {
         if (rawValue == TFCSampleUtils.VALUE_INVALID)
@@ -1748,6 +1881,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 case TFC_FOREST_TYPE -> TFCSampleUtils.forestTypeCount();
                 case TFC_TREE_SPECIES -> TFCSampleUtils.treeSpeciesCount();
                 case TFC_SOIL_TYPE -> TFCSampleUtils.soilTypeCount();
+                case TFC_CROP_SUITABILITY -> TFCCropSuitability.suitabilityCount();
                 default -> 0;
             };
             if (rawValue < 0 || rawValue >= count)

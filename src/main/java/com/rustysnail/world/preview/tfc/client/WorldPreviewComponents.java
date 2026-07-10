@@ -99,6 +99,10 @@ public class WorldPreviewComponents
     public static final Component BTN_TFC_FOREST_TYPE = Component.translatable("world_preview_tfc.button.tfc_forest_type");
     public static final Component BTN_TFC_TREE_SPECIES = Component.translatable("world_preview_tfc.button.tfc_tree_species");
     public static final Component BTN_TFC_SOIL_TYPE = Component.translatable("world_preview_tfc.button.tfc_soil_type");
+    public static final Component BTN_TFC_CROP_SUITABILITY = Component.translatable("world_preview_tfc.button.tfc_crop_suitability");
+    public static final Component BTN_CROP_WATER_MODE = Component.translatable("world_preview_tfc.button.crop_water_mode");
+    public static final Component BTN_CROP_RAIN_FED = Component.translatable("world_preview_tfc.button.crop_rain_fed");
+    public static final Component BTN_CROP_IRRIGATED = Component.translatable("world_preview_tfc.button.crop_irrigated");
     public static final Component BTN_TFC_HOTSPOT = Component.translatable("world_preview_tfc.button.tfc_hotspot");
     public static final Component BTN_RESOLUTION_TOOLTIP = Component.translatable("world_preview_tfc.button.resolution.tooltip");
     // Seed search tab / container

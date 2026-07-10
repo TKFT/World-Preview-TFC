@@ -177,5 +177,9 @@
   "feature.worldpreview.stratovolcano": "Stratovolcanoes",
   "world_preview_tfc.button.tfc_forest_type": "Forest Types",
   "world_preview_tfc.button.tfc_tree_species": "Dominant Tree Species - Shows the most climate-suitable tree species for each location",
-  "world_preview_tfc.button.tfc_soil_type": "TFC Soil Type\n\nDisplay predicted soil order from climate, water, volcanic influence, forest type, and biome context."
+  "world_preview_tfc.button.tfc_soil_type": "TFC Soil Type\n\nDisplay predicted soil order from climate, water, volcanic influence, forest type, and biome context.",
+  "world_preview_tfc.button.tfc_crop_suitability": "TFC Crop Suitability\n\nDisplay annual growing suitability for the selected crop using TFC temperature and farmland hydration requirements.",
+  "world_preview_tfc.button.crop_water_mode": "Hydration source used to evaluate crop suitability.\n\nRain-Fed: rainfall only.\nIrrigated: assumes a standard nearby freshwater source (+40 farmland hydration) and a neutral soil hydration multiplier.",
+  "world_preview_tfc.button.crop_rain_fed": "Rain-Fed",
+  "world_preview_tfc.button.crop_irrigated": "Irrigated"
 }

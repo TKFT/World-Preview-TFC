@@ -123,6 +123,7 @@ public class TFCSampleUtils
 
     private final ConcurrentArea<BiomeExtension> biomeLayer;
     private final BiomeSourceExtension biomeSource;
+    private final TFCPreviewClimateSampler climateSampler;
 
     private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, TFCTreeSpeciesRegistry treeSpeciesRegistry, long seed)
     {
@@ -136,6 +137,14 @@ public class TFCSampleUtils
         AreaFactory biomeFactory = TFCLayers.createRegionBiomeLayer(this.regionGenerator, tfcSeed);
         this.biomeLayer = new ConcurrentArea<>(biomeFactory, TFCLayers::getFromLayerId);
         this.chunkDataGenerator = chunkDataGenerator;
+        // Level-free climate model for the crop-suitability map (reused for hover). Derives its
+        // climate seed from the world seed exactly as TFC's OverworldClimateModel does.
+        this.climateSampler = new TFCPreviewClimateSampler(seed, settings.temperatureScale());
+    }
+
+    public TFCPreviewClimateSampler climateSampler()
+    {
+        return this.climateSampler;
     }
 
     public TFCTreeSpeciesRegistry treeSpeciesRegistry()

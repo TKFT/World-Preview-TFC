@@ -13,7 +13,19 @@ public class PreviewStorage implements Serializable
 {
     @Serial
     private static final long serialVersionUID = -275836689822028264L;
-    public static final long FLAG_MASK = 15L;
+
+    // Section-flag namespace. Flags now occupy the low 8 bits of the packed section key (0..255),
+    // up from the previous 4 bits (0..15), so independent map modes (soil, upcoming crop / fruit-tree
+    // suitability, etc.) can be added without aliasing. See quartPosToSectionLong for the layout.
+    public static final int FLAG_BITS = 8;
+    public static final long FLAG_MASK = 0xFFL;
+
+    // Each packed section coordinate (sX, sZ) uses 28 bits. sX/sZ derive from quart >> 11, so within
+    // Minecraft's coordinate range (|blocks| <= 30,000,000 -> |quart| <= 7.5M -> |s| <= ~3662) this is
+    // far more range than needed; the extra headroom simply future-proofs the layout.
+    private static final int COORD_BITS = 28;
+    private static final long COORD_MASK = (1L << COORD_BITS) - 1L;
+
     private transient Long2ObjectMap<PreviewBlock>[] blocks;
     private final int yMin;
     private final int yMax;
@@ -117,11 +129,23 @@ public class PreviewStorage implements Serializable
         }
     }
 
+    /**
+     * Packs a section coordinate + flag into a 64-bit map key:
+     * <pre>
+     *   bits 63..36 (28) : sX = quartX >> 11
+     *   bits 35..8  (28) : sZ = quartZ >> 11
+     *   bits  7..0   (8) : flag (0..255)
+     * </pre>
+     * The flag namespace is the low 8 bits (was 4). Coordinates keep 28 bits each, which comfortably
+     * covers Minecraft's supported range (see COORD_BITS).
+     */
     public static long quartPosToSectionLong(long quartX, long quartZ, long flags)
     {
         long sX = quartX >> 11;
         long sZ = quartZ >> 11;
-        return (sX & 1073741823L) << 34 | (sZ & 1073741823L) << 4 | (flags & 15L);
+        return (sX & COORD_MASK) << (COORD_BITS + FLAG_BITS)
+            | (sZ & COORD_MASK) << FLAG_BITS
+            | (flags & FLAG_MASK);
     }
 
     @Serial
