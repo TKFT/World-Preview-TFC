@@ -282,6 +282,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             || mode == RenderSettings.RenderMode.TFC_HOTSPOT;
     }
 
+    private static boolean shouldOverlayRegionWater(short terrain)
+    {
+        return terrain != TFCRegionWorkUnit.LAND_WATER_LAND
+            && terrain != TFCRegionWorkUnit.LAND_WATER_LAKE
+            && terrain != TFCRegionWorkUnit.LAND_WATER_RIVER;
+    }
+
     private static int packTex(int r, int g, int b)
     {
         return 0xFF000000 | (b << 16) | (g << 8) | r;
@@ -768,7 +775,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             if (rawData > -32768 && this.tfcTemperatureColorMap != null)
                             {
                                 short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                                if (terrain != TFCRegionWorkUnit.LAND_WATER_LAND)
+                                if (shouldOverlayRegionWater(terrain))
                                 {
                                     color = this.regionWaterTexture(terrain);
                                 }
@@ -784,7 +791,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             if (rawData > -32768 && this.tfcRainfallColorMap != null)
                             {
                                 short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                                if (terrain != TFCRegionWorkUnit.LAND_WATER_LAND)
+                                if (shouldOverlayRegionWater(terrain))
                                 {
                                     color = this.regionWaterTexture(terrain);
                                 }
@@ -814,7 +821,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_ROCK_MID:
                         case TFC_ROCK_BOT:
                             short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                            if (terrain != TFCRegionWorkUnit.LAND_WATER_LAND)
+                            if (shouldOverlayRegionWater(terrain))
                             {
                                 color = this.regionWaterTexture(terrain);
                             }
@@ -954,10 +961,10 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                     color = switch (landWater)
                                     {
                                         case TFCRegionWorkUnit.LAND_WATER_OCEAN -> this.tfcOceanTex;
-                                        case TFCRegionWorkUnit.LAND_WATER_LAND -> this.tfcLandTex;
+                                        case TFCRegionWorkUnit.LAND_WATER_LAND,
+                                             TFCRegionWorkUnit.LAND_WATER_LAKE,
+                                             TFCRegionWorkUnit.LAND_WATER_RIVER -> this.tfcLandTex;
                                         case TFCRegionWorkUnit.LAND_WATER_SHORE -> this.tfcShoreTex;
-                                        case TFCRegionWorkUnit.LAND_WATER_LAKE -> this.tfcLakeTex;
-                                        case TFCRegionWorkUnit.LAND_WATER_RIVER -> this.tfcRiverTex;
                                         default -> this.tfcUnknownTex;
                                     };
                                 }
