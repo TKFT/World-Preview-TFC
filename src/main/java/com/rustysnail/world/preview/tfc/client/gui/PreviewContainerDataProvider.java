@@ -44,11 +44,6 @@ public interface PreviewContainerDataProvider extends PreviewStorageCacheManager
 
     LayeredRegistryAccess<RegistryLayer> layeredRegistryAccess(@Nullable WorldCreationContext context);
 
-    /**
-     * Returns the TFC ChunkGeneratorExtension from the vanilla world creation context, if available.
-     * This is the generator that Minecraft uses for actual world creation (not the preview copy).
-     * Returns null in non-CreateWorldScreen contexts (e.g., in-game preview).
-     */
     @Nullable
     default ChunkGeneratorExtension vanillaTFCExtension()
     {

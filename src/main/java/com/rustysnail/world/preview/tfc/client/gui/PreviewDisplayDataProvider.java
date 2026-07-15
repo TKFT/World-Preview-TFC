@@ -10,7 +10,6 @@ import it.unimi.dsi.fastutil.shorts.Short2LongMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public interface PreviewDisplayDataProvider
@@ -47,11 +46,6 @@ public interface PreviewDisplayDataProvider
 
     void onVisibleRocksChanged(Short2LongMap visibleRocks);
 
-    /**
-     * A forest-type / tree-species category was selected by clicking the map. {@code value} is a
-     * forest ordinal, tree species id, or {@link com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils#VALUE_WATER};
-     * {@code Short.MIN_VALUE} clears the current selection.
-     */
     void onTFCMapValueVisuallySelected(com.rustysnail.world.preview.tfc.RenderSettings.RenderMode mode, short value);
 
     StructureRenderInfo[] renderStructureMap();
@@ -72,7 +66,6 @@ public interface PreviewDisplayDataProvider
 
     boolean setupFailed();
 
-    @NotNull
     PreviewDisplayDataProvider.PlayerData getPlayerData(UUID playerId);
 
     @Nullable

@@ -16,7 +16,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.biome.Biome;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
@@ -68,7 +67,7 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
     }
 
     @Override
-    public void replaceEntries(@NotNull Collection<BiomeEntry> entryList)
+    public void replaceEntries(Collection<BiomeEntry> entryList)
     {
         BiomeEntry oldEntry = this.getSelected();
         super.replaceEntries(entryList);
@@ -201,7 +200,6 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
             this.dataSource = PreviewData.DataSource.CONFIG;
         }
 
-        @NotNull
         public Component getNarration()
         {
             return Component.translatable("narrator.select", this.name);
@@ -230,7 +228,7 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
             }
         }
 
-        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
+        public void render(GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
         {
             guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
             String formatName = this.isPrimaryNamespace ? this.name : "§o" + this.name;

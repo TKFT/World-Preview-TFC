@@ -2,7 +2,6 @@ package com.rustysnail.world.preview.tfc.client.gui.widgets;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.NotNull;
 
 public class ToggleButton extends OldStyleImageButton
 {
@@ -29,7 +28,7 @@ public class ToggleButton extends OldStyleImageButton
     }
 
     @Override
-    public void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
     {
         int x = this.xTexStart;
         if (!this.selected)

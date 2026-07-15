@@ -4,19 +4,11 @@ import java.util.Map;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/** Immutable colors and optional display names for one categorical preview layer. */
-public final class CategoricalColorPalette
+public record CategoricalColorPalette(Map<ResourceLocation, Entry> entries)
 {
-    private final Map<ResourceLocation, Entry> entries;
-
     public CategoricalColorPalette(Map<ResourceLocation, Entry> entries)
     {
         this.entries = Map.copyOf(entries);
-    }
-
-    public Map<ResourceLocation, Entry> entries()
-    {
-        return this.entries;
     }
 
     @Nullable

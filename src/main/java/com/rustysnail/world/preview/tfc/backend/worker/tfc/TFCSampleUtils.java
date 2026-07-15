@@ -120,6 +120,9 @@ public class TFCSampleUtils
         previewId("entisol"), previewId("aridisol"), previewId("oxisol"), previewId("fluvisol"),
         previewId("andisol"), previewId("podzol"), previewId("alfisol"), previewId("mollisol")
     };
+    private static final int[] STABLE_CATEGORY_COLORS = {
+        0xFF6E8B3D, 0xFF4E7A4E, 0xFF8A9A5B, 0xFFB5A642, 0xFF7C6A40, 0xFF5F8A6B
+    };
     private static volatile TFCTreeSpeciesRegistry activeRegistry = TFCTreeSpeciesRegistry.fallback();
 
     public static boolean isWaterValue(short value)
@@ -557,7 +560,13 @@ public class TFCSampleUtils
             case DEAD_DIVERSE -> 0xFF776857;
             case DEAD_ALTERNATE -> 0xFF65574A;
             case DEAD_BAMBOO -> 0xFF7A7561;
+            default -> stableCategoryColor(ResourceLocation.fromNamespaceAndPath("tfc", type.getSerializedName()));
         };
+    }
+
+    private static int stableCategoryColor(ResourceLocation id)
+    {
+        return STABLE_CATEGORY_COLORS[Math.floorMod(id.toString().hashCode(), STABLE_CATEGORY_COLORS.length)];
     }
 
     private static boolean isForested(ForestType forestType)

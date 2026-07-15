@@ -8,7 +8,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureList.Entry>
@@ -47,7 +46,7 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
     }
 
     @Override
-    public void replaceEntries(@NotNull Collection<Entry> entryList)
+    public void replaceEntries(Collection<Entry> entryList)
     {
         super.replaceEntries(entryList);
         double maxScroll = Math.max(0.0, (super.getItemCount() * super.itemHeight - super.height));
@@ -107,7 +106,6 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
             return this.tooltip;
         }
 
-        @NotNull
         @Override
         public Component getNarration()
         {
@@ -130,7 +128,7 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
         }
 
         @Override
-        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
+        public void render(GuiGraphics gg, int index, int top, int left, int width, int height,
                            int mouseX, int mouseY, boolean hovered, float partialTick)
         {
             int textColor = this.enabled ? 0xFFFFFF : 0x777777;

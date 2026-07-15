@@ -174,7 +174,7 @@ public class PreviewMappingData
     {
         CategoricalColorPalette palette = this.categoricalPalettes.get(paletteId);
         CategoricalColorPalette.Entry entry = palette == null ? null : palette.get(valueId);
-        return entry == null ? 0xFF000000 | fallbackArgb & 0xFFFFFF : entry.argb();
+        return entry == null ? 0xFF000000 | (fallbackArgb & 0xFFFFFF) : entry.argb();
     }
 
     @Nullable
@@ -183,6 +183,12 @@ public class PreviewMappingData
         CategoricalColorPalette palette = this.categoricalPalettes.get(paletteId);
         CategoricalColorPalette.Entry entry = palette == null ? null : palette.get(valueId);
         return entry == null ? null : entry.name();
+    }
+
+    public String getCategoricalName(ResourceLocation paletteId, ResourceLocation valueId, String fallbackName)
+    {
+        String name = this.getCategoricalName(paletteId, valueId);
+        return name == null ? fallbackName : name;
     }
 
     public PreviewData generateMapData(

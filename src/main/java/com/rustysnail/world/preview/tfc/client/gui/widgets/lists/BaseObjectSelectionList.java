@@ -7,7 +7,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class BaseObjectSelectionList<E extends BaseObjectSelectionList.Entry<E>> extends ObjectSelectionList<E>
@@ -47,12 +46,12 @@ public abstract class BaseObjectSelectionList<E extends BaseObjectSelectionList.
         return this.width - 6;
     }
 
-    public void replaceEntries(@NotNull Collection<E> entryList)
+    public void replaceEntries(Collection<E> entryList)
     {
         super.replaceEntries(entryList);
     }
 
-    public void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
     {
         super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
         E hovered = this.getHovered();

@@ -8,7 +8,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
-import org.jetbrains.annotations.NotNull;
 
 public class SeedsList extends BaseObjectSelectionList<SeedsList.SeedEntry>
 {
@@ -41,7 +40,6 @@ public class SeedsList extends BaseObjectSelectionList<SeedsList.SeedEntry>
             this.deleteButton.active = SeedsList.this.seedCanChange;
         }
 
-        @NotNull
         public Component getNarration()
         {
             return Component.translatable("narrator.select", this.seed);

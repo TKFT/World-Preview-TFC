@@ -5,7 +5,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.NotNull;
 
 public class OldStyleImageButton extends Button
 {
@@ -29,12 +28,12 @@ public class OldStyleImageButton extends Button
         this.texHeight = texHeight;
     }
 
-    protected void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    protected void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
     {
         renderAtTexCoords(guiGraphics, this.xTexStart, this.yTexStart);
     }
 
-    protected void renderAtTexCoords(@NotNull GuiGraphics guiGraphics, int xTex, int yTex)
+    protected void renderAtTexCoords(GuiGraphics guiGraphics, int xTex, int yTex)
     {
         if (!this.isActive())
         {

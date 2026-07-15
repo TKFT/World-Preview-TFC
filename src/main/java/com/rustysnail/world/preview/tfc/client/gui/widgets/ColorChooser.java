@@ -14,7 +14,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.CommonComponents;
-import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix4f;
 
 public class ColorChooser extends AbstractWidget
@@ -107,7 +106,7 @@ public class ColorChooser extends AbstractWidget
         return this.mouseEvent(mouseX, mouseY, button, true);
     }
 
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)
+    protected void updateWidgetNarration(NarrationElementOutput narrationElementOutput)
     {
     }
 

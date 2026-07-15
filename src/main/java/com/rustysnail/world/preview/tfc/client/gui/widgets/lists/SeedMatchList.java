@@ -9,7 +9,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
@@ -26,7 +25,7 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
     }
 
     @Override
-    public void replaceEntries(@NotNull Collection<Entry> entryList)
+    public void replaceEntries(Collection<Entry> entryList)
     {
         Entry oldEntry = this.getSelected();
         super.replaceEntries(entryList);
@@ -112,7 +111,6 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
             return this.tooltip;
         }
 
-        @NotNull
         @Override
         public Component getNarration()
         {
@@ -131,7 +129,7 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
         }
 
         @Override
-        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
+        public void render(GuiGraphics gg, int index, int top, int left, int width, int height,
                            int mouseX, int mouseY, boolean hovered, float partialTick)
         {
             gg.drawString(SeedMatchList.this.minecraft.font, this.seedDisplay, left + 4, top + 2, 0xFFFFFF);

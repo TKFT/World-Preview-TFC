@@ -12,12 +12,6 @@ import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Scrollable side list of forest-type / tree-species categories, modeled on {@link BiomesList}
- * but backed by plain (id, name, color) entries so it needs no biome registry holders.
- * Reused for both TFC_FOREST_TYPE and TFC_TREE_SPECIES modes. Colors are normal ARGB and
- * rendered as swatches via {@link WorldPreview#nativeColor(int)}.
- */
 public class TFCMapValueList extends BaseObjectSelectionList<TFCMapValueList.ValueEntry>
 {
     private Consumer<ValueEntry> onValueSelected;

@@ -10,7 +10,6 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
@@ -46,7 +45,7 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
     }
 
     @Override
-    public void replaceEntries(@NotNull Collection<RockEntry> entryList)
+    public void replaceEntries(Collection<RockEntry> entryList)
     {
         RockEntry oldEntry = this.getSelected();
         super.replaceEntries(entryList);
@@ -118,7 +117,6 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
             return this.tooltip;
         }
 
-        @NotNull
         public Component getNarration()
         {
             return Component.translatable("narrator.select", this.name);
@@ -141,7 +139,7 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
             return true;
         }
 
-        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
+        public void render(GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
         {
             guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
             guiGraphics.drawString(RocksList.this.minecraft.font, this.name, k + 16, j + 2, 16777215);

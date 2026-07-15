@@ -13,7 +13,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.biome.Biome;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList.Entry>
@@ -60,7 +59,7 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
     }
 
     @Override
-    public void replaceEntries(@NotNull Collection<Entry> entryList)
+    public void replaceEntries(Collection<Entry> entryList)
     {
         super.replaceEntries(entryList);
         double maxScroll = Math.max(0.0, (super.getItemCount() * super.itemHeight - super.height));
@@ -110,7 +109,6 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
             return this.tooltip;
         }
 
-        @NotNull
         @Override
         public Component getNarration()
         {
@@ -134,7 +132,7 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
         }
 
         @Override
-        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
+        public void render(GuiGraphics gg, int index, int top, int left, int width, int height,
                            int mouseX, int mouseY, boolean hovered, float partialTick)
         {
             int cbX = left + 2;
