@@ -60,6 +60,46 @@ Rock Layers Map Mode
 
 <img alt="rock-layer" src="images/rock-layer-map.png" width="100%"/>
 
+### Large TFC Land/Water Exports
+
+Open **Settings → Land/Water Export** after the preview finishes loading. The exporter uses the
+currently selected seed, dimension, world-generation settings, datapacks, and installed mods. The
+center defaults to `0,0` and accepts any whole block X/Z coordinates whose requested bounds remain
+inside the integer coordinate range.
+
+| Action | Block coverage | Blocks per pixel | PNG dimensions |
+|---|---:|---:|---:|
+| Export 50k Land/Water | 50,000 × 50,000 | 4 | 12,500 × 12,500 |
+| Export 100k Land/Water | 100,000 × 100,000 | 8 (2×2 quart aggregation) | 12,500 × 12,500 |
+| Export Both | Both presets, sequentially | As above | Two PNGs |
+
+The PNG has exactly two indexed colors: land and water. Water includes final TFC ocean, deep-ocean,
+trench, lake, river, river-mouth/channel, and compatible addon water biomes. Salinity alone is not
+used, so freshwater is included and salty shores remain land. The 100k preset keeps a pixel as water
+when any of its four quart samples is a narrow river/lake/channel; otherwise at least two samples
+must be water. This keeps inland water visible without broadly expanding coastlines.
+
+Exports are written to `<Minecraft instance>/world-preview-exports/` as a PNG plus a companion JSON
+file. Filenames include the sanitized entered seed, preset, and center. JSON records the entered and
+numeric seeds, dimension, exact inclusive bounds, resolution, versions, timestamp, classification
+mode, TFC detection, and the detected TFC Large Biomes version when installed. The PNG is standalone.
+Default palette values live in `config/world_preview_tfc/config.json` as
+`landWaterExportLandColor` and `landWaterExportWaterColor` (RGB integers).
+
+The exporter never creates or loads chunks. It samples the active final TFC biome source directly,
+including its river overlay and compatible worldgen mixins. Rows are processed in bounded 256-row
+tiles and streamed into a one-bit indexed PNG; exporter-owned image buffers are about 20–25 MiB,
+with additional bounded per-thread TFC caches. Up to eight sampling threads are used. Runtime varies
+greatly by CPU and worldgen addons: expect the 50k export to take many minutes on typical hardware;
+the 100k preset performs four times as many biome lookups and can take roughly four times longer.
+The UI remains responsive and shows phase, percentage, elapsed time, and ETA.
+
+Cancel stops workers, closes the writer, and removes `.part` files. A PNG is moved to its final name
+only after all rows and metadata are complete, so a cancelled job does not leave a misleading partial
+image. For manual validation, export both presets at `0,0`, compare their central continents/oceans,
+confirm rivers and lakes remain visible at 100k, repeat with TFC Large Biomes, test center
+`-50000,-50000`, and cancel a run midway.
+
 ## Other Features
 - Persistent seed storage
 - Highlighting specific biomes

@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
@@ -28,6 +30,15 @@ public final class FeatureDetectors
     private static final ResourceLocation STRATOVOLCANOES_ID = ResourceLocation.fromNamespaceAndPath("tfc", "stratovolcanoes");
     private static final Map<ResourceLocation, Short> FEATURE_ID_MAP = new HashMap<>();
     private static final List<SearchableFeature> FEATURE_BY_ID = new ArrayList<>();
+    private static final int VARIANT_CACHE_SIZE = 256;
+    private static final Map<VariantCacheKey, Optional<String>> VARIANT_CACHE = new LinkedHashMap<>(16, 0.75f, true)
+    {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<VariantCacheKey, Optional<String>> eldest)
+        {
+            return size() > VARIANT_CACHE_SIZE;
+        }
+    };
 
     public static short getFeatureId(SearchableFeature feature)
     {
@@ -35,7 +46,7 @@ public final class FeatureDetectors
         return id != null ? id : -1;
     }
 
-    public static SearchableFeature getFeatureById(int id)
+    public static @Nullable SearchableFeature getFeatureById(int id)
     {
         if (id < 0 || id >= FEATURE_BY_ID.size()) return null;
         return FEATURE_BY_ID.get(id);
@@ -152,18 +163,34 @@ public final class FeatureDetectors
             return null;
         }
 
+        VariantCacheKey key = new VariantCacheKey(seed, center.getX(), center.getZ());
+        synchronized (VARIANT_CACHE)
+        {
+            Optional<String> cached = VARIANT_CACHE.get(key);
+            if (cached != null)
+            {
+                return cached.orElse(null);
+            }
+        }
+
+        String variantName = null;
         try
         {
             CenteredFeatureNoiseSampler sampler = getStratovolcanoSampler(seed);
             Cellular2D.Cell cell = sampler.getCellularNoise().cell(center.getX(), center.getZ());
             VolcanoVariant variant = sampler.getVolcanoVariant(cell);
-            return variant != null ? variant.name() : null;
+            variantName = variant != null ? variant.name() : null;
         }
         catch (RuntimeException ignored)
         {
             // A stale feature icon or incompatible TFC worldgen state must not break tooltip rendering.
-            return null;
         }
+
+        synchronized (VARIANT_CACHE)
+        {
+            VARIANT_CACHE.put(key, Optional.ofNullable(variantName));
+        }
+        return variantName;
     }
 
     public static @Nullable Component getFeatureVariantName(
@@ -202,6 +229,8 @@ public final class FeatureDetectors
         }
         return result.toString();
     }
+
+    private record VariantCacheKey(long seed, int centerX, int centerZ) {}
 
     private static final FeatureTest TUFF_RING_TEST = new FeatureTest()
     {
@@ -289,7 +318,7 @@ public final class FeatureDetectors
             QuartPos.fromBlock(cellCenter.getZ())
         );
 
-        if (biome == null || !sampler.isValidBiome(biome)) return null;
+        if (!sampler.isValidBiome(biome)) return null;
 
         return sampler.calculateCenter(q.blockX(), 64, q.blockZ(), sampler.getFrequency(biome));
     }

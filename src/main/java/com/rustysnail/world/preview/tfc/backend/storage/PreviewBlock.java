@@ -5,7 +5,6 @@ import java.io.Serializable;
 import java.util.Arrays;
 import com.rustysnail.world.preview.tfc.RenderSettings;
 import com.rustysnail.world.preview.tfc.WorldPreview;
-import org.jetbrains.annotations.NotNull;
 
 public class PreviewBlock implements Serializable
 {
@@ -25,7 +24,6 @@ public class PreviewBlock implements Serializable
         this.flags = flags;
     }
 
-    @NotNull
     public synchronized PreviewSection get(int quartX, int quartZ)
     {
         int idx = (quartX >> 6 & 31) * 32 + (quartZ >> 6 & 31);

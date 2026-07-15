@@ -4,13 +4,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
-import org.jetbrains.annotations.NotNull;
 
 public class RockColorReloadListener extends BaseMultiJsonResourceReloadListener
 {
@@ -28,7 +28,7 @@ public class RockColorReloadListener extends BaseMultiJsonResourceReloadListener
             try
             {
                 JsonObject raw = rawEl.getAsJsonObject();
-                value.name = ColorJsonParsingHelper.parseOptionalName(raw);
+                value.name = Objects.requireNonNull(ColorJsonParsingHelper.parseOptionalName(raw));
                 value.color = ColorJsonParsingHelper.parsePackedRgbColor(raw);
             }
             catch (UnsupportedOperationException | NullPointerException | IllegalStateException e)
@@ -49,7 +49,7 @@ public class RockColorReloadListener extends BaseMultiJsonResourceReloadListener
         super("rock_colors.json");
     }
 
-    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    protected void apply(Map<ResourceLocation, List<JsonElement>> object, ResourceManager resourceManager, ProfilerFiller profiler)
     {
         WorldPreview worldPreview = WorldPreview.get();
         PreviewMappingData previewMappingData = worldPreview.biomeColorMap();

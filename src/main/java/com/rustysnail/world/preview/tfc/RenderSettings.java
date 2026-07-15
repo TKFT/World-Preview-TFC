@@ -14,8 +14,6 @@ public class RenderSettings
     public ResourceLocation dimension = null;
     public boolean hideAllStructures = false;
     public transient RenderMode mode = RenderMode.BIOMES;
-    // True when the feature-icon overlay is shown; lets WorkManager queue TFC feature detection
-    // even in non-TFC modes (and skip it otherwise).
     public transient boolean featureOverlay = false;
     private BlockPos center = new BlockPos(0, 0, 0);
     private int quartExpand = 1;
@@ -84,11 +82,9 @@ public class RenderSettings
     {
         BIOMES(0L, false),
         HEIGHTMAP(2L, false),
-        // Each value's flag is the PreviewStorage section-flag namespace (now 8-bit, 0..255 - see
-        // PreviewStorage.FLAG_MASK). Reserved non-render-mode flags: 1 = structures,
-        // 4 = TFC feature-completion. 3, 5..15 are current modes; 16..255 are free for future modes.
-        TFC_SOIL_TYPE(3L, false),    // Predicted TFC soil order
+        // PreviewStorage.FLAG_MASK. Reserved non-render-mode flags: 1 = structures,
         // TFC-specific render modes
+        TFC_SOIL_TYPE(3L, false),    // Predicted TFC soil order\
         TFC_TEMPERATURE(5L, false),  // Mapping Temperature
         TFC_RAINFALL(6L, false),     // Mapping Rainfall
         TFC_LAND_WATER(7L, false),   // Simple land and water map
@@ -97,10 +93,9 @@ public class RenderSettings
         TFC_ROCK_BOT(10L, false),    // Bottom rock layer
         TFC_ROCK_TYPE(11L, false),   // Rock type category (Ocean/Volcanic/Land/Uplift)
         TFC_KAOLINITE(12L, false),   // Kaolin Clay Spawning Areas
-        TFC_FOREST_TYPE(13L, false), //TFC forest type/density
+        TFC_FOREST_TYPE(13L, false), // TFC forest type/density
         TFC_HOTSPOT(14L, false),     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
-        TFC_TREE_SPECIES(15L, false),
-        // Ecological suitability maps (8-bit flag namespace; 16..255 free - see PreviewStorage.FLAG_MASK)
+        TFC_TREE_SPECIES(15L, false),// TFC Tree Species Map
         TFC_CROP_SUITABILITY(16L, false); // Annual growing suitability for the selected crop
 
         public final long flag;

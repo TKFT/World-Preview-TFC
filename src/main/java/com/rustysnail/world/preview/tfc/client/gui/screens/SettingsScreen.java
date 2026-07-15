@@ -14,6 +14,7 @@ import com.rustysnail.world.preview.tfc.client.gui.screens.settings.CacheTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.DimensionsTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.GeneralTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.HeightmapTab;
+import com.rustysnail.world.preview.tfc.client.gui.screens.settings.LandWaterExportTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.SamplingTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.TFCTab;
 import javax.annotation.Nullable;
@@ -45,6 +46,7 @@ public class SettingsScreen extends Screen
     private final boolean tfcReadOnly;
     private TabNavigationBar tabNavigationBar;
     private GridLayout bottomButtons;
+    private LandWaterExportTab landWaterExportTab;
 
 
     public SettingsScreen(Screen lastScreen, PreviewContainer previewContainer, @Nullable ChunkGeneratorExtension tfcExtension)
@@ -61,6 +63,16 @@ public class SettingsScreen extends Screen
         this.openTfcTab = openTfcTab;
         this.tfcReadOnly = tfcReadOnly;
         this.tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
+    }
+
+    @Override
+    public void tick()
+    {
+        super.tick();
+        if (this.landWaterExportTab != null)
+        {
+            this.landWaterExportTab.tick();
+        }
     }
 
     public void render(GuiGraphics guiGraphics, int i, int j, float f)
@@ -97,19 +109,23 @@ public class SettingsScreen extends Screen
         tabs.add(new HeightmapTab(minecraft, this.previewContainer.previewData()));
         tabs.add(new DimensionsTab(minecraft, this.previewContainer.levelStemKeys()));
         tabs.add(new BiomesTab(minecraft, this.previewContainer));
+        int tfcTabIndex = -1;
         if (this.tfcExtension != null)
         {
+            tfcTabIndex = tabs.size();
             tabs.add(new TFCTab(minecraft, this.previewContainer, tfcExtension, this::onClose, this.tfcReadOnly));
         }
+        this.landWaterExportTab = new LandWaterExportTab(minecraft, this.previewContainer);
+        tabs.add(this.landWaterExportTab);
 
 
         this.tabNavigationBar = TabNavigationBar.builder(this.tabManager, this.width)
             .addTabs(tabs.toArray(new Tab[0]))
             .build();
         int initialIndex = 0;
-        if (this.openTfcTab && this.tfcExtension != null)
+        if (this.openTfcTab && tfcTabIndex >= 0)
         {
-            initialIndex = tabs.size() - 1;
+            initialIndex = tfcTabIndex;
         }
         this.tabNavigationBar.selectTab(initialIndex, false);
         this.addRenderableWidget(this.tabNavigationBar);

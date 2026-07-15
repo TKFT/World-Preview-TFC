@@ -110,7 +110,7 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @Nullable ChunkAccess getChunk(int x, int z, @NotNull ChunkStatus requiredStatus, boolean nonnull)
+    public @Nullable ChunkAccess getChunk(int x, int z, ChunkStatus requiredStatus, boolean nonnull)
     {
         ChunkPos pos = new ChunkPos(x, z);
         ProtoChunk chunk = chunks.get(pos.toLong());
@@ -126,7 +126,7 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public int getHeight(@NotNull Heightmap.Types heightmapType, int x, int z)
+    public int getHeight(Heightmap.Types heightmapType, int x, int z)
     {
         ChunkAccess chunk = getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
         if (chunk != null)
@@ -143,13 +143,13 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull BiomeManager getBiomeManager()
+    public BiomeManager getBiomeManager()
     {
         throw new UnsupportedOperationException("FeatureProbeLevel does not have a BiomeManager");
     }
 
     @Override
-    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
+    public Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
     {
         return registryAccess.registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.PLAINS);
     }
@@ -167,7 +167,7 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull DimensionType dimensionType()
+    public DimensionType dimensionType()
     {
         return dimensionType;
     }
@@ -185,13 +185,13 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull RegistryAccess registryAccess()
+    public RegistryAccess registryAccess()
     {
         return registryAccess;
     }
 
     @Override
-    public @NotNull FeatureFlagSet enabledFeatures()
+    public FeatureFlagSet enabledFeatures()
     {
         return FeatureFlagSet.of();
     }
@@ -203,7 +203,7 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull ServerLevel getLevel()
+    public ServerLevel getLevel()
     {
         throw new UnsupportedOperationException("FeatureProbeLevel does not have a backing ServerLevel");
     }
@@ -215,25 +215,25 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull LevelTickAccess<Block> getBlockTicks()
+    public LevelTickAccess<Block> getBlockTicks()
     {
         return BlackholeTickAccess.emptyLevelList();
     }
 
     @Override
-    public @NotNull LevelTickAccess<Fluid> getFluidTicks()
+    public LevelTickAccess<Fluid> getFluidTicks()
     {
         return BlackholeTickAccess.emptyLevelList();
     }
 
     @Override
-    public @NotNull LevelData getLevelData()
+    public LevelData getLevelData()
     {
         throw new UnsupportedOperationException("FeatureProbeLevel does not have LevelData");
     }
 
     @Override
-    public @NotNull DifficultyInstance getCurrentDifficultyAt(@NotNull BlockPos pos)
+    public DifficultyInstance getCurrentDifficultyAt(BlockPos pos)
     {
         return new DifficultyInstance(Difficulty.NORMAL, 0, 0, 0);
     }
@@ -245,71 +245,71 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull ChunkSource getChunkSource()
+    public ChunkSource getChunkSource()
     {
         throw new UnsupportedOperationException("FeatureProbeLevel does not have a ChunkSource");
     }
 
     @Override
-    public @NotNull RandomSource getRandom()
+    public RandomSource getRandom()
     {
         return random;
     }
 
     @Override
-    public void playSound(@Nullable Player player, @NotNull BlockPos pos, @NotNull SoundEvent sound,
-                          @NotNull SoundSource source, float volume, float pitch)
+    public void playSound(@Nullable Player player, BlockPos pos, SoundEvent sound,
+                          SoundSource source, float volume, float pitch)
     {
         // No-op
     }
 
     @Override
-    public void addParticle(@NotNull ParticleOptions particleData, double x, double y, double z,
+    public void addParticle(ParticleOptions particleData, double x, double y, double z,
                             double xSpeed, double ySpeed, double zSpeed)
     {
         // No-op
     }
 
     @Override
-    public void levelEvent(@Nullable Player player, int type, @NotNull BlockPos pos, int data)
+    public void levelEvent(@Nullable Player player, int type, BlockPos pos, int data)
     {
         // No-op
     }
 
     @Override
-    public void gameEvent(@NotNull Holder<GameEvent> holder, @NotNull Vec3 vec3,
-                          @NotNull GameEvent.Context context)
+    public void gameEvent(Holder<GameEvent> holder, Vec3 vec3,
+                          GameEvent.Context context)
     {
         // No-op
     }
 
     @Override
-    public float getShade(@NotNull Direction direction, boolean shade)
+    public float getShade(Direction direction, boolean shade)
     {
         return 1.0f;
     }
 
     @Override
-    public @NotNull LevelLightEngine getLightEngine()
+    public LevelLightEngine getLightEngine()
     {
         throw new UnsupportedOperationException("FeatureProbeLevel does not have a LightEngine");
     }
 
     @Override
-    public @NotNull WorldBorder getWorldBorder()
+    public WorldBorder getWorldBorder()
     {
         return INFINITE_BORDER;
     }
 
     @Override
-    public @Nullable BlockEntity getBlockEntity(@NotNull BlockPos pos)
+    public @Nullable BlockEntity getBlockEntity(BlockPos pos)
     {
         ChunkAccess chunk = getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.FULL, false);
         return chunk != null ? chunk.getBlockEntity(pos) : null;
     }
 
     @Override
-    public @NotNull BlockState getBlockState(@NotNull BlockPos pos)
+    public BlockState getBlockState(BlockPos pos)
     {
         if (pos.getY() < minY || pos.getY() >= maxY)
         {
@@ -324,46 +324,46 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public @NotNull FluidState getFluidState(@NotNull BlockPos pos)
+    public FluidState getFluidState(BlockPos pos)
     {
         return getBlockState(pos).getFluidState();
     }
 
     @Override
-    public @NotNull List<Entity> getEntities(@Nullable Entity entity, @NotNull AABB area,
-                                             @NotNull Predicate<? super Entity> predicate)
+    public List<Entity> getEntities(@Nullable Entity entity, AABB area,
+                                    Predicate<? super Entity> predicate)
     {
         return Collections.emptyList();
     }
 
     @Override
-    public <T extends Entity> @NotNull List<T> getEntities(@NotNull EntityTypeTest<Entity, T> entityTypeTest,
-                                                           @NotNull AABB bounds,
-                                                           @NotNull Predicate<? super T> predicate)
+    public <T extends Entity> @NotNull List<T> getEntities(EntityTypeTest<Entity, T> entityTypeTest,
+                                                           AABB bounds,
+                                                           Predicate<? super T> predicate)
     {
         return Collections.emptyList();
     }
 
     @Override
-    public @NotNull List<? extends Player> players()
+    public List<? extends Player> players()
     {
         return Collections.emptyList();
     }
 
     @Override
-    public boolean isStateAtPosition(@NotNull BlockPos pos, @NotNull Predicate<BlockState> state)
+    public boolean isStateAtPosition(BlockPos pos, Predicate<BlockState> state)
     {
         return state.test(getBlockState(pos));
     }
 
     @Override
-    public boolean isFluidAtPosition(@NotNull BlockPos pos, @NotNull Predicate<FluidState> predicate)
+    public boolean isFluidAtPosition(BlockPos pos, Predicate<FluidState> predicate)
     {
         return predicate.test(getFluidState(pos));
     }
 
     @Override
-    public boolean setBlock(@NotNull BlockPos pos, @NotNull BlockState state, int flags, int recursionLeft)
+    public boolean setBlock(BlockPos pos, BlockState state, int flags, int recursionLeft)
     {
         if (pos.getY() < minY || pos.getY() >= maxY)
         {
@@ -379,13 +379,13 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public boolean removeBlock(@NotNull BlockPos pos, boolean isMoving)
+    public boolean removeBlock(BlockPos pos, boolean isMoving)
     {
         return setBlock(pos, Blocks.AIR.defaultBlockState(), 3, 512);
     }
 
     @Override
-    public boolean destroyBlock(@NotNull BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft)
+    public boolean destroyBlock(BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft)
     {
         return setBlock(pos, Blocks.AIR.defaultBlockState(), 3, recursionLeft);
     }

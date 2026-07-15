@@ -188,7 +188,7 @@ public class PreviewMappingData
                 structure.name,
                 structure.texture == null ? null : ResourceLocation.parse(structure.texture),
                 structure.item == null ? null : ResourceLocation.parse(structure.item),
-                booleanOr(structure.showByDefault, displayByDefaultStructuresSet.contains(structureRes)),
+                booleanOr(null, displayByDefaultStructuresSet.contains(structureRes)),
                 structure.dataSource
             );
         }
@@ -250,8 +250,6 @@ public class PreviewMappingData
 
     public static class StructureEntry
     {
-        @Nullable
-        public final Boolean showByDefault = null;
         public PreviewData.DataSource dataSource;
         public String name = null;
         public String texture = null;

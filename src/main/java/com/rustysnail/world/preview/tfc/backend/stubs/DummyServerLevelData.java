@@ -9,17 +9,16 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.border.WorldBorder.Settings;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.level.timers.TimerQueue;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class DummyServerLevelData implements ServerLevelData
 {
-    public @NotNull String getLevelName()
+    public String getLevelName()
     {
         return "dummy";
     }
 
-    public @NotNull BlockPos getSpawnPos()
+    public BlockPos getSpawnPos()
     {
         return BlockPos.ZERO;
     }
@@ -121,7 +120,7 @@ public class DummyServerLevelData implements ServerLevelData
         return 0;
     }
 
-    public void setWanderingTraderId(@NotNull UUID id)
+    public void setWanderingTraderId(UUID id)
     {
     }
 
@@ -129,7 +128,7 @@ public class DummyServerLevelData implements ServerLevelData
     {
     }
 
-    public @NotNull GameType getGameType()
+    public GameType getGameType()
     {
         return GameType.SPECTATOR;
     }
@@ -139,7 +138,7 @@ public class DummyServerLevelData implements ServerLevelData
         return false;
     }
 
-    public void setWorldBorder(@NotNull Settings serializer)
+    public void setWorldBorder(Settings serializer)
     {
     }
 
@@ -163,7 +162,7 @@ public class DummyServerLevelData implements ServerLevelData
         return false;
     }
 
-    public @NotNull GameRules getGameRules()
+    public GameRules getGameRules()
     {
         return new GameRules();
     }
@@ -172,7 +171,7 @@ public class DummyServerLevelData implements ServerLevelData
     {
     }
 
-    public @NotNull Difficulty getDifficulty()
+    public Difficulty getDifficulty()
     {
         return Difficulty.HARD;
     }
@@ -187,11 +186,11 @@ public class DummyServerLevelData implements ServerLevelData
         return false;
     }
 
-    public void setGameType(@NotNull GameType type)
+    public void setGameType(GameType type)
     {
     }
 
-    public void setSpawn(@NotNull BlockPos spawnPoint, float spawnAngle)
+    public void setSpawn(BlockPos spawnPoint, float spawnAngle)
     {
     }
 

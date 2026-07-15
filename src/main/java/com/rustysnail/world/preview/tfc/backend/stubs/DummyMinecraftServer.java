@@ -12,7 +12,6 @@ import net.minecraft.server.level.progress.ChunkProgressListenerFactory;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.util.debugchart.SampleLogger;
 import net.minecraft.world.level.storage.LevelStorageSource.LevelStorageAccess;
-import org.jetbrains.annotations.NotNull;
 
 public class DummyMinecraftServer extends MinecraftServer
 {
@@ -53,7 +52,7 @@ public class DummyMinecraftServer extends MinecraftServer
         return false;
     }
 
-    protected @NotNull SampleLogger getTickTimeLogger()
+    protected SampleLogger getTickTimeLogger()
     {
         return new SampleLogger()
         {
@@ -76,8 +75,7 @@ public class DummyMinecraftServer extends MinecraftServer
         return false;
     }
 
-    @NotNull
-    public SystemReport fillServerSystemReport(@NotNull SystemReport report)
+    public SystemReport fillServerSystemReport(SystemReport report)
     {
         return report;
     }
@@ -112,7 +110,7 @@ public class DummyMinecraftServer extends MinecraftServer
         return false;
     }
 
-    public boolean isSingleplayerOwner(@NotNull GameProfile profile)
+    public boolean isSingleplayerOwner(GameProfile profile)
     {
         return false;
     }

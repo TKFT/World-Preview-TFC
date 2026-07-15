@@ -15,7 +15,6 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
-import org.jetbrains.annotations.NotNull;
 
 public abstract class BaseMultiJsonResourceReloadListener extends SimplePreparableReloadListener<Map<ResourceLocation, List<JsonElement>>>
 {
@@ -27,7 +26,7 @@ public abstract class BaseMultiJsonResourceReloadListener extends SimplePreparab
         this.filename = filename;
     }
 
-    protected @NotNull Map<ResourceLocation, List<JsonElement>> prepare(ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    protected Map<ResourceLocation, List<JsonElement>> prepare(ResourceManager resourceManager, ProfilerFiller profiler)
     {
         Map<ResourceLocation, List<JsonElement>> res = new HashMap<>();
 

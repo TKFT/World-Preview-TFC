@@ -20,6 +20,8 @@ public class WorldPreviewConfig
     public boolean cacheInNew = false;
     public boolean enableCompression = true;
     public String colorMap = "world_preview_tfc:inferno";
+    public int landWaterExportLandColor = 0x8B9B65;
+    public int landWaterExportWaterColor = 0x173F5F;
     private int numThreads = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
 
     public int numThreads()

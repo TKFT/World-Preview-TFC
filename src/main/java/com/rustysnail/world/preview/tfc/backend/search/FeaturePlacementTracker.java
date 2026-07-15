@@ -38,7 +38,7 @@ public final class FeaturePlacementTracker
 
     public static void setWhitelist(Set<ResourceLocation> whitelist)
     {
-        WHITELIST = whitelist == null ? Set.of() : Set.copyOf(whitelist);
+        WHITELIST = Set.copyOf(whitelist);
     }
 
     public static void onFeaturePlaced(WorldGenLevel level, ResourceLocation id, BlockPos pos)

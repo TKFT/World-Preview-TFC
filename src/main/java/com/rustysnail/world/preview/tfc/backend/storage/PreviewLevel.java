@@ -45,7 +45,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.ticks.LevelTickAccess;
 import org.apache.commons.lang3.NotImplementedException;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class PreviewLevel implements WorldGenLevel
@@ -62,12 +61,12 @@ public class PreviewLevel implements WorldGenLevel
     }
 
     @Nullable
-    public ChunkAccess getChunk(int x, int z, @NotNull ChunkStatus requiredStatus, boolean nonnull)
+    public ChunkAccess getChunk(int x, int z, ChunkStatus requiredStatus, boolean nonnull)
     {
         return new ProtoChunk(new ChunkPos(x, z), UpgradeData.EMPTY, this.levelHeightAccessor, this.biomeRegistry, null);
     }
 
-    public int getHeight(@NotNull Types heightmapType, int x, int z)
+    public int getHeight(Types heightmapType, int x, int z)
     {
         throw new NotImplementedException("Not implemented");
     }
@@ -77,12 +76,12 @@ public class PreviewLevel implements WorldGenLevel
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull BiomeManager getBiomeManager()
+    public BiomeManager getBiomeManager()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
+    public Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
     {
         throw new NotImplementedException("Not implemented");
     }
@@ -97,17 +96,17 @@ public class PreviewLevel implements WorldGenLevel
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull DimensionType dimensionType()
+    public DimensionType dimensionType()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull RegistryAccess registryAccess()
+    public RegistryAccess registryAccess()
     {
         return this.registryAccess;
     }
 
-    public @NotNull FeatureFlagSet enabledFeatures()
+    public FeatureFlagSet enabledFeatures()
     {
         throw new NotImplementedException("Not implemented");
     }
@@ -117,7 +116,7 @@ public class PreviewLevel implements WorldGenLevel
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull ServerLevel getLevel()
+    public ServerLevel getLevel()
     {
         throw new NotImplementedException("Not implemented");
     }
@@ -127,22 +126,22 @@ public class PreviewLevel implements WorldGenLevel
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull LevelTickAccess<Block> getBlockTicks()
+    public LevelTickAccess<Block> getBlockTicks()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull LevelTickAccess<Fluid> getFluidTicks()
+    public LevelTickAccess<Fluid> getFluidTicks()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull LevelData getLevelData()
+    public LevelData getLevelData()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull DifficultyInstance getCurrentDifficultyAt(@NotNull BlockPos pos)
+    public DifficultyInstance getCurrentDifficultyAt(BlockPos pos)
     {
         throw new NotImplementedException("Not implemented");
     }
@@ -153,103 +152,103 @@ public class PreviewLevel implements WorldGenLevel
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull ChunkSource getChunkSource()
+    public ChunkSource getChunkSource()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull RandomSource getRandom()
+    public RandomSource getRandom()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public void playSound(@Nullable Player player, @NotNull BlockPos pos, @NotNull SoundEvent sound, @NotNull SoundSource source, float volume, float pitch)
+    public void playSound(@Nullable Player player, BlockPos pos, SoundEvent sound, SoundSource source, float volume, float pitch)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public void addParticle(@NotNull ParticleOptions particleData, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed)
+    public void addParticle(ParticleOptions particleData, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public void levelEvent(@Nullable Player player, int type, @NotNull BlockPos pos, int data)
+    public void levelEvent(@Nullable Player player, int type, BlockPos pos, int data)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public void gameEvent(@NotNull Holder<GameEvent> holder, @NotNull Vec3 vec3, @NotNull Context context)
+    public void gameEvent(Holder<GameEvent> holder, Vec3 vec3, Context context)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public float getShade(@NotNull Direction direction, boolean shade)
+    public float getShade(Direction direction, boolean shade)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull LevelLightEngine getLightEngine()
+    public LevelLightEngine getLightEngine()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull WorldBorder getWorldBorder()
+    public WorldBorder getWorldBorder()
     {
         throw new NotImplementedException("Not implemented");
     }
 
     @Nullable
-    public BlockEntity getBlockEntity(@NotNull BlockPos pos)
+    public BlockEntity getBlockEntity(BlockPos pos)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull BlockState getBlockState(@NotNull BlockPos pos)
+    public BlockState getBlockState(BlockPos pos)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull FluidState getFluidState(@NotNull BlockPos pos)
+    public FluidState getFluidState(BlockPos pos)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull List<Entity> getEntities(@Nullable Entity entity, @NotNull AABB area, @NotNull Predicate<? super Entity> predicate)
+    public List<Entity> getEntities(@Nullable Entity entity, AABB area, Predicate<? super Entity> predicate)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public <T extends Entity> @NotNull List<T> getEntities(@NotNull EntityTypeTest<Entity, T> entityTypeTest, @NotNull AABB bounds, @NotNull Predicate<? super T> predicate)
+    public <T extends Entity> List<T> getEntities(EntityTypeTest<Entity, T> entityTypeTest, AABB bounds, Predicate<? super T> predicate)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public @NotNull List<? extends Player> players()
+    public List<? extends Player> players()
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public boolean isStateAtPosition(@NotNull BlockPos pos, @NotNull Predicate<BlockState> state)
+    public boolean isStateAtPosition(BlockPos pos, Predicate<BlockState> state)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public boolean isFluidAtPosition(@NotNull BlockPos pos, @NotNull Predicate<FluidState> predicate)
+    public boolean isFluidAtPosition(BlockPos pos, Predicate<FluidState> predicate)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public boolean setBlock(@NotNull BlockPos pos, @NotNull BlockState state, int flags, int recursionLeft)
+    public boolean setBlock(BlockPos pos, BlockState state, int flags, int recursionLeft)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public boolean removeBlock(@NotNull BlockPos pos, boolean isMoving)
+    public boolean removeBlock(BlockPos pos, boolean isMoving)
     {
         throw new NotImplementedException("Not implemented");
     }
 
-    public boolean destroyBlock(@NotNull BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft)
+    public boolean destroyBlock(BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft)
     {
         throw new NotImplementedException("Not implemented");
     }

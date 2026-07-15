@@ -10,7 +10,6 @@ import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
-import org.jetbrains.annotations.NotNull;
 
 public class StructureMapReloadListener extends BaseMultiJsonResourceReloadListener
 {
@@ -89,7 +88,7 @@ public class StructureMapReloadListener extends BaseMultiJsonResourceReloadListe
         super("structure_icons.json");
     }
 
-    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    protected void apply(Map<ResourceLocation, List<JsonElement>> object, ResourceManager resourceManager, ProfilerFiller profiler)
     {
         WorldPreview worldPreview = WorldPreview.get();
         PreviewMappingData previewMappingData = worldPreview.biomeColorMap();

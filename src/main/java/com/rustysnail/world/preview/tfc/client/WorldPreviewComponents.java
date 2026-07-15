@@ -86,6 +86,20 @@ public class WorldPreviewComponents
     public static final Component SEARCH_BIOME_NOT_FOUND = Component.translatable("world_preview_tfc.preview.search.not-found");
     public static final Component SEARCH_BIOME_CANCELLED = Component.translatable("world_preview_tfc.preview.search.cancelled");
     public static final Component SEARCH_BIOME_ERROR = Component.translatable("world_preview_tfc.preview.search.error");
+    public static final Component LAND_WATER_EXPORT_TITLE = Component.translatable("world_preview_tfc.export.land_water.title");
+    public static final Component LAND_WATER_EXPORT_HEAD = Component.translatable("world_preview_tfc.export.land_water.head");
+    public static final Component LAND_WATER_EXPORT_CENTER_X = Component.translatable("world_preview_tfc.export.land_water.center_x");
+    public static final Component LAND_WATER_EXPORT_CENTER_Z = Component.translatable("world_preview_tfc.export.land_water.center_z");
+    public static final Component LAND_WATER_EXPORT_DESC = Component.translatable("world_preview_tfc.export.land_water.description");
+    public static final Component LAND_WATER_EXPORT_50K = Component.translatable("world_preview_tfc.export.land_water.50k");
+    public static final Component LAND_WATER_EXPORT_100K = Component.translatable("world_preview_tfc.export.land_water.100k");
+    public static final Component LAND_WATER_EXPORT_BOTH = Component.translatable("world_preview_tfc.export.land_water.both");
+    public static final Component LAND_WATER_EXPORT_CANCEL = Component.translatable("world_preview_tfc.export.land_water.cancel");
+    public static final Component LAND_WATER_EXPORT_IDLE = Component.translatable("world_preview_tfc.export.land_water.idle");
+    public static final Component LAND_WATER_EXPORT_UNAVAILABLE = Component.translatable("world_preview_tfc.export.land_water.unavailable");
+    public static final Component LAND_WATER_EXPORT_CANCELLING = Component.translatable("world_preview_tfc.export.land_water.cancelling");
+    public static final Component LAND_WATER_EXPORT_COMPLETE = Component.translatable("world_preview_tfc.export.land_water.complete");
+    public static final Component LAND_WATER_EXPORT_CANCELLED = Component.translatable("world_preview_tfc.export.land_water.cancelled");
     // TFC view-mode toggle buttons
     public static final Component BTN_TOGGLE_FEATURES = Component.translatable("world_preview_tfc.button.toggle_features");
     public static final Component BTN_TFC_TEMPERATURE = Component.translatable("world_preview_tfc.button.tfc_temperature");

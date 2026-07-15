@@ -3,6 +3,7 @@ package com.rustysnail.world.preview.tfc.client.gui.screens;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -34,6 +35,11 @@ import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.ColorMap;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportController;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.Context;
+import com.rustysnail.world.preview.tfc.backend.export.TFCLandWaterClassifier;
 import com.rustysnail.world.preview.tfc.backend.search.FeatureDetectors;
 import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
@@ -85,6 +91,7 @@ import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -180,6 +187,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final Button searchBiomeButton;
     private final Checkbox islandCheckbox;
     private final ExecutorService biomeSearchExecutor = Executors.newSingleThreadExecutor();
+    private final LandWaterExportController landWaterExporter;
     private BiomeSearchTask currentSearchTask = null;
     private boolean isSearching = false;
 
@@ -195,6 +203,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.previewMappingData = this.worldPreview.biomeColorMap();
         this.renderSettings = this.worldPreview.renderSettings();
         this.serverThreadPoolExecutor = this.worldPreview.serverThreadPoolExecutor();
+        this.landWaterExporter = new LandWaterExportController(this.cfg.numThreads());
         this.seedEdit = new EditBox(font, 0, 0, 100, 18, WorldPreviewComponents.SEED_FIELD);
         this.seedEdit.setHint(WorldPreviewComponents.SEED_FIELD);
         this.seedEdit.setValue(this.dataProvider.seed());
@@ -1664,6 +1673,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public void close()
     {
+        this.landWaterExporter.close();
         this.cancelBiomeSearch();
         this.biomeSearchExecutor.shutdownNow();
         this.reloadExecutor.shutdownNow();
@@ -2097,6 +2107,79 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             }
         }
         return 0;
+    }
+
+    public @Nullable String startLandWaterExport(List<LandWaterExportPreset> presets, int centerX, int centerZ)
+    {
+        if (this.isUpdating || !this.workManager.hasWorldSeed())
+        {
+            return "The preview world-generation state is still loading.";
+        }
+
+        TFCSampleUtils tfc = this.workManager.tfcSampleUtils();
+        SampleUtils samples = this.workManager.sampleUtils();
+        if (tfc == null || samples == null)
+        {
+            return "The selected generator does not expose TFC land/water data.";
+        }
+
+        try
+        {
+            for (LandWaterExportPreset preset : presets)
+            {
+                preset.spec().bounds(centerX, centerZ);
+            }
+        }
+        catch (ArithmeticException e)
+        {
+            return "The selected center is too close to the integer world-coordinate limit.";
+        }
+
+        long numericSeed = this.workManager.worldSeed();
+        String enteredSeed = this.dataProvider.seed();
+        if (enteredSeed == null || enteredSeed.isBlank())
+        {
+            enteredSeed = Long.toString(numericSeed);
+        }
+        Path outputDirectory = this.minecraft.gameDirectory.toPath().resolve("world-preview-exports");
+        Context context = new LandWaterMapExporter.Context(
+            enteredSeed,
+            numericSeed,
+            samples.dimension().location().toString(),
+            centerX,
+            centerZ,
+            outputDirectory,
+            this.cfg.landWaterExportLandColor,
+            this.cfg.landWaterExportWaterColor,
+            modVersion("world_preview_tfc", "unknown"),
+            true,
+            modVersion("tfc", null),
+            modVersion("tfc_large_biomes", null)
+        );
+        TFCLandWaterClassifier classifier = new TFCLandWaterClassifier();
+        boolean started = this.landWaterExporter.start(
+            presets,
+            context,
+            (quartX, quartZ) -> classifier.classify(tfc.sampleBiomeExtensionQuart(quartX, quartZ))
+        );
+        return started ? null : "A land/water export is already running.";
+    }
+
+    public void cancelLandWaterExport()
+    {
+        this.landWaterExporter.cancel();
+    }
+
+    public LandWaterExportController.Status landWaterExportStatus()
+    {
+        return this.landWaterExporter.status();
+    }
+
+    private static @Nullable String modVersion(String modId, @Nullable String fallback)
+    {
+        return ModList.get().getModContainerById(modId)
+            .map(container -> container.getModInfo().getVersion().toString())
+            .orElse(fallback);
     }
 
     public PreviewContainerDataProvider dataProvider()

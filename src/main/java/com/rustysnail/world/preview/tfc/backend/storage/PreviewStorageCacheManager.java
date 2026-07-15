@@ -19,8 +19,6 @@ import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
 
 public interface PreviewStorageCacheManager
 {
-    //int CACHE_FORMAT_VERSION = 1;
-
     PreviewStorage loadPreviewStorage(long seed, int yMin, int yMax);
 
     void storePreviewStorage(long seed, PreviewStorage storage);
@@ -38,23 +36,9 @@ public interface PreviewStorageCacheManager
         flags |= 1536L;
         flags |= 20480L;
         flags |= cfg.enableCompression ? 65536L : 0L;
-        // Cache format bump: the combined TFC work unit now records completion on a dedicated flag
-        // (TFC_GENERATION_COMPLETE_FLAG) instead of the temperature section. Changing the cache key
-        // makes pre-bump caches (whose completion markers meant "temperature only") be ignored, so
-        // forest/tree sections are regenerated rather than served empty.
         flags |= 131072L;
-        // Second bump: tree-species ids are now assigned by the runtime TFCTreeSpeciesRegistry
-        // (ResourceLocation-sorted) and special water/invalid values moved to 32760-32763, so stored
-        // tree-species values from older caches are no longer meaningful.
         flags |= 262144L;
-        // Third bump (Commit H0): the PreviewStorage section-flag namespace widened from 4 to 8 bits
-        // and the packed section-key layout changed (28-bit sX << 36 | 28-bit sZ << 8 | 8-bit flag,
-        // was 30-bit sX << 34 | 30-bit sZ << 4 | 4-bit flag). Old serialized keys are incompatible,
-        // so pre-bump caches must be ignored (we do not migrate them).
         flags |= 524288L;
-        // Fourth bump (Commit H1): new TFC_CROP_SUITABILITY section (flag 16). Crop sections are
-        // crop-specific and session-only (invalidated whenever the selected crop / water mode changes),
-        // so they must never be reinterpreted across a format change.
         flags |= 1048576L;
         return String.format("%s-%d-%d", settings.dimension, settings.pixelsPerChunk(), flags)
             .replace(":", "_")

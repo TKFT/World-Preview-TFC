@@ -47,7 +47,7 @@ public class SeedSearchEngine implements Runnable
     private final Object pauseLock = new Object();
     private volatile boolean cancelled = false;
     private volatile boolean paused = false;
-    private java.lang.reflect.Method cachedWithSeedMethod;
+    @Nullable private java.lang.reflect.Method cachedWithSeedMethod;
     private boolean withSeedMethodLookedUp = false;
 
     public SeedSearchEngine(
@@ -186,7 +186,7 @@ public class SeedSearchEngine implements Runnable
             }
 
             HeightSampler heights = null;
-            if (this.registryAccess != null && this.heightAccessor != null)
+            if (this.registryAccess != null)
             {
                 final NoiseGeneratorSettings settings =
                     (seededGen instanceof NoiseBasedChunkGenerator nbg)

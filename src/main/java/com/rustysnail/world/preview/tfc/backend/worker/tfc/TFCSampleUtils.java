@@ -723,10 +723,13 @@ public class TFCSampleUtils
      */
     public @Nullable BiomeExtension sampleBiomeExtension(int blockX, int blockZ)
     {
-        return this.biomeSource.getBiomeExtension(
-            QuartPos.fromBlock(blockX),
-            QuartPos.fromBlock(blockZ)
-        );
+        return sampleBiomeExtensionQuart(QuartPos.fromBlock(blockX), QuartPos.fromBlock(blockZ));
+    }
+
+    /** Direct quart-coordinate variant used by large diagnostic exports. */
+    public @Nullable BiomeExtension sampleBiomeExtensionQuart(int quartX, int quartZ)
+    {
+        return this.biomeSource.getBiomeExtension(quartX, quartZ);
     }
 
     public Region.Point samplePoint(int blockX, int blockZ)

@@ -8,7 +8,6 @@ import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
-import org.jetbrains.annotations.NotNull;
 
 public class RockTypeColorReloadListener extends BaseMultiJsonResourceReloadListener
 {
@@ -17,7 +16,7 @@ public class RockTypeColorReloadListener extends BaseMultiJsonResourceReloadList
         super("rock_type_colors.json");
     }
 
-    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    protected void apply(Map<ResourceLocation, List<JsonElement>> object, ResourceManager resourceManager, ProfilerFiller profiler)
     {
         WorldPreview worldPreview = WorldPreview.get();
         PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
