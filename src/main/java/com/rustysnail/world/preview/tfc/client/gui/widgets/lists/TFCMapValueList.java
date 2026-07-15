@@ -1,5 +1,7 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.function.Consumer;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -9,9 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.function.Consumer;
 
 /**
  * Scrollable side list of forest-type / tree-species categories, modeled on {@link BiomesList}
@@ -127,12 +126,6 @@ public class TFCMapValueList extends BaseObjectSelectionList<TFCMapValueList.Val
             return Component.translatable("narrator.select", this.name);
         }
 
-        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
-        {
-            guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
-            guiGraphics.drawString(TFCMapValueList.this.minecraft.font, this.name, k + 16, j + 2, 16777215);
-        }
-
         public boolean mouseClicked(double d, double e, int i)
         {
             if (i != 0)
@@ -148,6 +141,12 @@ public class TFCMapValueList extends BaseObjectSelectionList<TFCMapValueList.Val
                 return false;
             }
             return true;
+        }
+
+        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
+        {
+            guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
+            guiGraphics.drawString(TFCMapValueList.this.minecraft.font, this.name, k + 16, j + 2, 16777215);
         }
     }
 }

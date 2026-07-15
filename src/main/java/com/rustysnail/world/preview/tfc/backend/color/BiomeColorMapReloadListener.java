@@ -1,15 +1,15 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -17,6 +17,41 @@ import org.jetbrains.annotations.NotNull;
 
 public class BiomeColorMapReloadListener extends BaseMultiJsonResourceReloadListener
 {
+    public static Map<ResourceLocation, PreviewMappingData.ColorEntry> parseColorData(
+        JsonElement jsonElement, PreviewData.DataSource dataSource
+    )
+    {
+        Map<ResourceLocation, PreviewMappingData.ColorEntry> res = new HashMap<>();
+        JsonObject obj = jsonElement.getAsJsonObject();
+
+        for (Entry<String, JsonElement> entry : obj.entrySet())
+        {
+            ResourceLocation location = ResourceLocation.parse(entry.getKey());
+            PreviewMappingData.ColorEntry value = new PreviewMappingData.ColorEntry();
+            JsonElement rawEl = entry.getValue();
+            value.dataSource = dataSource;
+
+            try
+            {
+                JsonObject raw = rawEl.getAsJsonObject();
+                JsonElement caveEl = raw.get("cave");
+                value.name = ColorJsonParsingHelper.parseOptionalName(raw);
+                value.cave = caveEl == null ? null : caveEl.getAsBoolean();
+                value.color = ColorJsonParsingHelper.parsePackedRgbColor(raw);
+            }
+            catch (UnsupportedOperationException | NullPointerException | IllegalStateException e)
+            {
+                WorldPreview.LOGGER.warn("   - {}: Invalid color entry format: {}", location, e.getMessage());
+                continue;
+            }
+
+            WorldPreview.LOGGER.debug("   - {}: {}", location, String.format("0x%06X", value.color & 0xFFFFFF));
+            res.put(location, value);
+        }
+
+        return res;
+    }
+
     public BiomeColorMapReloadListener()
     {
         super("biome_colors.json");
@@ -58,40 +93,5 @@ public class BiomeColorMapReloadListener extends BaseMultiJsonResourceReloadList
             Map<ResourceLocation, PreviewMappingData.ColorEntry> curr = parseColorData(el, PreviewData.DataSource.CONFIG);
             previewMappingData.update(curr);
         }
-    }
-
-    public static Map<ResourceLocation, PreviewMappingData.ColorEntry> parseColorData(
-        JsonElement jsonElement, PreviewData.DataSource dataSource
-    )
-    {
-        Map<ResourceLocation, PreviewMappingData.ColorEntry> res = new HashMap<>();
-        JsonObject obj = jsonElement.getAsJsonObject();
-
-        for (Entry<String, JsonElement> entry : obj.entrySet())
-        {
-            ResourceLocation location = ResourceLocation.parse(entry.getKey());
-            PreviewMappingData.ColorEntry value = new PreviewMappingData.ColorEntry();
-            JsonElement rawEl = entry.getValue();
-            value.dataSource = dataSource;
-
-            try
-            {
-                JsonObject raw = rawEl.getAsJsonObject();
-                JsonElement caveEl = raw.get("cave");
-                value.name = ColorJsonParsingHelper.parseOptionalName(raw);
-                value.cave = caveEl == null ? null : caveEl.getAsBoolean();
-                value.color = ColorJsonParsingHelper.parsePackedRgbColor(raw);
-            }
-            catch (UnsupportedOperationException | NullPointerException | IllegalStateException e)
-            {
-                WorldPreview.LOGGER.warn("   - {}: Invalid color entry format: {}", location, e.getMessage());
-                continue;
-            }
-
-            WorldPreview.LOGGER.debug("   - {}: {}", location, String.format("0x%06X", value.color & 0xFFFFFF));
-            res.put(location, value);
-        }
-
-        return res;
     }
 }

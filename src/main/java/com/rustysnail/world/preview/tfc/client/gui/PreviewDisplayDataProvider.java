@@ -1,13 +1,14 @@
 package com.rustysnail.world.preview.tfc.client.gui;
 
+import java.util.UUID;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomesList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.StructuresList;
-import com.mojang.blaze3d.platform.NativeImage;
 import it.unimi.dsi.fastutil.shorts.Short2LongMap;
-import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -32,6 +33,9 @@ public interface PreviewDisplayDataProvider
 
     @Nullable
     SearchableFeature feature4Id(int id);
+
+    @Nullable
+    Component featureVariantName(int featureId, BlockPos center);
 
     ItemStack[] structureItems();
 

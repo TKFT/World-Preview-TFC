@@ -1,21 +1,21 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Predicate;
 import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import com.rustysnail.world.preview.tfc.mixin.NoiseChunkAccessor;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Predicate;
-import net.minecraft.core.QuartPos;
 import net.minecraft.core.BlockPos.MutableBlockPos;
+import net.minecraft.core.QuartPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap.Types;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseSettings;
-import net.minecraft.world.level.levelgen.Heightmap.Types;
 
 public class HeightmapWorkUnit extends WorkUnit
 {
@@ -27,6 +27,12 @@ public class HeightmapWorkUnit extends WorkUnit
         super(sampleUtils, chunkPos, previewData, 0);
         this.sampler = sampler;
         this.numChunks = numChunks;
+    }
+
+    @Override
+    public long flags()
+    {
+        return 2L;
     }
 
     @Override
@@ -118,12 +124,6 @@ public class HeightmapWorkUnit extends WorkUnit
         }
 
         return List.of(result);
-    }
-
-    @Override
-    public long flags()
-    {
-        return 2L;
     }
 
     private record XZPair(int x, double dX, int z, double dZ)

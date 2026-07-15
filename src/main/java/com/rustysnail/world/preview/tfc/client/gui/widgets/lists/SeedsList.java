@@ -41,22 +41,10 @@ public class SeedsList extends BaseObjectSelectionList<SeedsList.SeedEntry>
             this.deleteButton.active = SeedsList.this.seedCanChange;
         }
 
-        private void deleteEntry(Button btn)
-        {
-            this.seedsList.previewContainer.deleteSeed(this.seed);
-        }
-
         @NotNull
         public Component getNarration()
         {
             return Component.translatable("narrator.select", this.seed);
-        }
-
-        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
-        {
-            guiGraphics.drawString(this.seedsList.minecraft.font, this.seed, left + 4, top + 6, SeedsList.this.seedCanChange ? 16777215 : 10066329);
-            this.deleteButton.setPosition(this.seedsList.getRowRight() - 22, top);
-            this.deleteButton.render(guiGraphics, mouseX, mouseY, partialTick);
         }
 
         public boolean mouseClicked(double d, double e, int i)
@@ -84,6 +72,18 @@ public class SeedsList extends BaseObjectSelectionList<SeedsList.SeedEntry>
                     return false;
                 }
             }
+        }
+
+        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
+        {
+            guiGraphics.drawString(this.seedsList.minecraft.font, this.seed, left + 4, top + 6, SeedsList.this.seedCanChange ? 16777215 : 10066329);
+            this.deleteButton.setPosition(this.seedsList.getRowRight() - 22, top);
+            this.deleteButton.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
+        private void deleteEntry(Button btn)
+        {
+            this.seedsList.previewContainer.deleteSeed(this.seed);
         }
     }
 }

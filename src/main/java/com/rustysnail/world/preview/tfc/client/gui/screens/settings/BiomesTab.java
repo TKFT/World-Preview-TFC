@@ -1,5 +1,12 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
@@ -8,13 +15,6 @@ import com.rustysnail.world.preview.tfc.client.gui.widgets.ColorChooser;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomesList;
 import com.rustysnail.world.preview.tfc.mixin.client.CheckboxAccessor;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -42,11 +42,11 @@ public class BiomesTab implements Tab
     private final CycleButton<BiomeListFilter> filterCycleButton;
     private final List<AbstractWidget> toRender = new ArrayList<>();
     private final ColorChooser colorChooser;
-    private BiomesList.BiomeEntry selectedEntry;
-    private boolean blockUpdates = false;
     private final Button resetBtn;
     private final Button applyBtn;
     private final Checkbox isCaveCB;
+    private BiomesList.BiomeEntry selectedEntry;
+    private boolean blockUpdates = false;
 
     public BiomesTab(Minecraft _minecraft, PreviewContainer _previewTab)
     {
@@ -134,24 +134,6 @@ public class BiomesTab implements Tab
         rowHelper.addChild(statusLabel, 2);
     }
 
-    private void updateStatus()
-    {
-        if (this.selectedEntry != null)
-        {
-            this.resetBtn.active = this.selectedEntry.color() != this.colorChooser.colorRGB()
-                || this.selectedEntry.isCave() != this.isCaveCB.selected()
-                || this.selectedEntry.dataSource() == PreviewData.DataSource.CONFIG;
-            this.applyBtn.active = this.selectedEntry.color() != this.colorChooser.colorRGB() || this.selectedEntry.isCave() != this.isCaveCB.selected();
-            this.isCaveCB.active = true;
-        }
-        else
-        {
-            this.resetBtn.active = false;
-            this.applyBtn.active = false;
-            this.isCaveCB.active = false;
-        }
-    }
-
     @NotNull
     public Component getTabTitle()
     {
@@ -182,6 +164,24 @@ public class BiomesTab implements Tab
         left = this.colorChooser.getX() + this.colorChooser.getWidth();
         ScreenRectangle controlRectangle = new ScreenRectangle(left, top + 2, screenRectangle.right() - left + 16, bottom - top - 2);
         FrameLayout.alignInRectangle(this.layout, controlRectangle, 0.5F, 0.5F);
+    }
+
+    private void updateStatus()
+    {
+        if (this.selectedEntry != null)
+        {
+            this.resetBtn.active = this.selectedEntry.color() != this.colorChooser.colorRGB()
+                || this.selectedEntry.isCave() != this.isCaveCB.selected()
+                || this.selectedEntry.dataSource() == PreviewData.DataSource.CONFIG;
+            this.applyBtn.active = this.selectedEntry.color() != this.colorChooser.colorRGB() || this.selectedEntry.isCave() != this.isCaveCB.selected();
+            this.isCaveCB.active = true;
+        }
+        else
+        {
+            this.resetBtn.active = false;
+            this.applyBtn.active = false;
+            this.isCaveCB.active = false;
+        }
     }
 
     private boolean validateMaxInt(String in, int max)
@@ -248,6 +248,11 @@ public class BiomesTab implements Tab
         DATA_PACK(x -> x.dataSource() == PreviewData.DataSource.RESOURCE),
         DATA_PACK_CUSTOM(x -> x.dataSource() == PreviewData.DataSource.RESOURCE || x.dataSource() == PreviewData.DataSource.CONFIG);
 
+        public static Component toComponent(BiomeListFilter x)
+        {
+            return Component.translatable("world_preview_tfc.settings.biomes.filter." + x.name());
+        }
+
         private final Predicate<BiomesList.BiomeEntry> filterFn;
 
         BiomeListFilter(Predicate<BiomesList.BiomeEntry> filterFn)
@@ -258,11 +263,6 @@ public class BiomesTab implements Tab
         public List<BiomesList.BiomeEntry> apply(List<BiomesList.BiomeEntry> orig)
         {
             return orig.stream().filter(this.filterFn).toList();
-        }
-
-        public static Component toComponent(BiomeListFilter x)
-        {
-            return Component.translatable("world_preview_tfc.settings.biomes.filter." + x.name());
         }
     }
 }

@@ -1,12 +1,12 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.Objects;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import com.rustysnail.world.preview.tfc.client.gui.PreviewDisplayDataProvider;
 import com.rustysnail.world.preview.tfc.client.gui.screens.PreviewContainer;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.ToggleButton;
-import com.mojang.blaze3d.platform.NativeImage;
-import java.util.Collection;
-import java.util.Objects;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -48,6 +48,7 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
 
     public class StructureEntry extends Entry<StructureEntry> implements PreviewDisplayDataProvider.StructureRenderInfo
     {
+        public final ToggleButton toggleVisible;
         private final short id;
         private final Item item;
         private final ItemStack itemStack;
@@ -59,7 +60,6 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
         private final boolean showByDefault;
         private final boolean isPrimaryNamespace;
         private boolean show;
-        public final ToggleButton toggleVisible;
 
         public StructureEntry(
             short id,
@@ -102,11 +102,6 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             this.toggleVisible.selected = this.show;
         }
 
-        private void toggleVisible(Button btn)
-        {
-            this.show = this.toggleVisible.selected;
-        }
-
         @Override
         public Tooltip tooltip()
         {
@@ -117,6 +112,17 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
         public Component getNarration()
         {
             return Component.empty();
+        }
+
+        public boolean mouseClicked(double mouseX, double mouseY, int button)
+        {
+            StructuresList.this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+            if (this.toggleVisible.isMouseOver(mouseX, mouseY))
+            {
+                this.toggleVisible.onClick(mouseX, mouseY);
+            }
+
+            return true;
         }
 
         public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
@@ -140,17 +146,6 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             this.toggleVisible.render(guiGraphics, mouseX, mouseY, partialTick);
         }
 
-        public boolean mouseClicked(double mouseX, double mouseY, int button)
-        {
-            StructuresList.this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
-            if (this.toggleVisible.isMouseOver(mouseX, mouseY))
-            {
-                this.toggleVisible.onClick(mouseX, mouseY);
-            }
-
-            return true;
-        }
-
         public String name()
         {
             return this.name;
@@ -170,6 +165,11 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
         public ItemStack itemStack()
         {
             return this.itemStack;
+        }
+
+        private void toggleVisible(Button btn)
+        {
+            this.show = this.toggleVisible.selected;
         }
     }
 }

@@ -1,6 +1,10 @@
 package com.rustysnail.world.preview.tfc.backend.storage;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,6 +19,56 @@ public class PreviewSectionStructure extends PreviewSection
     private static final long serialVersionUID = -3170004481651979128L;
     private transient List<PreviewStruct> structures = new ArrayList<>();
     private transient List<PreviewFeature> features = new ArrayList<>();
+
+    public PreviewSectionStructure(int quartX, int quartZ)
+    {
+        super(quartX, quartZ);
+    }
+
+    @Override
+    public int size()
+    {
+        return this.structures.size();
+    }
+
+    @Override
+    public short get(int x, int z)
+    {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public void set(int x, int z, short biome)
+    {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public synchronized List<PreviewStruct> structures()
+    {
+        return new ArrayList<>(this.structures);
+    }
+
+    @Override
+    public synchronized void addStructure(PreviewStruct structureData)
+    {
+        this.structures.add(structureData);
+    }
+
+    @Override
+    public synchronized List<PreviewFeature> features()
+    {
+        return new ArrayList<>(this.features);
+    }
+
+    @Override
+    public synchronized void addFeature(PreviewFeature feature)
+    {
+        if (!this.features.contains(feature))
+        {
+            this.features.add(feature);
+        }
+    }
 
     @Serial
     private void writeObject(ObjectOutputStream oos) throws IOException
@@ -48,53 +102,6 @@ public class PreviewSectionStructure extends PreviewSection
             // Handle older serialized data without features
             this.features = new ArrayList<>();
         }
-    }
-
-    public PreviewSectionStructure(int quartX, int quartZ)
-    {
-        super(quartX, quartZ);
-    }
-
-    @Override
-    public synchronized List<PreviewStruct> structures()
-    {
-        return new ArrayList<>(this.structures);
-    }
-
-    @Override
-    public synchronized void addStructure(PreviewStruct structureData)
-    {
-        this.structures.add(structureData);
-    }
-
-    @Override
-    public synchronized List<PreviewFeature> features()
-    {
-        return new ArrayList<>(this.features);
-    }
-
-    @Override
-    public synchronized void addFeature(PreviewFeature feature)
-    {
-        this.features.add(feature);
-    }
-
-    @Override
-    public short get(int x, int z)
-    {
-        throw new NotImplementedException();
-    }
-
-    @Override
-    public void set(int x, int z, short biome)
-    {
-        throw new NotImplementedException();
-    }
-
-    @Override
-    public int size()
-    {
-        return this.structures.size();
     }
 
     record SerializablePreviewStruct(int cX, int cY, int cZ, short structureId, int bbMinX, int bbMinY, int bbMinZ, int bbMaxX, int bbMaxY, int bbMaxZ)

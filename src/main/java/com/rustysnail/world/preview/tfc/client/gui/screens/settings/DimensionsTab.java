@@ -1,12 +1,12 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.List;
+import java.util.function.Consumer;
 import com.rustysnail.world.preview.tfc.RenderSettings;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BaseObjectSelectionList;
-import java.util.List;
-import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -102,11 +102,6 @@ public class DimensionsTab implements Tab
                 return Component.literal("");
             }
 
-            public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
-            {
-                guiGraphics.drawString(DimensionList.this.minecraft.font, this.component, left + 5, top + 2, 16777215);
-            }
-
             public boolean mouseClicked(double d, double e, int i)
             {
                 if (i != 0)
@@ -119,6 +114,11 @@ public class DimensionsTab implements Tab
                     DimensionsTab.this.renderSettings.dimension = this.dimensionKey;
                     return true;
                 }
+            }
+
+            public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
+            {
+                guiGraphics.drawString(DimensionList.this.minecraft.font, this.component, left + 5, top + 2, 16777215);
             }
         }
     }

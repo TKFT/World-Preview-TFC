@@ -1,5 +1,6 @@
 package com.rustysnail.world.preview.tfc.mixin;
 
+import java.util.Optional;
 import com.rustysnail.world.preview.tfc.backend.search.FeaturePlacementTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -13,8 +14,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Optional;
 
 @Mixin(PlacedFeature.class)
 public abstract class MixinPlacedFeature

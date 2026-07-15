@@ -1,19 +1,5 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-
-import net.dries007.tfc.world.feature.tree.ForestConfig;
-
-import net.minecraft.core.Holder;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
-import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -22,6 +8,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import com.rustysnail.world.preview.tfc.WorldPreview;
+import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+import org.jetbrains.annotations.Nullable;
+
+import net.dries007.tfc.world.feature.tree.ForestConfig;
 
 /**
  * Runtime registry of tree species, built from the configured-feature registry so that TFC trees
@@ -35,57 +32,7 @@ import java.util.Set;
  */
 public final class TFCTreeSpeciesRegistry
 {
-    private final Map<ResourceLocation, Short> speciesToId;
-    private final List<ResourceLocation> idToSpecies;
-    private final Map<ResourceLocation, ForestConfig.Entry> entryBySpecies;
-
-    private TFCTreeSpeciesRegistry(List<ResourceLocation> sortedSpecies, Map<ResourceLocation, ForestConfig.Entry> entries)
-    {
-        this.idToSpecies = List.copyOf(sortedSpecies);
-        this.entryBySpecies = Map.copyOf(entries);
-        Map<ResourceLocation, Short> toId = new HashMap<>();
-        for (short i = 0; i < sortedSpecies.size(); i++)
-        {
-            toId.put(sortedSpecies.get(i), i);
-        }
-        this.speciesToId = Map.copyOf(toId);
-    }
-
-    // ---------------------------------------------------------------- known TFC colors
-
-    private static ResourceLocation tfc(String path)
-    {
-        return ResourceLocation.fromNamespaceAndPath("tfc", path);
-    }
-
     private static final Map<ResourceLocation, Integer> KNOWN_COLORS = buildKnownColors();
-
-    private static Map<ResourceLocation, Integer> buildKnownColors()
-    {
-        Map<ResourceLocation, Integer> m = new HashMap<>();
-        m.put(tfc("acacia"), 0xFFD8A34D);
-        m.put(tfc("ash"), 0xFFA7B97A);
-        m.put(tfc("aspen"), 0xFFE7DC85);
-        m.put(tfc("birch"), 0xFFDCE7B5);
-        m.put(tfc("blackwood"), 0xFF2E4A39);
-        m.put(tfc("chestnut"), 0xFF8F6A3F);
-        m.put(tfc("douglas_fir"), 0xFF2E5F49);
-        m.put(tfc("hickory"), 0xFF86984A);
-        m.put(tfc("kapok"), 0xFF2F9C5C);
-        m.put(tfc("mangrove"), 0xFF3E5C4B);
-        m.put(tfc("maple"), 0xFFCB7C46);
-        m.put(tfc("oak"), 0xFF4F8C45);
-        m.put(tfc("palm"), 0xFF7FCB61);
-        m.put(tfc("pine"), 0xFF2F7440);
-        m.put(tfc("rosewood"), 0xFF7C4A62);
-        m.put(tfc("sequoia"), 0xFF234F3D);
-        m.put(tfc("spruce"), 0xFF3F6F58);
-        m.put(tfc("sycamore"), 0xFF7AB48C);
-        m.put(tfc("white_cedar"), 0xFF66937B);
-        m.put(tfc("willow"), 0xFF75B05D);
-        return Map.copyOf(m);
-    }
-
     // Muted, tree-like fallback colors (greens, olives, browns, golds, muted purples) for addon
     // species that have no curated color. Chosen by location hash so a species is always the same.
     private static final int[] FALLBACK_PALETTE = {
@@ -102,8 +49,6 @@ public final class TFCTreeSpeciesRegistry
         0xFF4A6E52, // deep green
         0xFF8C7853, // taupe
     };
-
-    // ---------------------------------------------------------------- construction
 
     /**
      * Builds the registry by scanning every configured feature: for a {@link ForestConfig} it walks
@@ -158,7 +103,9 @@ public final class TFCTreeSpeciesRegistry
         }
     }
 
-    /** Registry containing only the known TFC species (used before a world loads or on failure). */
+    /**
+     * Registry containing only the known TFC species (used before a world loads or on failure).
+     */
     public static TFCTreeSpeciesRegistry fallback()
     {
         List<ResourceLocation> sorted = new ArrayList<>(KNOWN_COLORS.keySet());
@@ -166,7 +113,7 @@ public final class TFCTreeSpeciesRegistry
         return new TFCTreeSpeciesRegistry(sorted, Map.of());
     }
 
-    // ---------------------------------------------------------------- species id derivation
+    // ---------------------------------------------------------------- known TFC colors
 
     /**
      * Species location for a {@code ForestConfig.Entry} holder. Prefers the entry holder's own key,
@@ -179,6 +126,37 @@ public final class TFCTreeSpeciesRegistry
             .map(ResourceKey::location)
             .orElseGet(() -> entry.treeFeature().unwrapKey().map(ResourceKey::location).orElse(null));
         return key == null ? tfc("tree") : normalize(key);
+    }
+
+    private static ResourceLocation tfc(String path)
+    {
+        return ResourceLocation.fromNamespaceAndPath("tfc", path);
+    }
+
+    private static Map<ResourceLocation, Integer> buildKnownColors()
+    {
+        Map<ResourceLocation, Integer> m = new HashMap<>();
+        m.put(tfc("acacia"), 0xFFD8A34D);
+        m.put(tfc("ash"), 0xFFA7B97A);
+        m.put(tfc("aspen"), 0xFFE7DC85);
+        m.put(tfc("birch"), 0xFFDCE7B5);
+        m.put(tfc("blackwood"), 0xFF2E4A39);
+        m.put(tfc("chestnut"), 0xFF8F6A3F);
+        m.put(tfc("douglas_fir"), 0xFF2E5F49);
+        m.put(tfc("hickory"), 0xFF86984A);
+        m.put(tfc("kapok"), 0xFF2F9C5C);
+        m.put(tfc("mangrove"), 0xFF3E5C4B);
+        m.put(tfc("maple"), 0xFFCB7C46);
+        m.put(tfc("oak"), 0xFF4F8C45);
+        m.put(tfc("palm"), 0xFF7FCB61);
+        m.put(tfc("pine"), 0xFF2F7440);
+        m.put(tfc("rosewood"), 0xFF7C4A62);
+        m.put(tfc("sequoia"), 0xFF234F3D);
+        m.put(tfc("spruce"), 0xFF3F6F58);
+        m.put(tfc("sycamore"), 0xFF7AB48C);
+        m.put(tfc("white_cedar"), 0xFF66937B);
+        m.put(tfc("willow"), 0xFF75B05D);
+        return Map.copyOf(m);
     }
 
     private static ResourceLocation normalize(ResourceLocation key)
@@ -204,7 +182,74 @@ public final class TFCTreeSpeciesRegistry
         return ResourceLocation.fromNamespaceAndPath(key.getNamespace(), path); // keep namespace
     }
 
+    // ---------------------------------------------------------------- construction
+
+    private static int fallbackColor(ResourceLocation rl)
+    {
+        int idx = Math.floorMod(rl.toString().hashCode(), FALLBACK_PALETTE.length);
+        return FALLBACK_PALETTE[idx];
+    }
+
+    private static String titleCase(String path)
+    {
+        String raw = path.replace('_', ' ');
+        StringBuilder sb = new StringBuilder(raw.length());
+        boolean cap = true;
+        for (int i = 0; i < raw.length(); i++)
+        {
+            char ch = raw.charAt(i);
+            if (cap && Character.isLetter(ch))
+            {
+                sb.append(Character.toUpperCase(ch));
+                cap = false;
+            }
+            else {sb.append(ch);}
+            if (ch == ' ') cap = true;
+        }
+        return sb.toString();
+    }
+
+    // ---------------------------------------------------------------- species id derivation
+
+    private static void logDiagnostics(int forestConfigCount, int entryFeatureCount, List<ResourceLocation> sorted)
+    {
+        WorldPreview.LOGGER.info(
+            "[TFC] Tree species registry built: {} ForestConfig features, {} direct ForestConfig.Entry features, {} species",
+            forestConfigCount, entryFeatureCount, sorted.size());
+
+        StringBuilder first = new StringBuilder();
+        for (int i = 0; i < Math.min(8, sorted.size()); i++)
+        {
+            first.append(i).append('=').append(sorted.get(i)).append(' ');
+        }
+        WorldPreview.LOGGER.info("[TFC] Tree species ids: {}", first.toString().trim());
+
+        List<ResourceLocation> addon = sorted.stream()
+            .filter(r -> !r.getNamespace().equals("tfc") && !r.getNamespace().equals("minecraft"))
+            .toList();
+        if (!addon.isEmpty())
+        {
+            WorldPreview.LOGGER.info("[TFC] Addon tree species detected ({}): {}", addon.size(), addon);
+        }
+    }
+
+    private final Map<ResourceLocation, Short> speciesToId;
+
     // ---------------------------------------------------------------- accessors
+    private final List<ResourceLocation> idToSpecies;
+    private final Map<ResourceLocation, ForestConfig.Entry> entryBySpecies;
+
+    private TFCTreeSpeciesRegistry(List<ResourceLocation> sortedSpecies, Map<ResourceLocation, ForestConfig.Entry> entries)
+    {
+        this.idToSpecies = List.copyOf(sortedSpecies);
+        this.entryBySpecies = Map.copyOf(entries);
+        Map<ResourceLocation, Short> toId = new HashMap<>();
+        for (short i = 0; i < sortedSpecies.size(); i++)
+        {
+            toId.put(sortedSpecies.get(i), i);
+        }
+        this.speciesToId = Map.copyOf(toId);
+    }
 
     public int size()
     {
@@ -239,13 +284,9 @@ public final class TFCTreeSpeciesRegistry
         return known != null ? known : fallbackColor(rl);
     }
 
-    private static int fallbackColor(ResourceLocation rl)
-    {
-        int idx = Math.floorMod(rl.toString().hashCode(), FALLBACK_PALETTE.length);
-        return FALLBACK_PALETTE[idx];
-    }
-
-    /** Clean display name; addon (non-tfc) species get a {@code [namespace]} suffix to disambiguate. */
+    /**
+     * Clean display name; addon (non-tfc) species get a {@code [namespace]} suffix to disambiguate.
+     */
     public String name(short id)
     {
         ResourceLocation rl = speciesFor(id);
@@ -256,42 +297,5 @@ public final class TFCTreeSpeciesRegistry
         String pretty = titleCase(rl.getPath());
         String ns = rl.getNamespace();
         return ns.equals("tfc") || ns.equals("minecraft") ? pretty : pretty + " [" + ns + "]";
-    }
-
-    private static String titleCase(String path)
-    {
-        String raw = path.replace('_', ' ');
-        StringBuilder sb = new StringBuilder(raw.length());
-        boolean cap = true;
-        for (int i = 0; i < raw.length(); i++)
-        {
-            char ch = raw.charAt(i);
-            if (cap && Character.isLetter(ch)) { sb.append(Character.toUpperCase(ch)); cap = false; }
-            else { sb.append(ch); }
-            if (ch == ' ') cap = true;
-        }
-        return sb.toString();
-    }
-
-    private static void logDiagnostics(int forestConfigCount, int entryFeatureCount, List<ResourceLocation> sorted)
-    {
-        WorldPreview.LOGGER.info(
-            "[TFC] Tree species registry built: {} ForestConfig features, {} direct ForestConfig.Entry features, {} species",
-            forestConfigCount, entryFeatureCount, sorted.size());
-
-        StringBuilder first = new StringBuilder();
-        for (int i = 0; i < Math.min(8, sorted.size()); i++)
-        {
-            first.append(i).append('=').append(sorted.get(i)).append(' ');
-        }
-        WorldPreview.LOGGER.info("[TFC] Tree species ids: {}", first.toString().trim());
-
-        List<ResourceLocation> addon = sorted.stream()
-            .filter(r -> !r.getNamespace().equals("tfc") && !r.getNamespace().equals("minecraft"))
-            .toList();
-        if (!addon.isEmpty())
-        {
-            WorldPreview.LOGGER.info("[TFC] Addon tree species detected ({}): {}", addon.size(), addon);
-        }
     }
 }

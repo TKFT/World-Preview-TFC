@@ -1,5 +1,8 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,24 +16,20 @@ import net.minecraft.world.level.biome.Biome;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
 public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList.Entry>
 {
 
     @Nullable
     private Runnable onChanged;
 
-    public void setOnChanged(@Nullable Runnable onChanged)
-    {
-        this.onChanged = onChanged;
-    }
-
     public BiomeCheckboxList(Minecraft minecraft, int width, int height, int x, int y)
     {
         super(minecraft, width, height, x, y, 16);
+    }
+
+    public void setOnChanged(@Nullable Runnable onChanged)
+    {
+        this.onChanged = onChanged;
     }
 
     public Entry createEntry(Holder.Reference<Biome> biomeRef, int color)
@@ -76,8 +75,8 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
         private final Holder.Reference<Biome> biomeRef;
         private final String name;
         private final int color;
-        private boolean checked = false;
         private final Tooltip tooltip;
+        private boolean checked = false;
 
         public Entry(Holder.Reference<Biome> biomeRef, int color)
         {
@@ -119,20 +118,6 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
         }
 
         @Override
-        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
-                           int mouseX, int mouseY, boolean hovered, float partialTick)
-        {
-            int cbX = left + 2;
-            int cbY = top + 1;
-            BaseObjectSelectionList.renderCheckbox(gg, cbX, cbY, this.checked);
-
-            int swatchColor = 0xFF000000 | this.color;
-            gg.fill(left + 15, top + 1, left + 25, top + 11, swatchColor);
-
-            gg.drawString(BiomeCheckboxList.this.minecraft.font, this.name, left + 28, top + 2, 0xFFFFFF);
-        }
-
-        @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button)
         {
             if (button == 0)
@@ -146,6 +131,20 @@ public class BiomeCheckboxList extends BaseObjectSelectionList<BiomeCheckboxList
                 return true;
             }
             return false;
+        }
+
+        @Override
+        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
+                           int mouseX, int mouseY, boolean hovered, float partialTick)
+        {
+            int cbX = left + 2;
+            int cbY = top + 1;
+            BaseObjectSelectionList.renderCheckbox(gg, cbX, cbY, this.checked);
+
+            int swatchColor = 0xFF000000 | this.color;
+            gg.fill(left + 15, top + 1, left + 25, top + 11, swatchColor);
+
+            gg.drawString(BiomeCheckboxList.this.minecraft.font, this.name, left + 28, top + 2, 0xFFFFFF);
         }
     }
 }

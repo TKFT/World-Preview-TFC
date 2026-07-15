@@ -1,11 +1,11 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
+import java.util.List;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
-import java.util.List;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
@@ -19,7 +19,7 @@ public abstract class WorkUnit
     protected final ChunkPos chunkPos;
     protected final PreviewData previewData;
     protected final int y;
-    private boolean isCanceled;
+    private volatile boolean isCanceled;
 
     protected WorkUnit(SampleUtils sampleUtils, ChunkPos chunkPos, PreviewData previewData, int y)
     {
@@ -35,8 +35,6 @@ public abstract class WorkUnit
     {
         return this.previewData.biome2Id().getShort(resourceKey.location().toString());
     }
-
-    protected abstract List<WorkResult> doWork();
 
     public abstract long flags();
 
@@ -82,4 +80,14 @@ public abstract class WorkUnit
     {
         return this.isCanceled;
     }
+
+    /**
+     * Checked after computation and immediately before a batch publishes this unit's results.
+     */
+    public boolean isResultValid()
+    {
+        return !this.isCanceled;
+    }
+
+    protected abstract List<WorkResult> doWork();
 }

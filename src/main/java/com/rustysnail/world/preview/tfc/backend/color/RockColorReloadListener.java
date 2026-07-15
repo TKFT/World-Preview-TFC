@@ -1,12 +1,12 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -14,30 +14,6 @@ import org.jetbrains.annotations.NotNull;
 
 public class RockColorReloadListener extends BaseMultiJsonResourceReloadListener
 {
-    public RockColorReloadListener()
-    {
-        super("rock_colors.json");
-    }
-
-    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
-    {
-        WorldPreview worldPreview = WorldPreview.get();
-        PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
-        previewMappingData.clearRockColors();
-        WorldPreview.LOGGER.debug("Loading rock color entries");
-
-        for (Entry<ResourceLocation, List<JsonElement>> entry : object.entrySet())
-        {
-            WorldPreview.LOGGER.debug(" - loading entries from {}", entry.getKey());
-
-            for (JsonElement j : entry.getValue())
-            {
-                Map<ResourceLocation, PreviewMappingData.RockColorEntry> curr = parseRockColorData(j);
-                previewMappingData.updateRockColors(curr);
-            }
-        }
-    }
-
     public static Map<ResourceLocation, PreviewMappingData.RockColorEntry> parseRockColorData(JsonElement jsonElement)
     {
         Map<ResourceLocation, PreviewMappingData.RockColorEntry> res = new HashMap<>();
@@ -66,5 +42,29 @@ public class RockColorReloadListener extends BaseMultiJsonResourceReloadListener
         }
 
         return res;
+    }
+
+    public RockColorReloadListener()
+    {
+        super("rock_colors.json");
+    }
+
+    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    {
+        WorldPreview worldPreview = WorldPreview.get();
+        PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
+        previewMappingData.clearRockColors();
+        WorldPreview.LOGGER.debug("Loading rock color entries");
+
+        for (Entry<ResourceLocation, List<JsonElement>> entry : object.entrySet())
+        {
+            WorldPreview.LOGGER.debug(" - loading entries from {}", entry.getKey());
+
+            for (JsonElement j : entry.getValue())
+            {
+                Map<ResourceLocation, PreviewMappingData.RockColorEntry> curr = parseRockColorData(j);
+                previewMappingData.updateRockColors(curr);
+            }
+        }
     }
 }

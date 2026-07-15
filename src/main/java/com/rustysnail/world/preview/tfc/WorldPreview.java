@@ -1,9 +1,5 @@
 package com.rustysnail.world.preview.tfc;
 
-import com.rustysnail.world.preview.tfc.backend.WorkManager;
-import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +10,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.rustysnail.world.preview.tfc.backend.WorkManager;
+import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.fml.common.Mod;
@@ -28,6 +28,17 @@ public class WorldPreview
 {
     public static final Logger LOGGER = LoggerFactory.getLogger("world_preview_tfc");
     private static WorldPreview INSTANCE;
+
+    public static WorldPreview get()
+    {
+        return INSTANCE;
+    }
+
+    public static int nativeColor(int orig)
+    {
+        return orig | 0xFF000000;
+    }
+
     private final Path configDir;
     private final Path configFile;
     private final Path renderConfigFile;
@@ -35,16 +46,11 @@ public class WorldPreview
     private final Path missingStructuresFile;
     private final Path userColorConfigFile;
     private final Gson gson;
-    private WorldPreviewConfig cfg;
     private final WorkManager workManager;
     private final PreviewMappingData previewMappingData;
-    private RenderSettings renderSettings;
     private final ExecutorService serverThreadPoolExecutor;
-
-    public static WorldPreview get()
-    {
-        return INSTANCE;
-    }
+    private WorldPreviewConfig cfg;
+    private RenderSettings renderSettings;
 
     public WorldPreview()
     {
@@ -244,10 +250,5 @@ public class WorldPreview
         {
             throw new RuntimeException(e);
         }
-    }
-
-    public static int nativeColor(int orig)
-    {
-        return orig | 0xFF000000;
     }
 }

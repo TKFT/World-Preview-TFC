@@ -40,8 +40,7 @@ public record TFCWorkPlan(
             case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, f, mode);
             case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, f, mode);
             case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, f, mode);
-            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE ->
-                new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, f, mode);
+            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, f, mode);
             case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, f, mode);
             // Forest/Tree water uses classifyTreeMapWater, not the river-fractal land/water map.
             case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, f, mode);
@@ -57,19 +56,25 @@ public record TFCWorkPlan(
         };
     }
 
-    /** Any output that needs the per-position Region.Point (climate, rocks, land/water, hotspot, kaolin, features). */
+    /**
+     * Any output that needs the per-position Region.Point (climate, rocks, land/water, hotspot, kaolin, features).
+     */
     public boolean needsRegionPoint()
     {
         return temperature || rainfall || landWater || rocks || hotspot || kaolin || features;
     }
 
-    /** Whether a chunk's ChunkData must be sampled (forest type / tree species / soil type / crop). */
+    /**
+     * Whether a chunk's ChunkData must be sampled (forest type / tree species / soil type / crop).
+     */
     public boolean needsChunkData()
     {
         return forestType || treeSpecies || soilType || cropSuitability;
     }
 
-    /** Whether the effective biome must be sampled per point (tree-map water / config / soil / crop). */
+    /**
+     * Whether the effective biome must be sampled per point (tree-map water / config / soil / crop).
+     */
     public boolean needsTreeMapBiome()
     {
         return forestType || treeSpecies || soilType || cropSuitability;

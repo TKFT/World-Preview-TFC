@@ -6,8 +6,8 @@ import org.jetbrains.annotations.NotNull;
 
 public class ToggleButton extends OldStyleImageButton
 {
-    public boolean selected;
     protected final int xDiff;
+    public boolean selected;
 
     public ToggleButton(
         int x,

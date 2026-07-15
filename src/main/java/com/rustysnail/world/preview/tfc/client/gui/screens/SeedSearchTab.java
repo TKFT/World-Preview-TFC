@@ -1,5 +1,6 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens;
 
+import java.util.function.Consumer;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.tabs.Tab;
@@ -7,8 +8,6 @@ import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.function.Consumer;
 
 public class SeedSearchTab implements Tab, AutoCloseable
 {

@@ -67,9 +67,49 @@ public class PreviewLevel implements WorldGenLevel
         return new ProtoChunk(new ChunkPos(x, z), UpgradeData.EMPTY, this.levelHeightAccessor, this.biomeRegistry, null);
     }
 
+    public int getHeight(@NotNull Types heightmapType, int x, int z)
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public int getSkyDarken()
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public @NotNull BiomeManager getBiomeManager()
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public boolean isClientSide()
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public int getSeaLevel()
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
+    public @NotNull DimensionType dimensionType()
+    {
+        throw new NotImplementedException("Not implemented");
+    }
+
     public @NotNull RegistryAccess registryAccess()
     {
         return this.registryAccess;
+    }
+
+    public @NotNull FeatureFlagSet enabledFeatures()
+    {
+        throw new NotImplementedException("Not implemented");
     }
 
     public long getSeed()
@@ -185,46 +225,6 @@ public class PreviewLevel implements WorldGenLevel
     }
 
     public @NotNull List<? extends Player> players()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public int getHeight(@NotNull Types heightmapType, int x, int z)
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public int getSkyDarken()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public @NotNull BiomeManager getBiomeManager()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public boolean isClientSide()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public int getSeaLevel()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public @NotNull DimensionType dimensionType()
-    {
-        throw new NotImplementedException("Not implemented");
-    }
-
-    public @NotNull FeatureFlagSet enabledFeatures()
     {
         throw new NotImplementedException("Not implemented");
     }

@@ -1,5 +1,13 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.platform.NativeImage.Format;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
 import com.rustysnail.world.preview.tfc.backend.color.ColorMap;
@@ -8,14 +16,6 @@ import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BaseObjectSelectionList;
-import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.platform.NativeImage.Format;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -33,6 +33,26 @@ import org.jetbrains.annotations.NotNull;
 
 public class HeightmapTab implements Tab
 {
+    private static boolean isInteger(String s)
+    {
+        if (s.isBlank())
+        {
+            return true;
+        }
+        else
+        {
+            try
+            {
+                Integer.parseInt(s);
+                return true;
+            }
+            catch (NumberFormatException ignored)
+            {
+                return false;
+            }
+        }
+    }
+
     private final WorldPreviewConfig cfg;
     private final WGLabel disabledWarning;
     private final WGLabel presetsHead;
@@ -100,26 +120,6 @@ public class HeightmapTab implements Tab
         this.colormapList.replaceEntries(colormaps.values().stream().sorted(Comparator.comparing(x -> x.name)).toList());
         this.colormapList.setSelected(colormaps.get(this.cfg.colorMap));
         this.toRender.add(this.colormapList);
-    }
-
-    private static boolean isInteger(String s)
-    {
-        if (s.isBlank())
-        {
-            return true;
-        }
-        else
-        {
-            try
-            {
-                Integer.parseInt(s);
-                return true;
-            }
-            catch (NumberFormatException ignored)
-            {
-                return false;
-            }
-        }
     }
 
     @NotNull
@@ -220,6 +220,13 @@ public class HeightmapTab implements Tab
                 return Component.empty();
             }
 
+            public boolean mouseClicked(double mouseX, double mouseY, int button)
+            {
+                ColormapList.this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+                this.onClick.accept(this);
+                return true;
+            }
+
             public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
             {
                 guiGraphics.drawString(ColormapList.this.minecraft.font, this.name, left + 4, top + 2, 16777215);
@@ -232,13 +239,6 @@ public class HeightmapTab implements Tab
                 guiGraphics.fill(xMax, yMin, xMax + 1, yMax, -6710887);
                 guiGraphics.fill(xMin - 1, yMax, xMax + 1, yMax + 1, -6710887);
                 guiGraphics.fill(xMin - 1, yMin, xMin, yMax, -6710887);
-            }
-
-            public boolean mouseClicked(double mouseX, double mouseY, int button)
-            {
-                ColormapList.this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
-                this.onClick.accept(this);
-                return true;
             }
         }
     }
@@ -280,16 +280,16 @@ public class HeightmapTab implements Tab
                 return Component.empty();
             }
 
-            public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
-            {
-                guiGraphics.drawString(HeightPresetList.this.minecraft.font, this.displayString, left + 4, top + 2, 16777215);
-            }
-
             public boolean mouseClicked(double mouseX, double mouseY, int button)
             {
                 HeightPresetList.this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
                 this.onClick.accept(this);
                 return true;
+            }
+
+            public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean bl, float partialTick)
+            {
+                guiGraphics.drawString(HeightPresetList.this.minecraft.font, this.displayString, left + 4, top + 2, 16777215);
             }
         }
     }

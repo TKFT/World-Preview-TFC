@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
-import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
-import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import java.util.ArrayList;
 import java.util.List;
+import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
+import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.ChunkPos;
@@ -19,6 +19,12 @@ public class SlowHeightmapWorkUnit extends WorkUnit
     }
 
     @Override
+    public long flags()
+    {
+        return 2L;
+    }
+
+    @Override
     protected List<WorkResult> doWork()
     {
         WorkResult res = new WorkResult(this, QuartPos.fromBlock(0), this.primarySection, new ArrayList<>(16), List.of());
@@ -29,11 +35,5 @@ public class SlowHeightmapWorkUnit extends WorkUnit
         }
 
         return List.of(res);
-    }
-
-    @Override
-    public long flags()
-    {
-        return 2L;
     }
 }

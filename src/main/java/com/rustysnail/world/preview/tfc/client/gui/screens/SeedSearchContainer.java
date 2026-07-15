@@ -1,9 +1,22 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
-import com.rustysnail.world.preview.tfc.backend.search.*;
+import com.rustysnail.world.preview.tfc.backend.search.FeatureDetectors;
+import com.rustysnail.world.preview.tfc.backend.search.MatchResult;
+import com.rustysnail.world.preview.tfc.backend.search.SearchCriteria;
+import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
+import com.rustysnail.world.preview.tfc.backend.search.SeedSearchEngine;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomeCheckboxList;
@@ -26,21 +39,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import org.jetbrains.annotations.Nullable;
 
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.biome.TFCBiomes;
-
-import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class SeedSearchContainer implements AutoCloseable
 {
@@ -48,11 +50,18 @@ public class SeedSearchContainer implements AutoCloseable
     private static final int[] SEARCH_RADII = {500, 2000, 5000, 10000};
     private static final String[] SEARCH_AREA_LABELS = {"1K x 1K", "4K x 4K", "10K x 10K", "20K x 20K"};
 
+    private static int getBiomeColor(PreviewMappingData mappingData, ResourceLocation biome)
+    {
+        int color = mappingData.getBiomeColor(biome.toString());
+        if (color != -1) return color;
+        int hash = biome.toString().hashCode();
+        return hash & 0xFFFFFF;
+    }
+
     private final Minecraft minecraft;
     private final WorldPreview worldPreview;
     private final WorkManager workManager;
     private final PreviewTab previewTab;
-
     private final Button searchAreaButton;
     private final EditBox maxSeedsEdit;
     private final Button tfcSettingsButton;
@@ -62,30 +71,22 @@ public class SeedSearchContainer implements AutoCloseable
     private final TerrainFeatureList terrainFeatureList;
     private final Button startButton;
     private final Button stopButton;
-
     private final WGLabel statusLabel;
     private final WGLabel debugBiomeLabel;
     private final SeedMatchList matchList;
     private final Button previewButton;
     private final Button copyButton;
     private final Button skipButton;
-
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final List<MatchResult> allMatches = new ArrayList<>();
+    private final List<AbstractWidget> allWidgets = new ArrayList<>();
     private int searchAreaIndex = 1;
     private int maxSeeds = SearchCriteria.DEFAULT_MAX_SEEDS;
     private SearchCriteria.BiomeMatchMode biomeMatchMode = SearchCriteria.BiomeMatchMode.ANY;
     @Nullable private SeedSearchEngine engine;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile SearchState state = SearchState.IDLE;
-    private final List<MatchResult> allMatches = new ArrayList<>();
-
-    private final List<AbstractWidget> allWidgets = new ArrayList<>();
     private volatile boolean populated = false;
     private volatile boolean closed = false;
-
-    enum SearchState
-    {
-        IDLE, SEARCHING, PAUSED
-    }
 
     public SeedSearchContainer(Screen screen, PreviewTab previewTab)
     {
@@ -200,6 +201,134 @@ public class SeedSearchContainer implements AutoCloseable
         // Search continues in the background.
     }
 
+    public void doLayout(ScreenRectangle rect)
+    {
+        if (rect == null)
+        {
+            assert this.minecraft.screen != null;
+            rect = this.minecraft.screen.getRectangle();
+        }
+
+        int totalWidth = rect.width();
+        int biomeLeft = rect.left() + 4;
+        int top = rect.top() + 4;
+        int bottom = rect.bottom() - 8;
+        int gap = 4;
+
+        int btnW = Math.clamp(totalWidth / 4, 120, 160);
+        int criteriaWidth = totalWidth - btnW - gap * 3;
+
+        int biomeWidth;
+        int featureWidth;
+        if (this.terrainFeatureList.visible)
+        {
+            biomeWidth = (criteriaWidth - gap) * 3 / 5;
+            featureWidth = criteriaWidth - biomeWidth - gap;
+        }
+        else
+        {
+            biomeWidth = criteriaWidth;
+            featureWidth = 0;
+        }
+
+        int featureLeft = biomeLeft + biomeWidth + gap;
+        int resultsLeft = biomeLeft + criteriaWidth + gap;
+
+        int y = top;
+        int controlRowWidth = this.terrainFeatureList.visible ? (biomeWidth + gap + featureWidth) : biomeWidth;
+
+        int searchAreaW = 70;
+        int maxSeedsW = 50;
+        int tfcSettingsW = 70;
+        int startW = 60;
+        int modeW = 60;
+        int clearW = 40;
+
+        this.searchAreaButton.setPosition(biomeLeft, y);
+        this.searchAreaButton.setWidth(searchAreaW);
+
+        this.maxSeedsEdit.setPosition(biomeLeft + searchAreaW + gap, y);
+        this.maxSeedsEdit.setWidth(maxSeedsW);
+
+        int tfcGap = this.tfcSettingsButton.visible ? gap : 0;
+        int tfcW = this.tfcSettingsButton.visible ? tfcSettingsW : 0;
+        this.tfcSettingsButton.setPosition(biomeLeft + searchAreaW + gap + maxSeedsW + tfcGap, y);
+        this.tfcSettingsButton.setWidth(tfcSettingsW);
+
+        int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
+        int rightClusterW = modeW + gap + clearW + gap + startW;
+        boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
+
+        int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
+        if (rightControlsX < biomeLeft) rightControlsX = biomeLeft;
+        int rightControlsY = wrapControls ? y + 22 : y;
+
+        this.biomeMatchModeButton.setPosition(rightControlsX, rightControlsY);
+        this.biomeMatchModeButton.setWidth(modeW);
+
+        this.clearButton.setPosition(rightControlsX + modeW + gap, rightControlsY);
+        this.clearButton.setWidth(clearW);
+
+        this.startButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.startButton.setWidth(startW);
+        this.stopButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
+        this.stopButton.setWidth(startW);
+
+        y += wrapControls ? 44 : 22;
+
+        int listTop = y;
+        int listHeight = bottom - listTop;
+        this.biomeCheckboxList.setPosition(biomeLeft, listTop);
+        this.biomeCheckboxList.setSize(biomeWidth, listHeight);
+
+        if (this.terrainFeatureList.visible)
+        {
+            this.terrainFeatureList.setPosition(featureLeft, listTop);
+            this.terrainFeatureList.setSize(featureWidth, listHeight);
+        }
+
+        int ry = top;
+
+        this.statusLabel.setPosition(resultsLeft, ry);
+        this.statusLabel.setWidth(btnW);
+        ry += 14;
+
+        this.debugBiomeLabel.setPosition(resultsLeft, ry);
+        this.debugBiomeLabel.setWidth(btnW);
+        ry += 14;
+
+        int matchListBottom = bottom - 24;
+        this.matchList.setPosition(resultsLeft, ry);
+        this.matchList.setSize(btnW, matchListBottom - ry);
+
+        int btnY = bottom - 20;
+
+        int halfBtnW = (btnW - gap) / 2;
+        this.previewButton.setPosition(resultsLeft, btnY);
+        this.previewButton.setWidth(halfBtnW);
+        this.copyButton.setPosition(resultsLeft + halfBtnW + gap, btnY);
+        this.copyButton.setWidth(halfBtnW);
+
+        this.skipButton.setPosition(resultsLeft, btnY - 22);
+        this.skipButton.setWidth(btnW);
+    }
+
+    public List<AbstractWidget> widgets()
+    {
+        return this.allWidgets;
+    }
+
+    @Override
+    public void close()
+    {
+        this.closed = true;
+        if (this.engine != null)
+        {
+            this.engine.cancel();
+        }
+        this.executor.shutdownNow();
+    }
+
     private void schedulePopulationRetry()
     {
         CompletableFuture.delayedExecutor(250, TimeUnit.MILLISECONDS)
@@ -262,14 +391,6 @@ public class SeedSearchContainer implements AutoCloseable
         }
 
         onBiomeSelectionChanged();
-    }
-
-    private static int getBiomeColor(PreviewMappingData mappingData, ResourceLocation biome)
-    {
-        int color = mappingData.getBiomeColor(biome.toString());
-        if (color != -1) return color;
-        int hash = biome.toString().hashCode();
-        return hash & 0xFFFFFF;
     }
 
     private void cycleSearchArea()
@@ -555,136 +676,13 @@ public class SeedSearchContainer implements AutoCloseable
         this.copyButton.active = hasSelection;
     }
 
-    public void doLayout(ScreenRectangle rect)
-    {
-        if (rect == null)
-        {
-            assert this.minecraft.screen != null;
-            rect = this.minecraft.screen.getRectangle();
-        }
-
-        int totalWidth = rect.width();
-        int biomeLeft = rect.left() + 4;
-        int top = rect.top() + 4;
-        int bottom = rect.bottom() - 8;
-        int gap = 4;
-
-        int btnW = Math.clamp(totalWidth / 4, 120, 160);
-        int criteriaWidth = totalWidth - btnW - gap * 3;
-
-        int biomeWidth;
-        int featureWidth;
-        if (this.terrainFeatureList.visible)
-        {
-            biomeWidth = (criteriaWidth - gap) * 3 / 5;
-            featureWidth = criteriaWidth - biomeWidth - gap;
-        }
-        else
-        {
-            biomeWidth = criteriaWidth;
-            featureWidth = 0;
-        }
-
-        int featureLeft = biomeLeft + biomeWidth + gap;
-        int resultsLeft = biomeLeft + criteriaWidth + gap;
-
-        int y = top;
-        int controlRowWidth = this.terrainFeatureList.visible ? (biomeWidth + gap + featureWidth) : biomeWidth;
-
-        int searchAreaW = 70;
-        int maxSeedsW = 50;
-        int tfcSettingsW = 70;
-        int startW = 60;
-        int modeW = 60;
-        int clearW = 40;
-
-        this.searchAreaButton.setPosition(biomeLeft, y);
-        this.searchAreaButton.setWidth(searchAreaW);
-
-        this.maxSeedsEdit.setPosition(biomeLeft + searchAreaW + gap, y);
-        this.maxSeedsEdit.setWidth(maxSeedsW);
-
-        int tfcGap = this.tfcSettingsButton.visible ? gap : 0;
-        int tfcW = this.tfcSettingsButton.visible ? tfcSettingsW : 0;
-        this.tfcSettingsButton.setPosition(biomeLeft + searchAreaW + gap + maxSeedsW + tfcGap, y);
-        this.tfcSettingsButton.setWidth(tfcSettingsW);
-
-        int leftClusterW = searchAreaW + gap + maxSeedsW + tfcGap + tfcW;
-        int rightClusterW = modeW + gap + clearW + gap + startW;
-        boolean wrapControls = leftClusterW + gap + rightClusterW > controlRowWidth;
-
-        int rightControlsX = biomeLeft + controlRowWidth - rightClusterW;
-        if (rightControlsX < biomeLeft) rightControlsX = biomeLeft;
-        int rightControlsY = wrapControls ? y + 22 : y;
-
-        this.biomeMatchModeButton.setPosition(rightControlsX, rightControlsY);
-        this.biomeMatchModeButton.setWidth(modeW);
-
-        this.clearButton.setPosition(rightControlsX + modeW + gap, rightControlsY);
-        this.clearButton.setWidth(clearW);
-
-        this.startButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
-        this.startButton.setWidth(startW);
-        this.stopButton.setPosition(rightControlsX + modeW + gap + clearW + gap, rightControlsY);
-        this.stopButton.setWidth(startW);
-
-        y += wrapControls ? 44 : 22;
-
-        int listTop = y;
-        int listHeight = bottom - listTop;
-        this.biomeCheckboxList.setPosition(biomeLeft, listTop);
-        this.biomeCheckboxList.setSize(biomeWidth, listHeight);
-
-        if (this.terrainFeatureList.visible)
-        {
-            this.terrainFeatureList.setPosition(featureLeft, listTop);
-            this.terrainFeatureList.setSize(featureWidth, listHeight);
-        }
-
-        int ry = top;
-
-        this.statusLabel.setPosition(resultsLeft, ry);
-        this.statusLabel.setWidth(btnW);
-        ry += 14;
-
-        this.debugBiomeLabel.setPosition(resultsLeft, ry);
-        this.debugBiomeLabel.setWidth(btnW);
-        ry += 14;
-
-        int matchListBottom = bottom - 24;
-        this.matchList.setPosition(resultsLeft, ry);
-        this.matchList.setSize(btnW, matchListBottom - ry);
-
-        int btnY = bottom - 20;
-
-        int halfBtnW = (btnW - gap) / 2;
-        this.previewButton.setPosition(resultsLeft, btnY);
-        this.previewButton.setWidth(halfBtnW);
-        this.copyButton.setPosition(resultsLeft + halfBtnW + gap, btnY);
-        this.copyButton.setWidth(halfBtnW);
-
-        this.skipButton.setPosition(resultsLeft, btnY - 22);
-        this.skipButton.setWidth(btnW);
-    }
-
-    public List<AbstractWidget> widgets()
-    {
-        return this.allWidgets;
-    }
-
     private void setStatusText(String text)
     {
         this.statusLabel.setText(Component.literal(text));
     }
 
-    @Override
-    public void close()
+    enum SearchState
     {
-        this.closed = true;
-        if (this.engine != null)
-        {
-            this.engine.cancel();
-        }
-        this.executor.shutdownNow();
+        IDLE, SEARCHING, PAUSED
     }
 }

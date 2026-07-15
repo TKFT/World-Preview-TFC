@@ -19,130 +19,6 @@ public class DummyServerLevelData implements ServerLevelData
         return "dummy";
     }
 
-    public void setThundering(boolean thundering)
-    {
-    }
-
-    public int getRainTime()
-    {
-        return 0;
-    }
-
-    public void setRainTime(int time)
-    {
-    }
-
-    public void setThunderTime(int time)
-    {
-    }
-
-    public int getThunderTime()
-    {
-        return 0;
-    }
-
-    public int getClearWeatherTime()
-    {
-        return 0;
-    }
-
-    public void setClearWeatherTime(int time)
-    {
-    }
-
-    public int getWanderingTraderSpawnDelay()
-    {
-        return 0;
-    }
-
-    public void setWanderingTraderSpawnDelay(int delay)
-    {
-    }
-
-    public int getWanderingTraderSpawnChance()
-    {
-        return 0;
-    }
-
-    public void setWanderingTraderSpawnChance(int chance)
-    {
-    }
-
-    @Nullable
-    public UUID getWanderingTraderId()
-    {
-        return UUID.randomUUID();
-    }
-
-    public void setWanderingTraderId(@NotNull UUID id)
-    {
-    }
-
-    public @NotNull GameType getGameType()
-    {
-        return GameType.SPECTATOR;
-    }
-
-    public void setWorldBorder(@NotNull Settings serializer)
-    {
-    }
-
-    @Nullable
-    public Settings getWorldBorder()
-    {
-        return null;
-    }
-
-    public boolean isInitialized()
-    {
-        return false;
-    }
-
-    public void setInitialized(boolean initialized)
-    {
-    }
-
-    public boolean isAllowCommands()
-    {
-        return false;
-    }
-
-    public void setGameType(@NotNull GameType type)
-    {
-    }
-
-    @Nullable
-    public TimerQueue<MinecraftServer> getScheduledEvents()
-    {
-        return null;
-    }
-
-    public void setGameTime(long time)
-    {
-    }
-
-    public void setDayTime(long time)
-    {
-    }
-
-    public float getDayTimeFraction()
-    {
-        return 0.0F;
-    }
-
-    public float getDayTimePerTick()
-    {
-        return 0.0F;
-    }
-
-    public void setDayTimeFraction(float v)
-    {
-    }
-
-    public void setDayTimePerTick(float v)
-    {
-    }
-
     public @NotNull BlockPos getSpawnPos()
     {
         return BlockPos.ZERO;
@@ -158,9 +34,67 @@ public class DummyServerLevelData implements ServerLevelData
         return 0L;
     }
 
+    public void setGameTime(long time)
+    {
+    }
+
+    public void setThunderTime(int time)
+    {
+    }
+
     public long getDayTime()
     {
         return 0L;
+    }
+
+    public int getThunderTime()
+    {
+        return 0;
+    }
+
+    public void setDayTime(long time)
+    {
+    }
+
+    public int getClearWeatherTime()
+    {
+        return 0;
+    }
+
+    public float getDayTimeFraction()
+    {
+        return 0.0F;
+    }
+
+    public void setClearWeatherTime(int time)
+    {
+    }
+
+    public float getDayTimePerTick()
+    {
+        return 0.0F;
+    }
+
+    public int getWanderingTraderSpawnDelay()
+    {
+        return 0;
+    }
+
+    public void setDayTimePerTick(float v)
+    {
+    }
+
+    public void setWanderingTraderSpawnDelay(int delay)
+    {
+    }
+
+    public void setDayTimeFraction(float v)
+    {
+    }
+
+    public int getWanderingTraderSpawnChance()
+    {
+        return 0;
     }
 
     public boolean isThundering()
@@ -168,16 +102,63 @@ public class DummyServerLevelData implements ServerLevelData
         return false;
     }
 
+    public void setWanderingTraderSpawnChance(int chance)
+    {
+    }
+
+    public void setThundering(boolean thundering)
+    {
+    }
+
+    @Nullable
+    public UUID getWanderingTraderId()
+    {
+        return UUID.randomUUID();
+    }
+
+    public int getRainTime()
+    {
+        return 0;
+    }
+
+    public void setWanderingTraderId(@NotNull UUID id)
+    {
+    }
+
+    public void setRainTime(int time)
+    {
+    }
+
+    public @NotNull GameType getGameType()
+    {
+        return GameType.SPECTATOR;
+    }
+
     public boolean isRaining()
     {
         return false;
+    }
+
+    public void setWorldBorder(@NotNull Settings serializer)
+    {
     }
 
     public void setRaining(boolean raining)
     {
     }
 
+    @Nullable
+    public Settings getWorldBorder()
+    {
+        return null;
+    }
+
     public boolean isHardcore()
+    {
+        return false;
+    }
+
+    public boolean isInitialized()
     {
         return false;
     }
@@ -187,9 +168,18 @@ public class DummyServerLevelData implements ServerLevelData
         return new GameRules();
     }
 
+    public void setInitialized(boolean initialized)
+    {
+    }
+
     public @NotNull Difficulty getDifficulty()
     {
         return Difficulty.HARD;
+    }
+
+    public boolean isAllowCommands()
+    {
+        return false;
     }
 
     public boolean isDifficultyLocked()
@@ -197,7 +187,19 @@ public class DummyServerLevelData implements ServerLevelData
         return false;
     }
 
+    public void setGameType(@NotNull GameType type)
+    {
+    }
+
     public void setSpawn(@NotNull BlockPos spawnPoint, float spawnAngle)
     {
     }
+
+    @Nullable
+    public TimerQueue<MinecraftServer> getScheduledEvents()
+    {
+        return null;
+    }
+
+
 }

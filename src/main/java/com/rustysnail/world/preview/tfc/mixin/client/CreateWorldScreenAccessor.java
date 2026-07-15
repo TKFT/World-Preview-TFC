@@ -1,7 +1,7 @@
 package com.rustysnail.world.preview.tfc.mixin.client;
 
-import com.mojang.datafixers.util.Pair;
 import java.nio.file.Path;
+import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.server.packs.repository.PackRepository;

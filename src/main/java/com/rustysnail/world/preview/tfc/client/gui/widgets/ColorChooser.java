@@ -1,6 +1,6 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets;
 
-import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
+import java.awt.Color;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -8,7 +8,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat.Mode;
-import java.awt.Color;
+import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -36,12 +36,6 @@ public class ColorChooser extends AbstractWidget
         this.hBarWidth = 16;
         this.finalColorHeight = 20;
         this.recalculateSize();
-    }
-
-    private void recalculateSize()
-    {
-        this.width = this.svSquareSize + 10 + this.hBarWidth;
-        this.height = this.svSquareSize + 10 + this.finalColorHeight;
     }
 
     public void setSquareSize(int squareSize)
@@ -103,6 +97,20 @@ public class ColorChooser extends AbstractWidget
         guiGraphics.fill(this.getX(), botY + 10, this.getX() + this.width, this.getY() + this.height, this.argbColor);
     }
 
+    protected void onDrag(double mouseX, double mouseY, double dragX, double dragY)
+    {
+        this.mouseEvent(mouseX, mouseY, 0, false);
+    }
+
+    public boolean mouseClicked(double mouseX, double mouseY, int button)
+    {
+        return this.mouseEvent(mouseX, mouseY, button, true);
+    }
+
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)
+    {
+    }
+
     public boolean mouseEvent(double mouseX, double mouseY, int button, boolean playSound)
     {
         if (this.active && this.visible && this.isValidClickButton(button) && this.isMouseOver(mouseX, mouseY))
@@ -157,16 +165,6 @@ public class ColorChooser extends AbstractWidget
         }
     }
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button)
-    {
-        return this.mouseEvent(mouseX, mouseY, button, true);
-    }
-
-    protected void onDrag(double mouseX, double mouseY, double dragX, double dragY)
-    {
-        this.mouseEvent(mouseX, mouseY, 0, false);
-    }
-
     public void runUpdater()
     {
         if (this.updater != null)
@@ -209,8 +207,10 @@ public class ColorChooser extends AbstractWidget
         return this.argbColor & 16777215;
     }
 
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)
+    private void recalculateSize()
     {
+        this.width = this.svSquareSize + 10 + this.hBarWidth;
+        this.height = this.svSquareSize + 10 + this.finalColorHeight;
     }
 
     public interface ColorUpdater

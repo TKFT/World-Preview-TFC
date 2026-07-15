@@ -1,21 +1,43 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
+import java.util.ArrayList;
+import java.util.List;
+import com.mojang.datafixers.util.Pair;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
-import com.mojang.datafixers.util.Pair;
-import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import org.jetbrains.annotations.NotNull;
 
 public class WorkBatch
 {
+    private static @NotNull PreviewSection getPreviewSection(WorkResult workResult)
+    {
+        PreviewSection section = workResult.section();
+
+        final int baseQuartX = section.quartX();
+        final int baseQuartZ = section.quartZ();
+        if (workResult.results() != null)
+        {
+            for (WorkResult.BlockResult x : workResult.results())
+            {
+                final int localX = x.quartX() - baseQuartX;
+                final int localZ = x.quartZ() - baseQuartZ;
+                if (localX < 0 || localX >= PreviewSection.SIZE || localZ < 0 || localZ >= PreviewSection.SIZE)
+                {
+                    continue;
+                }
+                section.set(localX, localZ, x.value());
+            }
+        }
+        return section;
+    }
+
     public final List<WorkUnit> workUnits;
     private final Object completedSynchro;
     private final PreviewData previewData;
-    private boolean isCanceled = false;
+    private volatile boolean isCanceled = false;
 
     public WorkBatch(List<WorkUnit> workUnits, Object completedSynchro, PreviewData previewData)
     {
@@ -50,10 +72,16 @@ public class WorkBatch
             for (WorkUnit unit : this.workUnits)
             {
                 res.addAll(unit.work());
-                if (this.isCanceled())
+                if (this.isCanceled() || !unit.isResultValid())
                 {
                     return;
                 }
+            }
+
+            // A crop/calendar revision can change after the final unit finishes but before publish.
+            if (this.workUnits.stream().anyMatch(unit -> !unit.isResultValid()))
+            {
+                return;
             }
 
             // 2. Apply every result to its PreviewSection.
@@ -61,7 +89,8 @@ public class WorkBatch
 
             // 3. Only mark units completed after a fully successful apply. A section that could not
             //    be written must not be flagged complete, or it would render permanently empty.
-            if (applied && !this.isCanceled())
+            if (applied && !this.isCanceled()
+                && this.workUnits.stream().allMatch(WorkUnit::isResultValid))
             {
                 synchronized (this.completedSynchro)
                 {
@@ -87,6 +116,10 @@ public class WorkBatch
                 {
                     continue;
                 }
+                if (this.isCanceled() || !workResult.workUnit().isResultValid())
+                {
+                    return false;
+                }
 
                 PreviewSection section = getPreviewSection(workResult);
 
@@ -104,27 +137,5 @@ public class WorkBatch
             WorldPreview.LOGGER.error("Error applying chunk result", e);
             return false;
         }
-    }
-
-    private static @NotNull PreviewSection getPreviewSection(WorkResult workResult)
-    {
-        PreviewSection section = workResult.section();
-
-        final int baseQuartX = section.quartX();
-        final int baseQuartZ = section.quartZ();
-        if (workResult.results() != null)
-        {
-            for (WorkResult.BlockResult x : workResult.results())
-            {
-                final int localX = x.quartX() - baseQuartX;
-                final int localZ = x.quartZ() - baseQuartZ;
-                if (localX < 0 || localX >= PreviewSection.SIZE || localZ < 0 || localZ >= PreviewSection.SIZE)
-                {
-                    continue;
-                }
-                section.set(localX, localZ, x.value());
-            }
-        }
-        return section;
     }
 }

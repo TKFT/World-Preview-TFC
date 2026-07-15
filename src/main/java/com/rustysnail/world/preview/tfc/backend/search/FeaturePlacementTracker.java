@@ -1,12 +1,16 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.ChunkPos;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.world.level.WorldGenLevel;
 
 public final class FeaturePlacementTracker
 {
@@ -14,11 +18,8 @@ public final class FeaturePlacementTracker
     private static final ThreadLocal<Boolean> RECORDING = ThreadLocal.withInitial(() -> false);
 
     private static final Map<ResourceLocation, Map<Long, Map<ResourceLocation, List<BlockPos>>>> DATA = new ConcurrentHashMap<>();
-
-    private static volatile Set<ResourceLocation> WHITELIST = Set.of();
     private static final boolean RECORD_ALL_TFC = true;
-
-    private FeaturePlacementTracker() {}
+    private static volatile Set<ResourceLocation> WHITELIST = Set.of();
 
     public static boolean isRecording()
     {
@@ -38,13 +39,6 @@ public final class FeaturePlacementTracker
     public static void setWhitelist(Set<ResourceLocation> whitelist)
     {
         WHITELIST = whitelist == null ? Set.of() : Set.copyOf(whitelist);
-    }
-
-    private static boolean shouldRecord(ResourceLocation id)
-    {
-        if (!WHITELIST.isEmpty()) return WHITELIST.contains(id);
-        if (RECORD_ALL_TFC) return "tfc".equals(id.getNamespace());
-        return false;
     }
 
     public static void onFeaturePlaced(WorldGenLevel level, ResourceLocation id, BlockPos pos)
@@ -86,4 +80,13 @@ public final class FeaturePlacementTracker
         }
         return out;
     }
+
+    private static boolean shouldRecord(ResourceLocation id)
+    {
+        if (!WHITELIST.isEmpty()) return WHITELIST.contains(id);
+        if (RECORD_ALL_TFC) return "tfc".equals(id.getNamespace());
+        return false;
+    }
+
+    private FeaturePlacementTracker() {}
 }

@@ -1,5 +1,31 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.rustysnail.world.preview.tfc.RenderSettings;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
@@ -28,37 +54,8 @@ import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.StructuresList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.TFCCropList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.TFCMapValueList;
 import com.rustysnail.world.preview.tfc.mixin.client.ScreenAccessor;
-import com.mojang.blaze3d.platform.NativeImage;
 import it.unimi.dsi.fastutil.shorts.Short2LongMap;
 import it.unimi.dsi.fastutil.shorts.Short2LongMap.Entry;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
-import net.dries007.tfc.world.ChunkGeneratorExtension;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -90,6 +87,8 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import net.dries007.tfc.world.ChunkGeneratorExtension;
 
 public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvider
 {
@@ -338,11 +337,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toRender.add(this.toggleShowStructures);
         this.toggleShowFeatures = new ToggleButton(
             0, 0, 20, 20, 140, 20, 20, 20, BUTTONS_TEXTURE, 920, 60, x -> {
-                boolean selected = ((ToggleButton) x).selected;
-                this.previewDisplay.setShowFeatures(selected);
-                this.renderSettings.featureOverlay = selected;
-                this.workManager.onFeatureOverlayChanged();
-            }
+            boolean selected = ((ToggleButton) x).selected;
+            this.previewDisplay.setShowFeatures(selected);
+            this.renderSettings.featureOverlay = selected;
+            this.workManager.onFeatureOverlayChanged();
+        }
         );
         this.toggleShowFeatures.selected = false;
         this.toggleShowFeatures.active = true;
@@ -693,7 +692,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.updateSidePanelVisibility();
     }
 
-    /** Water entry first, then every species in the runtime tree-species registry (TFC + addons). */
+    /**
+     * Water entry first, then every species in the runtime tree-species registry (TFC + addons).
+     */
     private List<TFCMapValueList.ValueEntry> buildTreeSpeciesEntries()
     {
         List<TFCMapValueList.ValueEntry> entries = new ArrayList<>();
@@ -1884,6 +1885,18 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     }
 
     @Override
+    @Nullable
+    public Component featureVariantName(int featureId, BlockPos center)
+    {
+        if (!this.workManager.hasWorldSeed())
+        {
+            return null;
+        }
+        SearchableFeature feature = FeatureDetectors.getFeatureById(featureId);
+        return FeatureDetectors.getFeatureVariantName(feature, this.workManager.worldSeed(), center);
+    }
+
+    @Override
     public NativeImage playerIcon()
     {
         return this.playerIcon;
@@ -2192,7 +2205,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleCropWaterMode.setMessage(this.getCropWaterModeLabel());
     }
 
-    /** Rebuilds the crop selector from the runtime registry and syncs the selection to the WorkManager. */
+    /**
+     * Rebuilds the crop selector from the runtime registry and syncs the selection to the WorkManager.
+     */
     private void refreshCropList()
     {
         List<TFCCropList.CropEntry> entries = new ArrayList<>();

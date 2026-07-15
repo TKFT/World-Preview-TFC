@@ -1,10 +1,10 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.google.gson.JsonElement;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import com.google.gson.JsonElement;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;

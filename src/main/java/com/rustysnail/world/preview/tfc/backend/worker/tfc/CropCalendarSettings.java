@@ -1,7 +1,5 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
-import net.minecraft.util.Mth;
-
 /**
  * The calendar / crop-growth assumptions a crop-suitability result was generated under. TFC lets an
  * existing world change its month length (via the {@code /time} command) and configure a global crop
@@ -14,48 +12,40 @@ import net.minecraft.util.Mth;
  */
 public record CropCalendarSettings(
     int daysInMonth,
-    int samplesPerYear,
-    float daysPerSample,
     float cropGrowthModifier,
-    float requiredGrowthDays,
-    int poorCoreSamples,
-    int goodCoreSamples,
-    int idealCoreSamples,
-    int idealCoverageSamples
+    double daysPerYear,
+    double requiredGrowthDays,
+    double poorCoreDays,
+    double goodCoreDays,
+    double idealCoreDays,
+    double idealCoverageDays
 )
 {
     private static final int MONTHS_PER_YEAR = 12;
 
-    /** A representative crop needs ~24 days of valid conditions (scaled by the growth modifier). */
+    /**
+     * A representative crop needs ~24 days of valid conditions (scaled by the growth modifier).
+     */
     private static final float BASE_REQUIRED_GROWTH_DAYS = 24f;
 
-    public static CropCalendarSettings build(int daysInMonth, int samplesPerYear, float cropGrowthModifier)
+    public static CropCalendarSettings build(int daysInMonth, float cropGrowthModifier)
     {
         int safeDays = Math.max(1, daysInMonth);
-        int safeSamples = Math.max(1, samplesPerYear);
-        float safeModifier = cropGrowthModifier > 0f ? cropGrowthModifier : 1f;
+        float safeModifier = Float.isFinite(cropGrowthModifier) && cropGrowthModifier > 0f ? cropGrowthModifier : 1f;
 
-        float daysPerYear = (float) safeDays * MONTHS_PER_YEAR;
-        float daysPerSample = daysPerYear / safeSamples;
-        float requiredGrowthDays = BASE_REQUIRED_GROWTH_DAYS * safeModifier;
-
-        int poor = clampSamples(Mth.ceil(0.5f * requiredGrowthDays / daysPerSample), safeSamples);
-        int good = clampSamples(Mth.ceil(requiredGrowthDays / daysPerSample), safeSamples);
-        int ideal = clampSamples(Mth.ceil(1.6666667f * requiredGrowthDays / daysPerSample), safeSamples);
-        int coverage = clampSamples(Mth.ceil(safeSamples * 0.5f), safeSamples);
+        double daysPerYear = (double) safeDays * MONTHS_PER_YEAR;
+        double requiredGrowthDays = BASE_REQUIRED_GROWTH_DAYS * safeModifier;
 
         return new CropCalendarSettings(
-            safeDays, safeSamples, daysPerSample, safeModifier, requiredGrowthDays,
-            poor, good, ideal, coverage);
+            safeDays, safeModifier, daysPerYear, requiredGrowthDays,
+            0.5f * requiredGrowthDays,
+            requiredGrowthDays,
+            (5d / 3d) * requiredGrowthDays,
+            0.5f * daysPerYear);
     }
 
-    private static int clampSamples(int value, int samplesPerYear)
+    public double daysPerSample(int samplesPerYear)
     {
-        return Mth.clamp(value, 1, samplesPerYear);
-    }
-
-    public int growingWindowDays(int longestCoreRun)
-    {
-        return Math.round(longestCoreRun * this.daysPerSample);
+        return this.daysPerYear / Math.max(1, samplesPerYear);
     }
 }

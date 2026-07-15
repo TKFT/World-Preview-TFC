@@ -1,5 +1,7 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
@@ -9,9 +11,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.function.Consumer;
 
 /**
  * Scrollable side list used to pick which crop the {@code TFC_CROP_SUITABILITY} map is evaluated for.
@@ -63,6 +62,12 @@ public class TFCCropList extends BaseObjectSelectionList<TFCCropList.CropEntry>
         return null;
     }
 
+    @Override
+    public void replaceEntries(@NotNull Collection<CropEntry> entryList)
+    {
+        super.replaceEntries(entryList);
+    }
+
     public class CropEntry extends Entry<CropEntry>
     {
         private final ResourceLocation cropId;
@@ -98,11 +103,6 @@ public class TFCCropList extends BaseObjectSelectionList<TFCCropList.CropEntry>
             return Component.translatable("narrator.select", this.name);
         }
 
-        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
-        {
-            guiGraphics.drawString(TFCCropList.this.minecraft.font, this.name, k + 4, j + 2, 16777215);
-        }
-
         public boolean mouseClicked(double d, double e, int i)
         {
             if (i != 0)
@@ -113,11 +113,10 @@ public class TFCCropList extends BaseObjectSelectionList<TFCCropList.CropEntry>
             TFCCropList.this.setSelected(this, false);
             return true;
         }
-    }
 
-    @Override
-    public void replaceEntries(@NotNull Collection<CropEntry> entryList)
-    {
-        super.replaceEntries(entryList);
+        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
+        {
+            guiGraphics.drawString(TFCCropList.this.minecraft.font, this.name, k + 4, j + 2, 16777215);
+        }
     }
 }

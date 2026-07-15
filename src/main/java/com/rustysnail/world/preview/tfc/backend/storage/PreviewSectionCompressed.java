@@ -24,6 +24,12 @@ public abstract class PreviewSectionCompressed extends PreviewSection
     public abstract int xzToIdx(int x, int z);
 
     @Override
+    public int size()
+    {
+        return this.size;
+    }
+
+    @Override
     public short get(int x, int z)
     {
         int idx = this.xzToIdx(x, z);
@@ -36,6 +42,75 @@ public abstract class PreviewSectionCompressed extends PreviewSection
         {
             return -32768;
         }
+    }
+
+    @Override
+    public synchronized void set(int x, int z, short biome)
+    {
+        if (this.mapData.length == 0)
+        {
+            if (this.data[0] != biome)
+            {
+                if (this.data[0] == -32768)
+                {
+                    this.data[0] = biome;
+                }
+                else
+                {
+                    short[] newData = new short[this.size * this.size >> 3];
+                    Arrays.fill(newData, (short) 0);
+                    this.mapData = new short[] {this.data[0], biome, -32768, -32768};
+                    this.data = newData;
+                    this.internalSetData(x, z, (short) 1);
+                }
+            }
+        }
+        else if (this.mapData.length == 1)
+        {
+            this.data[this.xzToIdx(x, z)] = biome;
+        }
+        else
+        {
+            this.internalSetData(x, z, this.cacheMapIdx(biome));
+        }
+    }
+
+    @Override
+    public List<PreviewStruct> structures()
+    {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public void addStructure(PreviewStruct structureData)
+    {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public List<PreviewFeature> features()
+    {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public void addFeature(PreviewFeature feature)
+    {
+        throw new NotImplementedException();
+    }
+
+    public synchronized short mapSize()
+    {
+        short s;
+        for (s = 0; s < this.mapData.length; s++)
+        {
+            if (this.mapData[s] == -32768)
+            {
+                return s;
+            }
+        }
+
+        return s;
     }
 
     private short getReal(int idx)
@@ -183,81 +258,6 @@ public abstract class PreviewSectionCompressed extends PreviewSection
                 default -> throw new IllegalStateException("Unexpected value: " + this.mapData.length);
             };
         }
-    }
-
-    @Override
-    public synchronized void set(int x, int z, short biome)
-    {
-        if (this.mapData.length == 0)
-        {
-            if (this.data[0] != biome)
-            {
-                if (this.data[0] == -32768)
-                {
-                    this.data[0] = biome;
-                }
-                else
-                {
-                    short[] newData = new short[this.size * this.size >> 3];
-                    Arrays.fill(newData, (short) 0);
-                    this.mapData = new short[] {this.data[0], biome, -32768, -32768};
-                    this.data = newData;
-                    this.internalSetData(x, z, (short) 1);
-                }
-            }
-        }
-        else if (this.mapData.length == 1)
-        {
-            this.data[this.xzToIdx(x, z)] = biome;
-        }
-        else
-        {
-            this.internalSetData(x, z, this.cacheMapIdx(biome));
-        }
-    }
-
-    @Override
-    public int size()
-    {
-        return this.size;
-    }
-
-    @Override
-    public List<PreviewStruct> structures()
-    {
-        throw new NotImplementedException();
-    }
-
-    @Override
-    public void addStructure(PreviewStruct structureData)
-    {
-        throw new NotImplementedException();
-    }
-
-    @Override
-    public List<PreviewFeature> features()
-    {
-        throw new NotImplementedException();
-    }
-
-    @Override
-    public void addFeature(PreviewFeature feature)
-    {
-        throw new NotImplementedException();
-    }
-
-    public synchronized short mapSize()
-    {
-        short s;
-        for (s = 0; s < this.mapData.length; s++)
-        {
-            if (this.mapData[s] == -32768)
-            {
-                return s;
-            }
-        }
-
-        return s;
     }
 
     public static class Full extends PreviewSectionCompressed

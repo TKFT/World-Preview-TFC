@@ -1,11 +1,11 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.function.Consumer;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
 import com.rustysnail.world.preview.tfc.client.gui.screens.PreviewContainer;
-import java.util.Collection;
-import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
@@ -21,9 +21,9 @@ import org.jetbrains.annotations.Nullable;
 
 public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
 {
-    private Consumer<BiomeEntry> onBiomeSelected;
     private final boolean allowDeselecting;
     private final PreviewContainer previewContainer;
+    private Consumer<BiomeEntry> onBiomeSelected;
 
     public BiomesList(PreviewContainer previewContainer, Minecraft minecraft, int width, int height, int x, int y, boolean allowDeselecting)
     {
@@ -88,15 +88,15 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
     {
         private final short id;
         private final String name;
-        private int color;
-        private boolean isCave;
         private final int initialColor;
         private final boolean initialIsCave;
         private final Reference<Biome> entry;
-        private PreviewData.DataSource dataSource;
         private final Tooltip tooltip;
         private final PreviewData.DataSource initialDataSource;
         private final boolean isPrimaryNamespace;
+        private int color;
+        private boolean isCave;
+        private PreviewData.DataSource dataSource;
 
         public BiomeEntry(
             Reference<Biome> entry,
@@ -167,6 +167,11 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
             return this.isCave;
         }
 
+        public void setCave(boolean cave)
+        {
+            this.isCave = cave;
+        }
+
         public PreviewData.DataSource dataSource()
         {
             return this.dataSource;
@@ -196,22 +201,10 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
             this.dataSource = PreviewData.DataSource.CONFIG;
         }
 
-        public void setCave(boolean cave)
-        {
-            this.isCave = cave;
-        }
-
         @NotNull
         public Component getNarration()
         {
             return Component.translatable("narrator.select", this.name);
-        }
-
-        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
-        {
-            guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
-            String formatName = this.isPrimaryNamespace ? this.name : "§o" + this.name;
-            guiGraphics.drawString(BiomesList.this.minecraft.font, formatName, k + 16, j + 2, 16777215);
         }
 
         public boolean mouseClicked(double d, double e, int i)
@@ -235,6 +228,13 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
                     return true;
                 }
             }
+        }
+
+        public void render(@NotNull GuiGraphics guiGraphics, int i, int j, int k, int l, int m, int n, int o, boolean bl, float f)
+        {
+            guiGraphics.fill(k + 3, j + 1, k + 13, j + 11, WorldPreview.nativeColor(this.color));
+            String formatName = this.isPrimaryNamespace ? this.name : "§o" + this.name;
+            guiGraphics.drawString(BiomesList.this.minecraft.font, formatName, k + 16, j + 2, 16777215);
         }
     }
 }

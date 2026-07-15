@@ -1,27 +1,25 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.ArrayList;
+import java.util.List;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.screens.PreviewContainer;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.SelectionSlider;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
-
-import net.dries007.tfc.world.ChunkGeneratorExtension;
-import net.dries007.tfc.world.settings.RockLayerSettings;
-import net.dries007.tfc.world.settings.Settings;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.tabs.GridLayoutTab;
-import net.minecraft.client.gui.layouts.GridLayout.RowHelper;
-import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.layouts.FrameLayout;
+import net.minecraft.client.gui.layouts.GridLayout.RowHelper;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.network.chat.Component;
 
-import java.util.ArrayList;
-import java.util.List;
+import net.dries007.tfc.world.ChunkGeneratorExtension;
+import net.dries007.tfc.world.settings.RockLayerSettings;
+import net.dries007.tfc.world.settings.Settings;
 
 /**
  * Settings tab for TerraFirmaCraft world generation options.
@@ -42,19 +40,6 @@ public class TFCTab extends GridLayoutTab
     private final ChunkGeneratorExtension tfcExtension;
     private final Runnable onApplyClose;
     private final boolean readOnly;
-
-    private int temperatureScale;
-    private float temperatureConstant;
-    private int rainfallScale;
-    private float rainfallConstant;
-    private float continentalness;
-    private boolean flatBedrock;
-    private boolean finiteContinents;
-    private int spawnDistance;
-    private int spawnCenterX;
-    private int spawnCenterZ;
-    private float grassDensity;
-
     private final SelectionSlider<ScaleValue> spawnRadiusSlider;
     private final SelectionSlider<ScaleValue> spawnCenterXSlider;
     private final SelectionSlider<ScaleValue> spawnCenterZSlider;
@@ -67,7 +52,6 @@ public class TFCTab extends GridLayoutTab
     private final Checkbox cbFlatBedrock;
     private final Checkbox cbFiniteContinents;
     private final Button applyButton;
-
     private final WGLabel headerLabel;
     private final WGLabel labelFlatBedrock;
     private final WGLabel labelSpawnDistance;
@@ -81,8 +65,18 @@ public class TFCTab extends GridLayoutTab
     private final WGLabel labelGrassDensity;
     private final WGLabel labelFiniteContinents;
     private final WGLabel labelSpacer;
-
     private final RockLayerSettings rockLayerSettings;
+    private int temperatureScale;
+    private float temperatureConstant;
+    private int rainfallScale;
+    private float rainfallConstant;
+    private float continentalness;
+    private boolean flatBedrock;
+    private boolean finiteContinents;
+    private int spawnDistance;
+    private int spawnCenterX;
+    private int spawnCenterZ;
+    private float grassDensity;
 
     public TFCTab(Minecraft minecraft, PreviewContainer previewContainer, ChunkGeneratorExtension tfcExtension, Runnable onApplyClose, boolean readOnly)
     {

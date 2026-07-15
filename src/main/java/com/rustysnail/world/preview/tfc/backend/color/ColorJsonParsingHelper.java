@@ -6,10 +6,6 @@ import org.jetbrains.annotations.Nullable;
 
 final class ColorJsonParsingHelper
 {
-    private ColorJsonParsingHelper()
-    {
-    }
-
     @Nullable
     static String parseOptionalName(JsonObject raw)
     {
@@ -37,5 +33,9 @@ final class ColorJsonParsingHelper
         int g = gEl.getAsInt() & 0xFF;
         int b = bEl.getAsInt() & 0xFF;
         return r << 16 | g << 8 | b;
+    }
+
+    private ColorJsonParsingHelper()
+    {
     }
 }

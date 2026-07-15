@@ -1,28 +1,31 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
-import net.dries007.tfc.world.Seed;
-import net.dries007.tfc.world.biome.BiomeExtension;
-import net.dries007.tfc.world.volcano.CenteredFeatureNoise;
-import net.dries007.tfc.world.volcano.CenteredFeatureNoiseSampler;
-
-import net.minecraft.core.QuartPos;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.QuartPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
+
+import net.dries007.tfc.world.Seed;
+import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.noise.Cellular2D;
+import net.dries007.tfc.world.volcano.CenteredFeatureNoise;
+import net.dries007.tfc.world.volcano.CenteredFeatureNoiseSampler;
+import net.dries007.tfc.world.volcano.VolcanoVariant;
 
 public final class FeatureDetectors
 {
 
+    private static final ResourceLocation STRATOVOLCANOES_ID = ResourceLocation.fromNamespaceAndPath("tfc", "stratovolcanoes");
     private static final Map<ResourceLocation, Short> FEATURE_ID_MAP = new HashMap<>();
     private static final List<SearchableFeature> FEATURE_BY_ID = new ArrayList<>();
 
@@ -56,7 +59,7 @@ public final class FeatureDetectors
         java.util.Arrays.fill(cachedSeeds, Long.MIN_VALUE);
     }
 
-    private static CenteredFeatureNoiseSampler getTuffRingSampler(long seed)
+    private static synchronized CenteredFeatureNoiseSampler getTuffRingSampler(long seed)
     {
         for (int i = 0; i < NOISE_CACHE_SIZE; i++)
         {
@@ -75,7 +78,7 @@ public final class FeatureDetectors
         return cachedTuffSamplers[idx];
     }
 
-    private static CenteredFeatureNoiseSampler getTuyaSampler(long seed)
+    private static synchronized CenteredFeatureNoiseSampler getTuyaSampler(long seed)
     {
         for (int i = 0; i < NOISE_CACHE_SIZE; i++)
         {
@@ -95,7 +98,7 @@ public final class FeatureDetectors
         return CenteredFeatureNoise.tuya(Seed.of(seed));
     }
 
-    private static CenteredFeatureNoiseSampler getCinderSampler(long seed)
+    private static synchronized CenteredFeatureNoiseSampler getCinderSampler(long seed)
     {
         for (int i = 0; i < NOISE_CACHE_SIZE; i++)
         {
@@ -115,7 +118,7 @@ public final class FeatureDetectors
         return CenteredFeatureNoise.cinder(Seed.of(seed));
     }
 
-    private static CenteredFeatureNoiseSampler getStratovolcanoSampler(long seed)
+    private static synchronized CenteredFeatureNoiseSampler getStratovolcanoSampler(long seed)
     {
         for (int i = 0; i < NOISE_CACHE_SIZE; i++)
         {
@@ -136,6 +139,68 @@ public final class FeatureDetectors
         }
 
         return CenteredFeatureNoise.stratovolcano(Seed.of(seed));
+    }
+
+    public static @Nullable String getFeatureVariant(
+        @Nullable SearchableFeature feature,
+        long seed,
+        @Nullable BlockPos center
+    )
+    {
+        if (feature == null || center == null || !STRATOVOLCANOES_ID.equals(feature.id()))
+        {
+            return null;
+        }
+
+        try
+        {
+            CenteredFeatureNoiseSampler sampler = getStratovolcanoSampler(seed);
+            Cellular2D.Cell cell = sampler.getCellularNoise().cell(center.getX(), center.getZ());
+            VolcanoVariant variant = sampler.getVolcanoVariant(cell);
+            return variant != null ? variant.name() : null;
+        }
+        catch (RuntimeException ignored)
+        {
+            // A stale feature icon or incompatible TFC worldgen state must not break tooltip rendering.
+            return null;
+        }
+    }
+
+    public static @Nullable Component getFeatureVariantName(
+        @Nullable SearchableFeature feature,
+        long seed,
+        @Nullable BlockPos center
+    )
+    {
+        String variantName = getFeatureVariant(feature, seed, center);
+        if (variantName == null || variantName.isBlank())
+        {
+            return null;
+        }
+
+        String fallback = titleCaseVariantName(variantName);
+        if (fallback.isBlank())
+        {
+            return null;
+        }
+        return Component.translatableWithFallback(
+            "feature.worldpreview.stratovolcano.variant." + variantName,
+            fallback
+        );
+    }
+
+    static String titleCaseVariantName(String serializedName)
+    {
+        String[] words = serializedName.strip().split("[_\\s-]+");
+        StringBuilder result = new StringBuilder();
+        for (String word : words)
+        {
+            if (word.isEmpty()) continue;
+            if (!result.isEmpty()) result.append(' ');
+            String lower = word.toLowerCase(Locale.ROOT);
+            result.append(Character.toUpperCase(lower.charAt(0))).append(lower, 1, lower.length());
+        }
+        return result.toString();
     }
 
     private static final FeatureTest TUFF_RING_TEST = new FeatureTest()
@@ -253,7 +318,7 @@ public final class FeatureDetectors
             TUYA_TEST
         ),
         new SearchableFeature(
-            ResourceLocation.fromNamespaceAndPath("tfc", "stratovolcanoes"),
+            STRATOVOLCANOES_ID,
             Component.translatable("feature.worldpreview.stratovolcano"),
             STRATOVOLCANO_TEST
         ),
@@ -289,7 +354,6 @@ public final class FeatureDetectors
             true
         )
     );
-
 
 
     static

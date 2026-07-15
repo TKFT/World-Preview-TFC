@@ -6,13 +6,13 @@ import java.util.List;
 public class WorldPreviewConfig
 {
     public final List<String> savedSeeds = new ArrayList<>();
+    public final boolean storeNoiseSamples = false;
     public boolean showInPauseMenu = true;
     public boolean showPlayer = true;
     public boolean showControls = true;
     public boolean showFrameTime = false;
     public boolean sampleStructures = false;
     public boolean sampleHeightmap = false;
-    public final boolean storeNoiseSamples = false;
     public int heightmapMinY = 32;
     public int heightmapMaxY = 255;
     public boolean onlySampleInVisualRange = true;

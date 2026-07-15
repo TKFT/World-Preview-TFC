@@ -1,7 +1,7 @@
 package com.rustysnail.world.preview.tfc.backend.sampler;
 
-import com.rustysnail.world.preview.tfc.backend.worker.WorkResult;
 import java.util.List;
+import com.rustysnail.world.preview.tfc.backend.worker.WorkResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.SectionPos;

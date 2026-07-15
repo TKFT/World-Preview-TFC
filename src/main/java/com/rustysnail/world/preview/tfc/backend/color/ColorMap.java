@@ -6,107 +6,35 @@ import net.minecraft.resources.ResourceLocation;
 
 public class ColorMap
 {
-    private final ResourceLocation key;
-    private final String name;
-    private final Color[] colors;
-
-    public ResourceLocation key()
+    public static float[] LabToRGB(float L, float a, float b)
     {
-        return this.key;
+        float[] out = new float[3];
+        return XYZToRGB(LabToXYZ(out, L, a, b), out[0], out[1], out[2]);
     }
 
-    public String name()
+    public static float[] RGBToLab(float r, float g, float b)
     {
-        return this.name;
+        float[] out = new float[3];
+        return XYZToLab(RGBToXYZ(out, r, g, b), out[0], out[1], out[2]);
     }
 
-    public ColorMap(ResourceLocation key, RawColorMap raw)
+    public static float clamp(float val, float min, float max)
     {
-        this.key = key;
-        this.name = raw.name;
-        if (raw.data.size() < 2)
-        {
-            throw new InvalidParameterException(this.name + ": All colormaps MUST have at least 2 entries");
-        }
-        else
-        {
-            this.colors = new Color[raw.data.size()];
-
-            for (int i = 0; i < raw.data.size(); i++)
-            {
-                List<Float> entry = raw.data.get(i);
-                if (entry.size() != 3)
-                {
-                    throw new InvalidParameterException(this.name + ": All entries in a colormap data MUST have exactly 3 elements: [R, G, B]!");
-                }
-
-                if (entry.stream().anyMatch(x -> x < 0.0 || x > 1.0))
-                {
-                    throw new InvalidParameterException(this.name + ": All values in a colormap data MUST be between 0.0 and 1.0 (inclusive)");
-                }
-
-                this.colors[i] = new Color(entry.get(0), entry.get(1), entry.get(2));
-            }
-        }
+        return Math.clamp(val, min, max);
     }
 
-    public Color get(float position)
+    public static float lerp(float low, float high, float amt)
     {
-        if (position < 0.0F)
-        {
-            return this.colors[0];
-        }
-        else if (position > 1.0F)
-        {
-            return this.colors[this.colors.length - 1];
-        }
-        else
-        {
-            float pos = position * (this.colors.length - 1);
-            int floor = (int) pos;
-            if (pos == floor)
-            {
-                return this.colors[floor];
-            }
-            else
-            {
-                return pos == floor + 1 ? this.colors[floor + 1] : lerp(this.colors[floor], this.colors[floor + 1], pos - floor);
-            }
-        }
+        amt = clamp(amt, 0.0F, 1.0F);
+        return low * amt + high * (1.0F - amt);
     }
 
-    public int getARGB(float position)
+    public static Color lerp(Color lower, Color upper, float amount)
     {
-        Color c = this.get(position);
-        int R = (int) (c.r * 255.0F) & 0xFF;
-        int G = (int) (c.g * 255.0F) & 0xFF;
-        int B = (int) (c.b * 255.0F) & 0xFF;
-        return R | G << 8 | B << 16 | 0xFF000000;
-    }
-
-    public int[] bake(int yMin, int yMax, int yVisMin, int yVisMax)
-    {
-        int[] res = new int[yMax - yMin];
-        float visRange = (float) yVisMax - yVisMin;
-
-        for (int i = yMin; i < yMax; i++)
-        {
-            res[i - yMin] = this.getARGB((i - yVisMin) / visRange);
-        }
-
-        return res;
-    }
-
-    public int[] bake(int numValues)
-    {
-        int[] res = new int[numValues];
-
-        for (int i = 0; i < numValues; i++)
-        {
-            res[i] = this.getARGB((float) i / numValues);
-        }
-
-        return res;
+        float[] lowerLab = RGBToLab(lower.r, lower.g, lower.b);
+        float[] upperLab = RGBToLab(upper.r, upper.g, upper.b);
+        float[] rgb = LabToRGB(lerp(upperLab[0], lowerLab[0], amount), lerp(upperLab[1], lowerLab[1], amount), lerp(upperLab[2], lowerLab[2], amount));
+        return new Color(clamp(rgb[0], 0.0F, 1.0F), clamp(rgb[1], 0.0F, 1.0F), clamp(rgb[2], 0.0F, 1.0F));
     }
 
     static float[] RGBToXYZ(float[] out, float r, float g, float b)
@@ -183,35 +111,107 @@ public class ColorMap
         return out;
     }
 
-    public static float[] LabToRGB(float L, float a, float b)
+    private final ResourceLocation key;
+    private final String name;
+    private final Color[] colors;
+
+    public ColorMap(ResourceLocation key, RawColorMap raw)
     {
-        float[] out = new float[3];
-        return XYZToRGB(LabToXYZ(out, L, a, b), out[0], out[1], out[2]);
+        this.key = key;
+        this.name = raw.name;
+        if (raw.data.size() < 2)
+        {
+            throw new InvalidParameterException(this.name + ": All colormaps MUST have at least 2 entries");
+        }
+        else
+        {
+            this.colors = new Color[raw.data.size()];
+
+            for (int i = 0; i < raw.data.size(); i++)
+            {
+                List<Float> entry = raw.data.get(i);
+                if (entry.size() != 3)
+                {
+                    throw new InvalidParameterException(this.name + ": All entries in a colormap data MUST have exactly 3 elements: [R, G, B]!");
+                }
+
+                if (entry.stream().anyMatch(x -> x < 0.0 || x > 1.0))
+                {
+                    throw new InvalidParameterException(this.name + ": All values in a colormap data MUST be between 0.0 and 1.0 (inclusive)");
+                }
+
+                this.colors[i] = new Color(entry.get(0), entry.get(1), entry.get(2));
+            }
+        }
     }
 
-    public static float[] RGBToLab(float r, float g, float b)
+    public ResourceLocation key()
     {
-        float[] out = new float[3];
-        return XYZToLab(RGBToXYZ(out, r, g, b), out[0], out[1], out[2]);
+        return this.key;
     }
 
-    public static float clamp(float val, float min, float max)
+    public String name()
     {
-        return Math.clamp(val, min, max);
+        return this.name;
     }
 
-    public static float lerp(float low, float high, float amt)
+    public Color get(float position)
     {
-        amt = clamp(amt, 0.0F, 1.0F);
-        return low * amt + high * (1.0F - amt);
+        if (position < 0.0F)
+        {
+            return this.colors[0];
+        }
+        else if (position > 1.0F)
+        {
+            return this.colors[this.colors.length - 1];
+        }
+        else
+        {
+            float pos = position * (this.colors.length - 1);
+            int floor = (int) pos;
+            if (pos == floor)
+            {
+                return this.colors[floor];
+            }
+            else
+            {
+                return pos == floor + 1 ? this.colors[floor + 1] : lerp(this.colors[floor], this.colors[floor + 1], pos - floor);
+            }
+        }
     }
 
-    public static Color lerp(Color lower, Color upper, float amount)
+    public int getARGB(float position)
     {
-        float[] lowerLab = RGBToLab(lower.r, lower.g, lower.b);
-        float[] upperLab = RGBToLab(upper.r, upper.g, upper.b);
-        float[] rgb = LabToRGB(lerp(upperLab[0], lowerLab[0], amount), lerp(upperLab[1], lowerLab[1], amount), lerp(upperLab[2], lowerLab[2], amount));
-        return new Color(clamp(rgb[0], 0.0F, 1.0F), clamp(rgb[1], 0.0F, 1.0F), clamp(rgb[2], 0.0F, 1.0F));
+        Color c = this.get(position);
+        int R = (int) (c.r * 255.0F) & 0xFF;
+        int G = (int) (c.g * 255.0F) & 0xFF;
+        int B = (int) (c.b * 255.0F) & 0xFF;
+        return R | G << 8 | B << 16 | 0xFF000000;
+    }
+
+    public int[] bake(int yMin, int yMax, int yVisMin, int yVisMax)
+    {
+        int[] res = new int[yMax - yMin];
+        float visRange = (float) yVisMax - yVisMin;
+
+        for (int i = yMin; i < yMax; i++)
+        {
+            res[i - yMin] = this.getARGB((i - yVisMin) / visRange);
+        }
+
+        return res;
+    }
+
+    public int[] bake(int numValues)
+    {
+        int[] res = new int[numValues];
+
+        for (int i = 0; i < numValues; i++)
+        {
+            res[i] = this.getARGB((float) i / numValues);
+        }
+
+        return res;
     }
 
     public record Color(float r, float g, float b)

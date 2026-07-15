@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.mixin.client;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.screens.InGamePreviewScreen;
-import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.GridLayout.RowHelper;

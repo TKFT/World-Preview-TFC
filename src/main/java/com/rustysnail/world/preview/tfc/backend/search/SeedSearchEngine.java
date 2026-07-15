@@ -1,18 +1,11 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SplittableRandom;
 import com.rustysnail.world.preview.tfc.WorldPreview;
-
-import net.dries007.tfc.world.ChunkGeneratorExtension;
-import net.dries007.tfc.world.Seed;
-import net.dries007.tfc.world.biome.BiomeExtension;
-import net.dries007.tfc.world.layer.TFCLayers;
-import net.dries007.tfc.world.layer.framework.AreaFactory;
-import net.dries007.tfc.world.layer.framework.ConcurrentArea;
-import net.dries007.tfc.world.region.Region;
-import net.dries007.tfc.world.region.RegionGenerator;
-import net.dries007.tfc.world.region.Units;
-import net.dries007.tfc.world.settings.Settings;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.RegistryAccess;
@@ -29,40 +22,31 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import net.dries007.tfc.world.ChunkGeneratorExtension;
+import net.dries007.tfc.world.Seed;
+import net.dries007.tfc.world.biome.BiomeExtension;
+import net.dries007.tfc.world.layer.TFCLayers;
+import net.dries007.tfc.world.layer.framework.AreaFactory;
+import net.dries007.tfc.world.layer.framework.ConcurrentArea;
+import net.dries007.tfc.world.region.Region;
+import net.dries007.tfc.world.region.RegionGenerator;
+import net.dries007.tfc.world.region.Units;
+import net.dries007.tfc.world.settings.Settings;
 
 public class SeedSearchEngine implements Runnable
 {
 
-    public interface Callback
-    {
-        void onProgress(long seedsTested, int maxSeeds, String currentSeed,
-                        @Nullable String debugBiomeAtOrigin);
-
-        void onMatchFound(MatchResult result);
-
-        void onComplete(long totalTested, int matchesFound);
-
-        void onCancelled();
-
-        void onError(Throwable t);
-    }
-
     private static final int KNOWN_LOCATION_PROBE_RADIUS = 8;
-
     private final ChunkGenerator chunkGenerator;
     private final net.minecraft.world.level.LevelHeightAccessor heightAccessor;
     @Nullable private final RegistryAccess registryAccess;
     @Nullable private final Settings tfcSettings;
     private final boolean isTFC;
-
     private final SearchCriteria criteria;
     private final Callback callback;
-
+    private final Object pauseLock = new Object();
     private volatile boolean cancelled = false;
     private volatile boolean paused = false;
-    private final Object pauseLock = new Object();
-
     private java.lang.reflect.Method cachedWithSeedMethod;
     private boolean withSeedMethodLookedUp = false;
 
@@ -486,6 +470,20 @@ public class SeedSearchEngine implements Runnable
             .orElse(null);
 
         return biomeKey == null ? null : biomeKey.location().toString();
+    }
+
+    public interface Callback
+    {
+        void onProgress(long seedsTested, int maxSeeds, String currentSeed,
+                        @Nullable String debugBiomeAtOrigin);
+
+        void onMatchFound(MatchResult result);
+
+        void onComplete(long totalTested, int matchesFound);
+
+        void onCancelled();
+
+        void onError(Throwable t);
     }
 
 }

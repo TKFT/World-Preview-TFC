@@ -1,8 +1,8 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import it.unimi.dsi.fastutil.objects.Object2ShortMap;
 import java.util.List;
 import java.util.Map;
+import it.unimi.dsi.fastutil.objects.Object2ShortMap;
 import net.minecraft.resources.ResourceLocation;
 
 public record PreviewData(
@@ -14,6 +14,13 @@ public record PreviewData(
     Map<String, ColorMap> colorMaps
 )
 {
+    public enum DataSource
+    {
+        MISSING,
+        RESOURCE,
+        CONFIG
+    }
+
     public record BiomeData(
         int id,
         ResourceLocation tag,
@@ -26,13 +33,6 @@ public record PreviewData(
         DataSource dataSource
     )
     {
-    }
-
-    public enum DataSource
-    {
-        MISSING,
-        RESOURCE,
-        CONFIG
     }
 
     public record HeightmapPresetData(String name, int minY, int maxY)

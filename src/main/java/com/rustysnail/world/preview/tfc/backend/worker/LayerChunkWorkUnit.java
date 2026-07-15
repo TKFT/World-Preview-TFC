@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
-import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
-import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import java.util.ArrayList;
 import java.util.List;
+import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
+import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.ChunkPos;
@@ -16,6 +16,12 @@ public class LayerChunkWorkUnit extends WorkUnit
     {
         super(sampleUtils, pos, previewData, y);
         this.sampler = sampler;
+    }
+
+    @Override
+    public long flags()
+    {
+        return 0L;
     }
 
     @Override
@@ -64,11 +70,5 @@ public class LayerChunkWorkUnit extends WorkUnit
         }
 
         return List.of(res, temperature, humidity, continentalness, erosion, depth, weirdness);
-    }
-
-    @Override
-    public long flags()
-    {
-        return 0L;
     }
 }

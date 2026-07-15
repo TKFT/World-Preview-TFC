@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.backend.stubs;
 
-import com.mojang.authlib.GameProfile;
-import com.mojang.datafixers.DataFixer;
 import java.net.Proxy;
 import java.util.UUID;
+import com.mojang.authlib.GameProfile;
+import com.mojang.datafixers.DataFixer;
 import net.minecraft.SystemReport;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.Services;

@@ -1,5 +1,8 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -7,10 +10,6 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 
 public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureList.Entry>
 {
@@ -58,13 +57,25 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
         }
     }
 
+    public int entryCount()
+    {
+        return this.children().size();
+    }
+
+    @org.jetbrains.annotations.Nullable
+    public Entry entryAt(int index)
+    {
+        if (index < 0 || index >= this.children().size()) return null;
+        return this.children().get(index);
+    }
+
     public class Entry extends BaseObjectSelectionList.Entry<Entry>
     {
         private final SearchableFeature feature;
         private final String name;
+        private final Tooltip tooltip;
         private boolean checked = false;
         private boolean enabled = true;
-        private final Tooltip tooltip;
 
         public Entry(SearchableFeature feature)
         {
@@ -104,19 +115,6 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
         }
 
         @Override
-        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
-                           int mouseX, int mouseY, boolean hovered, float partialTick)
-        {
-            int textColor = this.enabled ? 0xFFFFFF : 0x777777;
-
-            int cbX = left + 2;
-            int cbY = top + 1;
-            BaseObjectSelectionList.renderCheckbox(gg, cbX, cbY, this.checked, this.enabled);
-
-            gg.drawString(TerrainFeatureList.this.minecraft.font, this.name, left + 15, top + 2, textColor);
-        }
-
-        @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button)
         {
             if (button == 0)
@@ -130,18 +128,19 @@ public class TerrainFeatureList extends BaseObjectSelectionList<TerrainFeatureLi
             }
             return false;
         }
-    }
 
-    public int entryCount()
-    {
-        return this.children().size();
-    }
+        @Override
+        public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
+                           int mouseX, int mouseY, boolean hovered, float partialTick)
+        {
+            int textColor = this.enabled ? 0xFFFFFF : 0x777777;
 
-    @org.jetbrains.annotations.Nullable
-    public Entry entryAt(int index)
-    {
-        if (index < 0 || index >= this.children().size()) return null;
-        return this.children().get(index);
+            int cbX = left + 2;
+            int cbY = top + 1;
+            BaseObjectSelectionList.renderCheckbox(gg, cbX, cbY, this.checked, this.enabled);
+
+            gg.drawString(TerrainFeatureList.this.minecraft.font, this.name, left + 15, top + 2, textColor);
+        }
     }
 
 }

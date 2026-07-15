@@ -1,6 +1,5 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import it.unimi.dsi.fastutil.objects.Object2ShortOpenHashMap;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -9,14 +8,34 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.stream.Collectors;
+import it.unimi.dsi.fastutil.objects.Object2ShortOpenHashMap;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public class PreviewMappingData
 {
+    private static final MessageDigest sha1;
+
+    static
+    {
+        try
+        {
+            sha1 = MessageDigest.getInstance("SHA1");
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static boolean booleanOr(@Nullable Boolean value, boolean fallback)
+    {
+        return value != null ? value : fallback;
+    }
+
     private final Map<String, ColorEntry> resourceOnlyColorMappingData = new HashMap<>();
     private final Map<String, ColorEntry> colorMappingData = new HashMap<>();
     private final Map<String, StructureEntry> structMappingData = new HashMap<>();
@@ -24,38 +43,6 @@ public class PreviewMappingData
     private final Map<String, RockColorEntry> rockTypeColorData = new HashMap<>();
     private final List<PreviewData.HeightmapPresetData> heightmapPresets = new ArrayList<>();
     private final List<ColorMap> colorMaps = new ArrayList<>();
-    private static final MessageDigest sha1;
-
-    void clearBiomes()
-    {
-        this.colorMappingData.clear();
-        this.resourceOnlyColorMappingData.clear();
-    }
-
-    void clearStructures()
-    {
-        this.structMappingData.clear();
-    }
-
-    void clearColorMappings()
-    {
-        this.colorMaps.clear();
-    }
-
-    void clearHeightmapPresets()
-    {
-        this.heightmapPresets.clear();
-    }
-
-    void clearRockColors()
-    {
-        this.rockColorData.clear();
-    }
-
-    void clearRockTypeColors()
-    {
-        this.rockTypeColorData.clear();
-    }
 
     public void updateRockColors(Map<ResourceLocation, RockColorEntry> newData)
     {
@@ -209,16 +196,35 @@ public class PreviewMappingData
         return res;
     }
 
-    static
+    void clearBiomes()
     {
-        try
-        {
-            sha1 = MessageDigest.getInstance("SHA1");
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new RuntimeException(e);
-        }
+        this.colorMappingData.clear();
+        this.resourceOnlyColorMappingData.clear();
+    }
+
+    void clearStructures()
+    {
+        this.structMappingData.clear();
+    }
+
+    void clearColorMappings()
+    {
+        this.colorMaps.clear();
+    }
+
+    void clearHeightmapPresets()
+    {
+        this.heightmapPresets.clear();
+    }
+
+    void clearRockColors()
+    {
+        this.rockColorData.clear();
+    }
+
+    void clearRockTypeColors()
+    {
+        this.rockTypeColorData.clear();
     }
 
     public static class ColorEntry
@@ -244,12 +250,12 @@ public class PreviewMappingData
 
     public static class StructureEntry
     {
+        @Nullable
+        public final Boolean showByDefault = null;
         public PreviewData.DataSource dataSource;
         public String name = null;
         public String texture = null;
         public String item = null;
-        @Nullable
-        public final Boolean showByDefault = null;
     }
 
     public static class RockColorEntry
@@ -260,10 +266,5 @@ public class PreviewMappingData
         public RockColorEntry()
         {
         }
-    }
-
-    private static boolean booleanOr(@Nullable Boolean value, boolean fallback)
-    {
-        return value != null ? value : fallback;
     }
 }

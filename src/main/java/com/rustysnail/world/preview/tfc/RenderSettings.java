@@ -1,18 +1,15 @@
 package com.rustysnail.world.preview.tfc;
 
+import java.util.function.IntFunction;
 import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
 import com.rustysnail.world.preview.tfc.backend.sampler.FullQuartSampler;
 import com.rustysnail.world.preview.tfc.backend.sampler.QuarterQuartSampler;
 import com.rustysnail.world.preview.tfc.backend.sampler.SingleQuartSampler;
-import java.util.function.IntFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
 public class RenderSettings
 {
-    private BlockPos center = new BlockPos(0, 0, 0);
-    private int quartExpand = 1;
-    private int quartStride = 1;
     public SamplerType samplerType = SamplerType.AUTO;
     public ResourceLocation dimension = null;
     public boolean hideAllStructures = false;
@@ -20,7 +17,9 @@ public class RenderSettings
     // True when the feature-icon overlay is shown; lets WorkManager queue TFC feature detection
     // even in non-TFC modes (and skip it otherwise).
     public transient boolean featureOverlay = false;
-
+    private BlockPos center = new BlockPos(0, 0, 0);
+    private int quartExpand = 1;
+    private int quartStride = 1;
 
     public BlockPos center()
     {

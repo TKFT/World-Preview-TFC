@@ -10,25 +10,11 @@ import org.jetbrains.annotations.Nullable;
 public class BiomeSearchTask implements Runnable
 {
 
-    public interface Callback
-    {
-        void onProgress(int currentDistance, int maxDistance);
-
-        void onFound(BlockPos pos);
-
-        void onNotFound();
-
-        void onCancelled();
-
-        void onError(Throwable t);
-    }
-
     private static final int RING_STEP = 2000;
     private static final int MAX_DISTANCE = 100_000;
     private static final int SAMPLE_SPACING = 16;
     private static final int COARSE_SPACING = 32;
     private static final int COARSE_THRESHOLD = 20_000;
-
     private final SampleUtils sampleUtils;
     @Nullable
     private final TFCSampleUtils tfcSampleUtils;
@@ -142,5 +128,18 @@ public class BiomeSearchTask implements Runnable
             return this.tfcSampleUtils.samplePoint(x, z).island();
         }
         return true;
+    }
+
+    public interface Callback
+    {
+        void onProgress(int currentDistance, int maxDistance);
+
+        void onFound(BlockPos pos);
+
+        void onNotFound();
+
+        void onCancelled();
+
+        void onError(Throwable t);
     }
 }

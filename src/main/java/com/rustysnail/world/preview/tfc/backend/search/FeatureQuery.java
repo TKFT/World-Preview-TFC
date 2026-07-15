@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
+import org.jetbrains.annotations.Nullable;
+
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.region.Region;
-
-import org.jetbrains.annotations.Nullable;
 
 public record FeatureQuery(
     long seed,

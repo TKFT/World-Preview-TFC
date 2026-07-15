@@ -1,11 +1,11 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.List;
 import com.rustysnail.world.preview.tfc.RenderSettings;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.SelectionSlider;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
-import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.tabs.GridLayoutTab;
 import net.minecraft.client.gui.layouts.GridLayout.RowHelper;
@@ -69,22 +69,22 @@ public class SamplingTab extends GridLayoutTab
         QUARTER(RenderSettings.SamplerType.QUARTER),
         SINGLE(RenderSettings.SamplerType.SINGLE);
 
-        public final RenderSettings.SamplerType samplerType;
-
         public static GUISamplesType of(RenderSettings.SamplerType typ)
         {
             return valueOf(typ.name());
+        }
+
+        public final RenderSettings.SamplerType samplerType;
+
+        GUISamplesType(RenderSettings.SamplerType samplerType)
+        {
+            this.samplerType = samplerType;
         }
 
         @Override
         public Component message()
         {
             return Component.translatable("world_preview_tfc.settings.sample.sampler.name." + this.name());
-        }
-
-        GUISamplesType(RenderSettings.SamplerType samplerType)
-        {
-            this.samplerType = samplerType;
         }
     }
 
@@ -96,16 +96,16 @@ public class SamplingTab extends GridLayoutTab
         NUM_2(2),
         NUM_1(1);
 
+        public static PixelsPerChunk of(int num)
+        {
+            return valueOf("NUM_" + num);
+        }
+
         public final int value;
 
         PixelsPerChunk(int value)
         {
             this.value = value;
-        }
-
-        public static PixelsPerChunk of(int num)
-        {
-            return valueOf("NUM_" + num);
         }
 
         @Override

@@ -1,14 +1,14 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.InvalidParameterException;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.PreviewContainerDataProvider;
 import com.rustysnail.world.preview.tfc.mixin.MinecraftServerAccessor;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.InvalidParameterException;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -33,13 +33,27 @@ import org.jetbrains.annotations.Nullable;
 
 public class InGamePreviewScreen extends Screen implements PreviewContainerDataProvider
 {
+    private final WorldPreview worldPreview = WorldPreview.get();
     private IntegratedServer integratedServer;
     private PreviewContainer previewContainer;
-    private final WorldPreview worldPreview = WorldPreview.get();
 
     public InGamePreviewScreen()
     {
         super(WorldPreviewComponents.TITLE_FULL);
+    }
+
+    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    {
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.TITLE_FULL, this.width / 2, 6, 16777215);
+        guiGraphics.blit(FOOTER_SEPARATOR, 0, Mth.roundToward(this.height - 30, 2), 0.0F, 0.0F, this.width, 2, 32, 2);
+    }
+
+    public void onClose()
+    {
+        this.worldPreview.saveConfig();
+        this.previewContainer.close();
+        super.onClose();
     }
 
     protected void init()
@@ -65,39 +79,20 @@ public class InGamePreviewScreen extends Screen implements PreviewContainerDataP
         this.addRenderableWidget(btn);
     }
 
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
-    {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.TITLE_FULL, this.width / 2, 6, 16777215);
-        guiGraphics.blit(FOOTER_SEPARATOR, 0, Mth.roundToward(this.height - 30, 2), 0.0F, 0.0F, this.width, 2, 32, 2);
-    }
-
-    public void onClose()
-    {
-        this.worldPreview.saveConfig();
-        this.previewContainer.close();
-        super.onClose();
-    }
-
     @Override
-    public Path cacheDir()
+    public PreviewStorage loadPreviewStorage(long seed, int yMin, int yMax)
     {
-        LevelStorageAccess access = ((MinecraftServerAccessor) this.integratedServer).getStorageSource();
-        Path previewDir = access.getLevelPath(LevelResource.ROOT).resolve("world-preview");
-        try
+        if (!this.worldPreview.cfg().cacheInGame)
         {
-            Files.createDirectories(previewDir);
+            return new PreviewStorage(yMin, yMax);
         }
-        catch (IOException e)
+        else
         {
-            throw new RuntimeException("Failed to create preview cache directory: " + previewDir, e);
+            this.minecraft.forceSetScreen(new PreviewCacheLoadingScreen(WorldPreviewComponents.LOADING_PREVIEW));
+            PreviewStorage res = this.readCacheFile(yMin, yMax, this.cacheDir().resolve(this.filename()));
+            this.minecraft.forceSetScreen(this);
+            return res;
         }
-        return previewDir;
-    }
-
-    private String filename()
-    {
-        return String.format("%s.zip", this.cacheFileCompatPart());
     }
 
     @Override
@@ -118,19 +113,19 @@ public class InGamePreviewScreen extends Screen implements PreviewContainerDataP
     }
 
     @Override
-    public PreviewStorage loadPreviewStorage(long seed, int yMin, int yMax)
+    public Path cacheDir()
     {
-        if (!this.worldPreview.cfg().cacheInGame)
+        LevelStorageAccess access = ((MinecraftServerAccessor) this.integratedServer).getStorageSource();
+        Path previewDir = access.getLevelPath(LevelResource.ROOT).resolve("world-preview");
+        try
         {
-            return new PreviewStorage(yMin, yMax);
+            Files.createDirectories(previewDir);
         }
-        else
+        catch (IOException e)
         {
-            this.minecraft.forceSetScreen(new PreviewCacheLoadingScreen(WorldPreviewComponents.LOADING_PREVIEW));
-            PreviewStorage res = this.readCacheFile(yMin, yMax, this.cacheDir().resolve(this.filename()));
-            this.minecraft.forceSetScreen(this);
-            return res;
+            throw new RuntimeException("Failed to create preview cache directory: " + previewDir, e);
         }
+        return previewDir;
     }
 
     @Nullable
@@ -204,5 +199,10 @@ public class InGamePreviewScreen extends Screen implements PreviewContainerDataP
     public LayeredRegistryAccess<RegistryLayer> layeredRegistryAccess(@Nullable WorldCreationContext wcContext)
     {
         return this.integratedServer.registries();
+    }
+
+    private String filename()
+    {
+        return String.format("%s.zip", this.cacheFileCompatPart());
     }
 }

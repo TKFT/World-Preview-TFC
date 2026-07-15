@@ -1,12 +1,12 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -14,32 +14,6 @@ import org.jetbrains.annotations.NotNull;
 
 public class StructureMapReloadListener extends BaseMultiJsonResourceReloadListener
 {
-    public StructureMapReloadListener()
-    {
-        super("structure_icons.json");
-    }
-
-    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
-    {
-        WorldPreview worldPreview = WorldPreview.get();
-        PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
-        previewMappingData.clearStructures();
-        WorldPreview.LOGGER.debug("Loading structure resource entries");
-
-        for (Entry<ResourceLocation, List<JsonElement>> entry : object.entrySet())
-        {
-            WorldPreview.LOGGER.debug(" - loading entries from {}", entry.getKey());
-
-            for (JsonElement jsonElement : entry.getValue())
-            {
-                Map<ResourceLocation, PreviewMappingData.StructureEntry> curr = parseStructureData(
-                    jsonElement, PreviewData.DataSource.RESOURCE
-                );
-                previewMappingData.updateStruct(curr);
-            }
-        }
-    }
-
     public static Map<ResourceLocation, PreviewMappingData.StructureEntry> parseStructureData(
         JsonElement jsonElement, PreviewData.DataSource dataSource
     )
@@ -108,5 +82,31 @@ public class StructureMapReloadListener extends BaseMultiJsonResourceReloadListe
         }
 
         return res;
+    }
+
+    public StructureMapReloadListener()
+    {
+        super("structure_icons.json");
+    }
+
+    protected void apply(Map<ResourceLocation, List<JsonElement>> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler)
+    {
+        WorldPreview worldPreview = WorldPreview.get();
+        PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
+        previewMappingData.clearStructures();
+        WorldPreview.LOGGER.debug("Loading structure resource entries");
+
+        for (Entry<ResourceLocation, List<JsonElement>> entry : object.entrySet())
+        {
+            WorldPreview.LOGGER.debug(" - loading entries from {}", entry.getKey());
+
+            for (JsonElement jsonElement : entry.getValue())
+            {
+                Map<ResourceLocation, PreviewMappingData.StructureEntry> curr = parseStructureData(
+                    jsonElement, PreviewData.DataSource.RESOURCE
+                );
+                previewMappingData.updateStruct(curr);
+            }
+        }
     }
 }

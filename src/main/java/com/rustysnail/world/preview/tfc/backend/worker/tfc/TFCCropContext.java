@@ -1,9 +1,8 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
+import java.util.function.IntSupplier;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.function.IntSupplier;
 
 /**
  * The crop selection captured for a batch of {@link TFCRegionWorkUnit}s when queued for the

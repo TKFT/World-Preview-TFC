@@ -1,5 +1,8 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets.lists;
 
+import java.util.Collection;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import com.rustysnail.world.preview.tfc.backend.search.MatchResult;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -8,10 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
 {
@@ -121,6 +120,17 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
         }
 
         @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int button)
+        {
+            if (button == 0)
+            {
+                SeedMatchList.this.setSelected(this);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
         public void render(@NotNull GuiGraphics gg, int index, int top, int left, int width, int height,
                            int mouseX, int mouseY, boolean hovered, float partialTick)
         {
@@ -140,17 +150,6 @@ public class SeedMatchList extends BaseObjectSelectionList<SeedMatchList.Entry>
                 }
                 gg.drawString(SeedMatchList.this.minecraft.font, details, left + 4, top + 14, 0xAAAAAA);
             }
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button)
-        {
-            if (button == 0)
-            {
-                SeedMatchList.this.setSelected(this);
-                return true;
-            }
-            return false;
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.rustysnail.world.preview.tfc.mixin;
 
-import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.Aquifer.NoiseBasedAquifer;
+import net.minecraft.world.level.levelgen.NoiseChunk;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,6 +17,12 @@ public abstract class NoiseBasedAquiferMixin
     @Shadow
     private NoiseChunk noiseChunk;
 
+    @Invoker
+    abstract int invokeGridX(int var1);
+
+    @Invoker
+    abstract int invokeGridZ(int var1);
+
     @ModifyVariable(method = "<init>", at = @At("STORE"), ordinal = 2)
     private int fixMaxPosX(int k)
     {
@@ -28,12 +34,6 @@ public abstract class NoiseBasedAquiferMixin
     {
         return k + this.invokeGridZ(((NoiseChunkAccessor) this.noiseChunk).getCellCountXZ() * this.worldPreview_TFC$cellWidth());
     }
-
-    @Invoker
-    abstract int invokeGridX(int var1);
-
-    @Invoker
-    abstract int invokeGridZ(int var1);
 
     @Unique
     private int worldPreview_TFC$cellWidth()

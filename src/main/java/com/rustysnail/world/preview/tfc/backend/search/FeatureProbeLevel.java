@@ -1,5 +1,8 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.function.Predicate;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
@@ -13,8 +16,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.flag.FeatureFlagSet;
@@ -49,10 +52,6 @@ import net.minecraft.world.ticks.BlackholeTickAccess;
 import net.minecraft.world.ticks.LevelTickAccess;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Predicate;
 
 public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
 {
@@ -127,9 +126,74 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
+    public int getHeight(@NotNull Heightmap.Types heightmapType, int x, int z)
+    {
+        ChunkAccess chunk = getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
+        if (chunk != null)
+        {
+            return chunk.getHeight(heightmapType, x & 15, z & 15);
+        }
+        return SEA_LEVEL;
+    }
+
+    @Override
+    public int getSkyDarken()
+    {
+        return 0;
+    }
+
+    @Override
+    public @NotNull BiomeManager getBiomeManager()
+    {
+        throw new UnsupportedOperationException("FeatureProbeLevel does not have a BiomeManager");
+    }
+
+    @Override
+    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
+    {
+        return registryAccess.registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.PLAINS);
+    }
+
+    @Override
+    public boolean isClientSide()
+    {
+        return false;
+    }
+
+    @Override
+    public int getSeaLevel()
+    {
+        return SEA_LEVEL;
+    }
+
+    @Override
+    public @NotNull DimensionType dimensionType()
+    {
+        return dimensionType;
+    }
+
+    @Override
+    public int getMinBuildHeight()
+    {
+        return minY;
+    }
+
+    @Override
+    public int getHeight()
+    {
+        return height;
+    }
+
+    @Override
     public @NotNull RegistryAccess registryAccess()
     {
         return registryAccess;
+    }
+
+    @Override
+    public @NotNull FeatureFlagSet enabledFeatures()
+    {
+        return FeatureFlagSet.of();
     }
 
     @Override
@@ -287,59 +351,6 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     }
 
     @Override
-    public int getHeight(@NotNull Heightmap.Types heightmapType, int x, int z)
-    {
-        ChunkAccess chunk = getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
-        if (chunk != null)
-        {
-            return chunk.getHeight(heightmapType, x & 15, z & 15);
-        }
-        return SEA_LEVEL;
-    }
-
-    @Override
-    public int getSkyDarken()
-    {
-        return 0;
-    }
-
-    @Override
-    public @NotNull BiomeManager getBiomeManager()
-    {
-        throw new UnsupportedOperationException("FeatureProbeLevel does not have a BiomeManager");
-    }
-
-    @Override
-    public @NotNull Holder<Biome> getUncachedNoiseBiome(int x, int y, int z)
-    {
-        return registryAccess.registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.PLAINS);
-    }
-
-    @Override
-    public boolean isClientSide()
-    {
-        return false;
-    }
-
-    @Override
-    public int getSeaLevel()
-    {
-        return SEA_LEVEL;
-    }
-
-    @Override
-    public @NotNull DimensionType dimensionType()
-    {
-        return dimensionType;
-    }
-
-    @Override
-    public @NotNull FeatureFlagSet enabledFeatures()
-    {
-        return FeatureFlagSet.of();
-    }
-
-    @Override
     public boolean isStateAtPosition(@NotNull BlockPos pos, @NotNull Predicate<BlockState> state)
     {
         return state.test(getBlockState(pos));
@@ -377,17 +388,5 @@ public class FeatureProbeLevel implements WorldGenLevel, LevelHeightAccessor
     public boolean destroyBlock(@NotNull BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft)
     {
         return setBlock(pos, Blocks.AIR.defaultBlockState(), 3, recursionLeft);
-    }
-
-    @Override
-    public int getHeight()
-    {
-        return height;
-    }
-
-    @Override
-    public int getMinBuildHeight()
-    {
-        return minY;
     }
 }

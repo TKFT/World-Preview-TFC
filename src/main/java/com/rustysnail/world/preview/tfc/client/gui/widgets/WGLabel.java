@@ -10,9 +10,9 @@ import org.jetbrains.annotations.NotNull;
 public class WGLabel extends AbstractWidget
 {
     private final Font font;
-    private Component component;
     private final int color;
     private final TextAlignment alignment;
+    private Component component;
     private int startX;
     private int startY;
 
@@ -39,9 +39,30 @@ public class WGLabel extends AbstractWidget
         };
     }
 
+    public void setText(Component _component)
+    {
+        this.component = _component;
+        this.update();
+    }
+
+    public void renderWidget(GuiGraphics guiGraphics, int i, int j, float f)
+    {
+        guiGraphics.drawString(this.font, this.component, this.startX, this.startY, this.color);
+    }
+
     public boolean mouseClicked(double mouseX, double mouseY, int button)
     {
         return false;
+    }
+
+    public void setWidth(int width)
+    {
+        super.setWidth(width);
+        this.update();
+    }
+
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)
+    {
     }
 
     public void setX(int x)
@@ -54,27 +75,6 @@ public class WGLabel extends AbstractWidget
     {
         super.setY(i);
         this.update();
-    }
-
-    public void setWidth(int width)
-    {
-        super.setWidth(width);
-        this.update();
-    }
-
-    public void setText(Component _component)
-    {
-        this.component = _component;
-        this.update();
-    }
-
-    public void renderWidget(GuiGraphics guiGraphics, int i, int j, float f)
-    {
-        guiGraphics.drawString(this.font, this.component, this.startX, this.startY, this.color);
-    }
-
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narrationElementOutput)
-    {
     }
 
     public enum TextAlignment

@@ -1,17 +1,10 @@
 package com.rustysnail.world.preview.tfc.backend.search;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-
-import net.dries007.tfc.common.TFCAttachments;
-import net.dries007.tfc.world.ChunkGeneratorExtension;
-import net.dries007.tfc.world.Seed;
-import net.dries007.tfc.world.chunkdata.ChunkData;
-import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
-import net.dries007.tfc.world.chunkdata.RegionChunkDataGenerator;
-import net.dries007.tfc.world.region.RegionGenerator;
-import net.dries007.tfc.world.settings.Settings;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
@@ -26,7 +19,14 @@ import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 
-import java.util.*;
+import net.dries007.tfc.common.TFCAttachments;
+import net.dries007.tfc.world.ChunkGeneratorExtension;
+import net.dries007.tfc.world.Seed;
+import net.dries007.tfc.world.chunkdata.ChunkData;
+import net.dries007.tfc.world.chunkdata.ChunkDataGenerator;
+import net.dries007.tfc.world.chunkdata.RegionChunkDataGenerator;
+import net.dries007.tfc.world.region.RegionGenerator;
+import net.dries007.tfc.world.settings.Settings;
 
 public class FeatureProbe
 {

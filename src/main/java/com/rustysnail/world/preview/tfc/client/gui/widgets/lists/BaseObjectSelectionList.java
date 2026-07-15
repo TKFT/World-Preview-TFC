@@ -18,12 +18,6 @@ public abstract class BaseObjectSelectionList<E extends BaseObjectSelectionList.
     private static final int CHECKBOX_FILL = 0xFF000000;
     private static final int CHECKBOX_CHECK = 0xFF55FF55;
 
-    protected BaseObjectSelectionList(Minecraft minecraft, int width, int height, int x, int y, int itemHeight)
-    {
-        super(minecraft, width, height, y, itemHeight);
-        this.setX(x);
-    }
-
     protected static void renderCheckbox(GuiGraphics gg, int x, int y, boolean checked)
     {
         renderCheckbox(gg, x, y, checked, true);
@@ -42,19 +36,30 @@ public abstract class BaseObjectSelectionList<E extends BaseObjectSelectionList.
         }
     }
 
-    public int getRowLeft()
+    protected BaseObjectSelectionList(Minecraft minecraft, int width, int height, int x, int y, int itemHeight)
     {
-        return this.getX();
-    }
-
-    public int getRowRight()
-    {
-        return this.getX() + this.width - 6;
+        super(minecraft, width, height, y, itemHeight);
+        this.setX(x);
     }
 
     public int getRowWidth()
     {
         return this.width - 6;
+    }
+
+    public void replaceEntries(@NotNull Collection<E> entryList)
+    {
+        super.replaceEntries(entryList);
+    }
+
+    public void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    {
+        super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+        E hovered = this.getHovered();
+        if (hovered != null && hovered.tooltip() != null && this.minecraft.screen != null)
+        {
+            this.minecraft.screen.setTooltipForNextRenderPass(Objects.requireNonNull(hovered.tooltip()), DefaultTooltipPositioner.INSTANCE, true);
+        }
     }
 
     protected int getScrollbarPosition()
@@ -70,19 +75,14 @@ public abstract class BaseObjectSelectionList<E extends BaseObjectSelectionList.
         guiGraphics.fill(left + 1, rowTop - 1, right - 1, rowTop + innerHeight + 1, boxInnerColor);
     }
 
-    public void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    public int getRowLeft()
     {
-        super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
-        E hovered = this.getHovered();
-        if (hovered != null && hovered.tooltip() != null && this.minecraft.screen != null)
-        {
-            this.minecraft.screen.setTooltipForNextRenderPass(Objects.requireNonNull(hovered.tooltip()), DefaultTooltipPositioner.INSTANCE, true);
-        }
+        return this.getX();
     }
 
-    public void replaceEntries(@NotNull Collection<E> entryList)
+    public int getRowRight()
     {
-        super.replaceEntries(entryList);
+        return this.getX() + this.width - 6;
     }
 
     public abstract static class Entry<E extends Entry<E>> extends ObjectSelectionList.Entry<E>

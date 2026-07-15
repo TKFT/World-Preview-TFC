@@ -1,11 +1,11 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
+import net.minecraft.util.LinearCongruentialGenerator;
+import net.minecraft.util.Mth;
+
 import net.dries007.tfc.util.Helpers;
 import net.dries007.tfc.util.calendar.Month;
 import net.dries007.tfc.util.climate.OverworldClimateModel;
-
-import net.minecraft.util.LinearCongruentialGenerator;
-import net.minecraft.util.Mth;
 
 /**
  * A lightweight, Level-free climate sampler for the preview. Subclasses TFC's
@@ -30,21 +30,20 @@ import net.minecraft.util.Mth;
  */
 public class TFCPreviewClimateSampler extends OverworldClimateModel
 {
-    /** Salt TFC uses to derive its climate seed from the world seed (OverworldClimateModel ctor). */
-    private static final long CLIMATE_SEED_SALT = 719283741234L;
-
-    // Annual sampling resolution. 24 samples = two per month. This is a count of samples over the
-    // year (fractions of the year), independent of the calendar's day/month length - the actual day
-    // math lives in CropCalendarSettings, driven by the live TFC calendar.
-    public static final int SAMPLES_PER_YEAR = 24;
+    // Map sampling resolution. 48 samples = four per month. This is independent of the configured
+    // month length; CropCalendarSettings converts each sample to real calendar days. Detailed hover
+    // uses a separate cached schedule with one sample per calendar day (subject to a safety cap).
+    public static final int MAP_SAMPLES_PER_YEAR = 48;
+    /**
+     * Kept as the public default used by tooltip fallbacks and older callers.
+     */
+    public static final int SAMPLES_PER_YEAR = MAP_SAMPLES_PER_YEAR;
     public static final int MONTHS_PER_YEAR = 12;
-
+    /**
+     * Salt TFC uses to derive its climate seed from the world seed (OverworldClimateModel ctor).
+     */
+    private static final long CLIMATE_SEED_SALT = 719283741234L;
     private static final Month[] MONTHS = Month.values();
-
-    public TFCPreviewClimateSampler(long worldSeed, float temperatureScale)
-    {
-        super(LinearCongruentialGenerator.next(worldSeed, CLIMATE_SEED_SALT), temperatureScale);
-    }
 
     /**
      * The interpolated month temperature factor for a sample at {@code fractionOfYear} in [0,1),
@@ -72,12 +71,18 @@ public class TFCPreviewClimateSampler extends OverworldClimateModel
         return Helpers.triangle(1f, 0f, 1f, fractionOfYear + 0.75f);
     }
 
+    public TFCPreviewClimateSampler(long worldSeed, float temperatureScale)
+    {
+        super(LinearCongruentialGenerator.next(worldSeed, CLIMATE_SEED_SALT), temperatureScale);
+    }
+
     /**
      * Elevation-adjusted, hemisphere-aware monthly temperature (no daily variation) for a sample.
-     * @param z            sampled block Z (drives hemisphere/latitude)
-     * @param surfaceY     approximate surface height (elevation lapse)
+     *
+     * @param z               sampled block Z (drives hemisphere/latitude)
+     * @param surfaceY        approximate surface height (elevation lapse)
      * @param avgSeaLevelTemp ChunkData#getAverageSeaLevelTemp at the point
-     * @param monthFactor  precomputed via {@link #monthFactorForFraction}
+     * @param monthFactor     precomputed via {@link #monthFactorForFraction}
      */
     public float previewTemperature(int z, int surfaceY, float avgSeaLevelTemp, float monthFactor)
     {
@@ -101,16 +106,20 @@ public class TFCPreviewClimateSampler extends OverworldClimateModel
     // and calculateMonthlyTemperature(z, mf) = mf * calculateMonthlyTemperature(z, 1) (it is mf times
     // a z-only latitude term), and adjustTemperatureByElevation is affine in its monthTemperature arg.
     // Hence temp(mf) = base + slope * mf, where base and slope depend only on (z, y, avg). Computing
-    // them once per point lets the 24-sample loop do a single multiply-add per sample instead of a
+    // them once per point lets the annual loop do a single multiply-add per sample instead of a
     // full monthly + elevation recomputation. This is algebraically exact (not an approximation).
 
-    /** Constant term of {@code temp(monthFactor) = base + slope*monthFactor} for a point. */
+    /**
+     * Constant term of {@code temp(monthFactor) = base + slope*monthFactor} for a point.
+     */
     public float temperatureBase(int surfaceY, float avgSeaLevelTemp)
     {
         return adjustTemperatureByElevation(surfaceY, avgSeaLevelTemp, 0f, 0f);
     }
 
-    /** Slope term of {@code temp(monthFactor) = base + slope*monthFactor} for a point. */
+    /**
+     * Slope term of {@code temp(monthFactor) = base + slope*monthFactor} for a point.
+     */
     public float temperatureSlope(int z, int surfaceY, float avgSeaLevelTemp)
     {
         float latitude = calculateMonthlyTemperature(z, 1f); // z-only latitude term (mf = 1)

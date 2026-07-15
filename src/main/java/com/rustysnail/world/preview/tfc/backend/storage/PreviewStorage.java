@@ -1,34 +1,54 @@
 package com.rustysnail.world.preview.tfc.backend.storage;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serial;
+import java.io.Serializable;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectSet;
-
-import java.io.*;
 import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.ChunkPos;
 
 public class PreviewStorage implements Serializable
 {
-    @Serial
-    private static final long serialVersionUID = -275836689822028264L;
-
     // Section-flag namespace. Flags now occupy the low 8 bits of the packed section key (0..255),
     // up from the previous 4 bits (0..15), so independent map modes (soil, upcoming crop / fruit-tree
     // suitability, etc.) can be added without aliasing. See quartPosToSectionLong for the layout.
     public static final int FLAG_BITS = 8;
     public static final long FLAG_MASK = 0xFFL;
-
+    @Serial
+    private static final long serialVersionUID = -275836689822028264L;
     // Each packed section coordinate (sX, sZ) uses 28 bits. sX/sZ derive from quart >> 11, so within
     // Minecraft's coordinate range (|blocks| <= 30,000,000 -> |quart| <= 7.5M -> |s| <= ~3662) this is
     // far more range than needed; the extra headroom simply future-proofs the layout.
     private static final int COORD_BITS = 28;
     private static final long COORD_MASK = (1L << COORD_BITS) - 1L;
 
-    private transient Long2ObjectMap<PreviewBlock>[] blocks;
+    /**
+     * Packs a section coordinate + flag into a 64-bit map key:
+     * <pre>
+     *   bits 63..36 (28) : sX = quartX >> 11
+     *   bits 35..8  (28) : sZ = quartZ >> 11
+     *   bits  7..0   (8) : flag (0..255)
+     * </pre>
+     * The flag namespace is the low 8 bits (was 4). Coordinates keep 28 bits each, which comfortably
+     * covers Minecraft's supported range (see COORD_BITS).
+     */
+    public static long quartPosToSectionLong(long quartX, long quartZ, long flags)
+    {
+        long sX = quartX >> 11;
+        long sZ = quartZ >> 11;
+        return (sX & COORD_MASK) << (COORD_BITS + FLAG_BITS)
+            | (sZ & COORD_MASK) << FLAG_BITS
+            | (flags & FLAG_MASK);
+    }
+
     private final int yMin;
     private final int yMax;
+    private transient Long2ObjectMap<PreviewBlock>[] blocks;
 
     @SuppressWarnings("unchecked")
     public PreviewStorage(int yMin, int yMax)
@@ -127,25 +147,6 @@ public class PreviewStorage implements Serializable
             PreviewSection section = block.get(quartX, quartZ);
             return section.get(quartX - section.quartX(), quartZ - section.quartZ());
         }
-    }
-
-    /**
-     * Packs a section coordinate + flag into a 64-bit map key:
-     * <pre>
-     *   bits 63..36 (28) : sX = quartX >> 11
-     *   bits 35..8  (28) : sZ = quartZ >> 11
-     *   bits  7..0   (8) : flag (0..255)
-     * </pre>
-     * The flag namespace is the low 8 bits (was 4). Coordinates keep 28 bits each, which comfortably
-     * covers Minecraft's supported range (see COORD_BITS).
-     */
-    public static long quartPosToSectionLong(long quartX, long quartZ, long flags)
-    {
-        long sX = quartX >> 11;
-        long sZ = quartZ >> 11;
-        return (sX & COORD_MASK) << (COORD_BITS + FLAG_BITS)
-            | (sZ & COORD_MASK) << FLAG_BITS
-            | (flags & FLAG_MASK);
     }
 
     @Serial

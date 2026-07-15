@@ -1,28 +1,5 @@
 package com.rustysnail.world.preview.tfc.client.gui.widgets;
 
-import com.rustysnail.world.preview.tfc.RenderSettings;
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
-import com.rustysnail.world.preview.tfc.backend.WorkManager;
-import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
-import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
-import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
-import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
-import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
-import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
-import com.rustysnail.world.preview.tfc.client.gui.PreviewDisplayDataProvider;
-import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomesList;
-import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.platform.NativeImage.Format;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
-import it.unimi.dsi.fastutil.shorts.Short2LongMap;
-import it.unimi.dsi.fastutil.shorts.Short2LongOpenHashMap;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -31,6 +8,30 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.platform.NativeImage.Format;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.VertexSorting;
+import com.rustysnail.world.preview.tfc.RenderSettings;
+import com.rustysnail.world.preview.tfc.WorldPreview;
+import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
+import com.rustysnail.world.preview.tfc.backend.WorkManager;
+import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
+import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
+import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
+import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
+import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
+import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
+import com.rustysnail.world.preview.tfc.client.gui.PreviewDisplayDataProvider;
+import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.BiomesList;
+import it.unimi.dsi.fastutil.shorts.Short2LongMap;
+import it.unimi.dsi.fastutil.shorts.Short2LongOpenHashMap;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -106,6 +107,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private static final long CROP_HOVER_DETAIL_MS = 90L;
     private int lastCropHoverQuartX = Integer.MIN_VALUE;
     private int lastCropHoverQuartZ = Integer.MIN_VALUE;
+    private int lastCropHoverRevision = Integer.MIN_VALUE;
     private long cropHoverSinceMs = 0L;
     private int texWidth = 100;
     private int texHeight = 100;
@@ -276,7 +278,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return 0xFF000000 | (b << 16) | (g << 8) | r;
     }
 
-    /** Rebuild the TFC palettes if the tree-species registry changed (cheap no-op otherwise). */
+    /**
+     * Rebuild the TFC palettes if the tree-species registry changed (cheap no-op otherwise).
+     */
     private void maybeRebuildTfcPalettes()
     {
         if (this.treeTexPalette == null || this.treeTexPalette.length != TFCSampleUtils.treeSpeciesCount()
@@ -1374,41 +1378,40 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 PreviewSection.PreviewStruct structure = structuresInfos.getFirst().structure;
                 short structId = structure.structureId();
                 String name;
+                Component tooltip;
 
                 if (structId < 0)
                 {
                     int featureId = -(structId + 1);
                     SearchableFeature feature = this.dataProvider.feature4Id(featureId);
                     name = feature != null ? feature.name().getString() : "Unknown Feature";
+                    Component variant = this.dataProvider.featureVariantName(featureId, structure.center());
+                    String tooltipKey = variant != null
+                        ? "world_preview_tfc.preview-display.feature.variant.tooltip"
+                        : "world_preview_tfc.preview-display.feature.tooltip";
+                    if (this.config.showControls)
+                    {
+                        tooltipKey += ".controls";
+                    }
+                    String center = blockPosTemplate.formatted(
+                        structure.center().getX(), structure.center().getY(), structure.center().getZ());
+                    tooltip = variant != null
+                        ? Component.translatable(tooltipKey, nameFormatter(name), variant, center)
+                        : Component.translatable(tooltipKey, nameFormatter(name), center);
                 }
                 else
                 {
                     var structEntry = this.dataProvider.structure4Id(structId);
                     name = structEntry != null ? structEntry.name() : "Unknown Structure";
+                    String tooltipKey = this.config.showControls
+                        ? "world_preview_tfc.preview-display.struct.tooltip.controls"
+                        : "world_preview_tfc.preview-display.struct.tooltip";
+                    tooltip = Component.translatable(
+                        tooltipKey,
+                        nameFormatter(name),
+                        blockPosTemplate.formatted(structure.center().getX(), structure.center().getY(), structure.center().getZ()));
                 }
-
-                if (this.config.showControls)
-                {
-                    this.setTooltipNow(
-                        Tooltip.create(
-                            Component.translatable(
-                                "world_preview_tfc.preview-display.struct.tooltip.controls",
-                                nameFormatter(name),
-                                blockPosTemplate.formatted(structure.center().getX(), structure.center().getY(), structure.center().getZ()))
-                        )
-                    );
-                }
-                else
-                {
-                    this.setTooltipNow(
-                        Tooltip.create(
-                            Component.translatable(
-                                "world_preview_tfc.preview-display.struct.tooltip",
-                                nameFormatter(name),
-                                blockPosTemplate.formatted(structure.center().getX(), structure.center().getY(), structure.center().getZ()))
-                        )
-                    );
-                }
+                this.setTooltipNow(Tooltip.create(tooltip));
             }
             else
             {
@@ -1641,7 +1644,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return tfcClimate;
     }
 
-    /** Registry display name for a species id, or "Unknown Tree #id" (logged once) if not registered. */
+    /**
+     * Registry display name for a species id, or "Unknown Tree #id" (logged once) if not registered.
+     */
     private String treeSpeciesDisplayName(short id)
     {
         if (id >= 0 && id < TFCSampleUtils.treeSpeciesCount())
@@ -1656,7 +1661,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return "Unknown Tree #" + id;
     }
 
-    /** Comma-joined species names, capped at 5 with a "+N more" suffix to keep the tooltip short. */
+    /**
+     * Comma-joined species names, capped at 5 with a "+N more" suffix to keep the tooltip short.
+     */
     private String formatPossibleTrees(List<Short> ids)
     {
         if (ids.isEmpty())
@@ -1767,7 +1774,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
     }
 
-    /** Reads the stored soil-type value for a block position (soil embeds its own water values). */
+    /**
+     * Reads the stored soil-type value for a block position (soil embeds its own water values).
+     */
     private short readSoilRawAt(int blockX, int blockZ)
     {
         return this.workManager.previewStorage().getRawData4(
@@ -1775,7 +1784,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             RenderSettings.RenderMode.TFC_SOIL_TYPE.flag);
     }
 
-    /** Reads the stored crop-suitability value for a block position (embeds its own water values). */
+    /**
+     * Reads the stored crop-suitability value for a block position (embeds its own water values).
+     */
     private short readCropRawAt(int blockX, int blockZ)
     {
         return this.workManager.previewStorage().getRawData4(
@@ -1828,11 +1839,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         // Debounce: only compute detail once the cursor has rested on this quart.
         int qx = hoverInfo.blockX >> 2;
         int qz = hoverInfo.blockZ >> 2;
-        long now = System.currentTimeMillis();
-        if (qx != this.lastCropHoverQuartX || qz != this.lastCropHoverQuartZ)
+        int hoverRevision = this.workManager.cropRevision();
+        long now = Util.getMillis();
+        if (qx != this.lastCropHoverQuartX || qz != this.lastCropHoverQuartZ
+            || hoverRevision != this.lastCropHoverRevision)
         {
             this.lastCropHoverQuartX = qx;
             this.lastCropHoverQuartZ = qz;
+            this.lastCropHoverRevision = hoverRevision;
             this.cropHoverSinceMs = now;
         }
         boolean detailReady = (now - this.cropHoverSinceMs) >= CROP_HOVER_DETAIL_MS;
@@ -1849,7 +1863,18 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             return;
         }
 
-        TFCCropSuitability.CropSuitabilityResult result = this.workManager.resolveCropAt(hoverInfo.blockX, hoverInfo.blockZ);
+        TFCCropSuitability.CropSuitabilityResult result = this.workManager.requestCropDetailsAt(hoverInfo.blockX, hoverInfo.blockZ);
+        if (result == null)
+        {
+            if (entry.hasClimateData())
+            {
+                var cr = entry.climateRange();
+                tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
+            }
+            tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+            tfcInfo.append("\n§8Calculating daily growing details…§r");
+            return;
+        }
         if (TFCCropSuitability.isSuitabilityValue(result.suitability()))
         {
             tfcInfo.append("\n§3Growing Window:§r §b~%d days§r".formatted(result.growingWindowDays()));

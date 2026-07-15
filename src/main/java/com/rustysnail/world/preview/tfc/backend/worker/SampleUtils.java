@@ -1,5 +1,23 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Stream;
+import com.mojang.datafixers.DataFixer;
+import com.mojang.datafixers.util.Pair;
+import com.mojang.serialization.Lifecycle;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewLevel;
@@ -9,24 +27,6 @@ import com.rustysnail.world.preview.tfc.backend.stubs.EmptyAquifer;
 import com.rustysnail.world.preview.tfc.mixin.MinecraftServerAccessor;
 import com.rustysnail.world.preview.tfc.mixin.NoiseBasedChunkGeneratorAccessor;
 import com.rustysnail.world.preview.tfc.mixin.NoiseChunkAccessor;
-import com.mojang.datafixers.DataFixer;
-import com.mojang.datafixers.util.Pair;
-import com.mojang.serialization.Lifecycle;
-import java.io.File;
-import java.io.IOException;
-import java.net.Proxy;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.Map.Entry;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.stream.Stream;
 import net.minecraft.FileUtil;
 import net.minecraft.Util;
 import net.minecraft.commands.Commands.CommandSelection;
@@ -44,8 +44,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.RegistryLayer;
 import net.minecraft.server.ReloadableServerResources;
 import net.minecraft.server.Services;
-import net.minecraft.server.WorldStem;
 import net.minecraft.server.WorldLoader.PackConfig;
+import net.minecraft.server.WorldStem;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.progress.ChunkProgressListener;
@@ -66,24 +66,24 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Climate;
-import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.Climate.Sampler;
 import net.minecraft.world.level.biome.Climate.TargetPoint;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.DensityFunction.SinglePointContext;
+import net.minecraft.world.level.levelgen.DensityFunctions.BeardifierMarker;
+import net.minecraft.world.level.levelgen.Heightmap.Types;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldOptions;
-import net.minecraft.world.level.levelgen.DensityFunction.SinglePointContext;
-import net.minecraft.world.level.levelgen.DensityFunctions.BeardifierMarker;
-import net.minecraft.world.level.levelgen.Heightmap.Types;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheck;
@@ -92,8 +92,8 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
-import net.minecraft.world.level.storage.PrimaryLevelData;
 import net.minecraft.world.level.storage.LevelStorageSource.LevelStorageAccess;
+import net.minecraft.world.level.storage.PrimaryLevelData;
 import net.minecraft.world.level.storage.PrimaryLevelData.SpecialWorldProperty;
 import net.minecraft.world.level.validation.DirectoryValidator;
 import net.minecraft.world.level.validation.PathAllowList;
@@ -102,6 +102,28 @@ import org.jetbrains.annotations.Nullable;
 
 public class SampleUtils implements AutoCloseable
 {
+    public static void deleteDirectoryLegacyIO(File file)
+    {
+        File[] list = file.listFiles();
+        if (list != null)
+        {
+            for (File temp : list)
+            {
+                deleteDirectoryLegacyIO(temp);
+            }
+        }
+
+        if (!file.delete())
+        {
+            WorldPreview.LOGGER.warn("Unable to delete file or directory : {}", file);
+        }
+    }
+
+    private static short doubleToShort(double val, double factor)
+    {
+        return (short) Math.clamp((long) (val * factor * 32767.0), -32768L, 32767L);
+    }
+
     private final Path tempDir;
     private final DataFixer dataFixer;
     private final LevelStorageAccess levelStorageAccess;
@@ -396,11 +418,6 @@ public class SampleUtils implements AutoCloseable
         return this.minecraftServer instanceof DummyMinecraftServer ? null : this.minecraftServer.getPlayerList().getPlayer(playerId);
     }
 
-    private static short doubleToShort(double val, double factor)
-    {
-        return (short) Math.clamp((long) (val * factor * 32767.0), -32768L, 32767L);
-    }
-
     public boolean hasRawNoiseInfo()
     {
         return this.cfg.storeNoiseSamples && this.biomeSource instanceof MultiNoiseBiomeSource;
@@ -442,7 +459,6 @@ public class SampleUtils implements AutoCloseable
             );
         }
     }
-
 
     public ResourceKey<Biome> getBiomeKey(BlockPos pos)
     {
@@ -522,23 +538,6 @@ public class SampleUtils implements AutoCloseable
         if (this.tempDir != null)
         {
             deleteDirectoryLegacyIO(this.tempDir.toFile());
-        }
-    }
-
-    public static void deleteDirectoryLegacyIO(File file)
-    {
-        File[] list = file.listFiles();
-        if (list != null)
-        {
-            for (File temp : list)
-            {
-                deleteDirectoryLegacyIO(temp);
-            }
-        }
-
-        if (!file.delete())
-        {
-            WorldPreview.LOGGER.warn("Unable to delete file or directory : {}", file);
         }
     }
 

@@ -1,8 +1,8 @@
 package com.rustysnail.world.preview.tfc.mixin;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.Palette;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import org.spongepowered.asm.mixin.Mixin;

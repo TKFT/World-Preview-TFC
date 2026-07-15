@@ -18,6 +18,12 @@ public class PreviewSectionHalf extends PreviewSection
     }
 
     @Override
+    public int size()
+    {
+        return 32;
+    }
+
+    @Override
     public short get(int x, int z)
     {
         return this.data[(x >> 1) * 32 + (z >> 1)];
@@ -27,12 +33,6 @@ public class PreviewSectionHalf extends PreviewSection
     public void set(int x, int z, short biome)
     {
         this.data[(x >> 1) * 32 + (z >> 1)] = biome;
-    }
-
-    @Override
-    public int size()
-    {
-        return 32;
     }
 
     @Override

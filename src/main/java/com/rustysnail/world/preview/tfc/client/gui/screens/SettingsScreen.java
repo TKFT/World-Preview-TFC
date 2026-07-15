@@ -1,5 +1,10 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
@@ -11,14 +16,7 @@ import com.rustysnail.world.preview.tfc.client.gui.screens.settings.GeneralTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.HeightmapTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.SamplingTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.TFCTab;
-
-import net.dries007.tfc.world.ChunkGeneratorExtension;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.tabs.Tab;
@@ -33,7 +31,7 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-import javax.annotation.Nullable;
+import net.dries007.tfc.world.ChunkGeneratorExtension;
 
 public class SettingsScreen extends Screen
 {
@@ -41,13 +39,12 @@ public class SettingsScreen extends Screen
     private final Screen lastScreen;
     private final PreviewContainer previewContainer;
     private final TabManager tabManager;
-    private TabNavigationBar tabNavigationBar;
-    private GridLayout bottomButtons;
     @Nullable
     private final ChunkGeneratorExtension tfcExtension;
-
     private final boolean openTfcTab;
     private final boolean tfcReadOnly;
+    private TabNavigationBar tabNavigationBar;
+    private GridLayout bottomButtons;
 
 
     public SettingsScreen(Screen lastScreen, PreviewContainer previewContainer, @Nullable ChunkGeneratorExtension tfcExtension)
@@ -64,6 +61,30 @@ public class SettingsScreen extends Screen
         this.openTfcTab = openTfcTab;
         this.tfcReadOnly = tfcReadOnly;
         this.tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
+    }
+
+    public void render(GuiGraphics guiGraphics, int i, int j, float f)
+    {
+        guiGraphics.blit(FOOTER_SEPERATOR, 0, Mth.roundToward(this.height - 36 - 2, 2), 0.0F, 0.0F, this.width, 2, 32, 2);
+        super.render(guiGraphics, i, j, f);
+    }
+
+    public void onClose()
+    {
+        Map<ResourceLocation, PreviewMappingData.ColorEntry> toWrite = this.previewContainer
+            .allBiomes()
+            .stream()
+            .filter(x -> x.dataSource() == PreviewData.DataSource.CONFIG)
+            .collect(
+                Collectors.toMap(
+                    x -> x.entry().key().location(), x -> new PreviewMappingData.ColorEntry(PreviewData.DataSource.CONFIG, x.color(), x.isCave(), x.name())
+                )
+            );
+        WorldPreview.get().writeUserColorConfig(toWrite);
+        this.previewContainer.patchColorData();
+        this.previewContainer.resetTabs();
+        //noinspection DataFlowIssue
+        this.minecraft.setScreen(this.lastScreen);
     }
 
     protected void init()
@@ -114,29 +135,5 @@ public class SettingsScreen extends Screen
             ScreenRectangle screenRectangle = new ScreenRectangle(0, i, this.width, this.bottomButtons.getY() - i);
             this.tabManager.setTabArea(screenRectangle);
         }
-    }
-
-    public void render(GuiGraphics guiGraphics, int i, int j, float f)
-    {
-        guiGraphics.blit(FOOTER_SEPERATOR, 0, Mth.roundToward(this.height - 36 - 2, 2), 0.0F, 0.0F, this.width, 2, 32, 2);
-        super.render(guiGraphics, i, j, f);
-    }
-
-    public void onClose()
-    {
-        Map<ResourceLocation, PreviewMappingData.ColorEntry> toWrite = this.previewContainer
-            .allBiomes()
-            .stream()
-            .filter(x -> x.dataSource() == PreviewData.DataSource.CONFIG)
-            .collect(
-                Collectors.toMap(
-                    x -> x.entry().key().location(), x -> new PreviewMappingData.ColorEntry(PreviewData.DataSource.CONFIG, x.color(), x.isCave(), x.name())
-                )
-            );
-        WorldPreview.get().writeUserColorConfig(toWrite);
-        this.previewContainer.patchColorData();
-        this.previewContainer.resetTabs();
-        //noinspection DataFlowIssue
-        this.minecraft.setScreen(this.lastScreen);
     }
 }

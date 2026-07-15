@@ -1,37 +1,5 @@
 package com.rustysnail.world.preview.tfc.backend;
 
-import com.rustysnail.world.preview.tfc.RenderSettings;
-import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
-import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
-import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
-import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
-import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorageCacheManager;
-import com.rustysnail.world.preview.tfc.backend.worker.HeightmapWorkUnit;
-import com.rustysnail.world.preview.tfc.backend.worker.LayerChunkWorkUnit;
-import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
-import com.rustysnail.world.preview.tfc.backend.worker.SlowHeightmapWorkUnit;
-import com.rustysnail.world.preview.tfc.backend.worker.StructStartWorkUnit;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.AnnualClimateSchedule;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.CropCalendarSettings;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropContext;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
-
-import net.dries007.tfc.config.TFCConfig;
-import net.dries007.tfc.util.calendar.Calendar;
-import net.dries007.tfc.util.calendar.Calendars;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCWorkPlan;
-import net.minecraft.resources.ResourceLocation;
-import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
-import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
 import java.io.IOException;
 import java.net.Proxy;
 import java.nio.file.Path;
@@ -50,8 +18,38 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
+import com.rustysnail.world.preview.tfc.RenderSettings;
+import com.rustysnail.world.preview.tfc.WorldPreview;
+import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
+import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
+import com.rustysnail.world.preview.tfc.backend.sampler.ChunkSampler;
+import com.rustysnail.world.preview.tfc.backend.sampler.FullQuartSampler;
+import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
+import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorageCacheManager;
+import com.rustysnail.world.preview.tfc.backend.worker.HeightmapWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.LayerChunkWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
+import com.rustysnail.world.preview.tfc.backend.worker.SlowHeightmapWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.StructStartWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.WorkBatch;
+import com.rustysnail.world.preview.tfc.backend.worker.WorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.AnnualClimateSchedule;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.CropCalendarSettings;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.KaolinBiomeRules;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.QuartSurfaceHeights;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropContext;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeResolver;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCWorkPlan;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.LayeredRegistryAccess;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.RegistryLayer;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -63,14 +61,16 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
+import org.jetbrains.annotations.Nullable;
 
+import net.dries007.tfc.config.TFCConfig;
+import net.dries007.tfc.util.calendar.Calendar;
+import net.dries007.tfc.util.calendar.Calendars;
 import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ForestType;
 import net.dries007.tfc.world.settings.Settings;
-
-import org.jetbrains.annotations.Nullable;
 
 public class WorkManager
 {
@@ -81,6 +81,7 @@ public class WorkManager
     private DimensionType dimensionType;
     private ChunkGenerator chunkGenerator;
     private ChunkSampler chunkSampler;
+    private final ChunkSampler cropSampler = new FullQuartSampler();
     private SampleUtils sampleUtils;
     private PreviewData previewData;
     private PreviewStorage previewStorage;
@@ -97,6 +98,7 @@ public class WorkManager
     private ResourceLocation selectedCropId;
     private TFCCropSuitability.CropWaterMode cropWaterMode = TFCCropSuitability.CropWaterMode.RAIN_FED;
     private final java.util.concurrent.atomic.AtomicInteger cropRevision = new java.util.concurrent.atomic.AtomicInteger(0);
+    private final java.util.concurrent.atomic.AtomicInteger worldGenerationRevision = new java.util.concurrent.atomic.AtomicInteger(0);
     // The active in-game server, if the preview is opened from an existing world (else null on the
     // create-world screen). Used to read the world's live calendar month length.
     @Nullable
@@ -105,9 +107,9 @@ public class WorkManager
     // queue pass so a changed month length or growth modifier regenerates flag 16 exactly once.
     @Nullable
     private CropCalendarSettings capturedCropCalendar;
-    // Bounded hover caches (crop suitability breakdown, and ChunkData+chunk-center height). Keyed to
+    // Bounded hover caches (crop suitability breakdown, and ChunkData+four-height grid). Keyed to
     // include everything a crop result depends on, so a stale entry can never be served.
-    private final CropHoverCache cropHoverCache = new CropHoverCache(256);
+    private final CropHoverCache cropHoverCache = new CropHoverCache(256, 16);
     private final ChunkDataCache chunkDataHoverCache = new ChunkDataCache(64);
 
     @Nullable
@@ -120,6 +122,7 @@ public class WorkManager
     private final SplittableRandom random = new SplittableRandom();
     private ExecutorService executorService;
     private ExecutorService queueChunksService;
+    private ExecutorService cropHoverExecutor;
     private ChunkPos lastQueuedTopLeft;
     private ChunkPos lastQueuedBotRight;
 
@@ -295,6 +298,7 @@ public class WorkManager
         this.shutdownExecutors();
         this.executorService = Executors.newFixedThreadPool(this.config.numThreads());
         this.queueChunksService = Executors.newSingleThreadExecutor();
+        this.cropHoverExecutor = Executors.newSingleThreadExecutor();
         this.queueIsRunning.set(false);
         this.shouldEarlyAbortQueuing.set(false);
         this.futures.clear();
@@ -314,6 +318,9 @@ public class WorkManager
     )
     {
         this.cancel();
+        // Invalidates any async hover computation that captured the previous world-gen state.
+        this.cropRevision.incrementAndGet();
+        this.worldGenerationRevision.incrementAndGet();
         this.activeServer = server;
         this.worldOptions = _worldOptions;
         this.levelStem = _levelStem;
@@ -390,10 +397,25 @@ public class WorkManager
         this.chunkDataHoverCache.clear();
         this.executorService = Executors.newFixedThreadPool(this.config.numThreads());
         this.queueChunksService = Executors.newSingleThreadExecutor();
+        this.cropHoverExecutor = Executors.newSingleThreadExecutor();
     }
 
     private void shutdownExecutors()
     {
+        this.cropHoverCache.clear();
+        if (this.cropHoverExecutor != null)
+        {
+            this.cropHoverExecutor.shutdownNow();
+            try
+            {
+                this.cropHoverExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            catch (InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+            }
+            this.cropHoverExecutor = null;
+        }
         if (this.executorService != null)
         {
             this.shouldEarlyAbortQueuing.set(true);
@@ -425,6 +447,14 @@ public class WorkManager
 
             this.executorService.shutdownNow();
             this.queueChunksService.shutdownNow();
+            try
+            {
+                this.executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            catch (InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -481,6 +511,7 @@ public class WorkManager
         this.futures.clear();
         this.executorService = null;
         this.queueChunksService = null;
+        this.cropHoverExecutor = null;
         this.previewStorageCacheManager = null;
     }
 
@@ -492,6 +523,14 @@ public class WorkManager
         final RenderSettings.RenderMode mode = this.renderSettings.mode;
         final boolean tfcMode = mode != null && mode.isTFC();
         final long modeFlag = this.effectiveModeKey(mode);
+
+        // Calendar/config values can change without the viewport moving. Poll before the queue
+        // identity short-circuit so crop work and hover data are invalidated immediately.
+        if (mode == RenderSettings.RenderMode.TFC_CROP_SUITABILITY
+            && this.tfcSampleUtils != null && this.previewStorage != null)
+        {
+            this.ensureCropCalendarCurrent();
+        }
 
         if (this.executorService != null
             && this.sampleUtils != null
@@ -601,7 +640,7 @@ public class WorkManager
             // Smaller units (16x16 chunks, was 32x32) so cancellation responds ~4x faster, partial
             // results arrive sooner, and a moved viewport is black for less time. Must be a power of
             // two: unit origins are aligned to numChunks so the units tile the range without gaps.
-            // Crop suitability uses even smaller 8x8 units - its per-point cost is higher (24 annual
+            // Crop suitability uses even smaller 8x8 units - its per-point cost is higher (48 annual
             // samples), so smaller units cancel faster on crop/pan changes and stream partial results.
             final int numChunks = tfcPlan.cropSuitability() ? TFC_CROP_UNIT_CHUNKS : TFC_UNIT_CHUNKS;
             final int alignBits = Integer.numberOfTrailingZeros(numChunks);
@@ -629,6 +668,7 @@ public class WorkManager
                 1,
                 (pos, yx) -> new TFCRegionWorkUnit(
                     this.chunkSampler,
+                    this.cropSampler,
                     this.sampleUtils,
                     pos,
                     numChunks,
@@ -723,7 +763,7 @@ public class WorkManager
                 toQueue[i] = temp;
             }
 
-            int batchSize = maxBatchSize == 1 ? 1 : Math.clamp(maxBatchSize, 8, size / 4096);
+            final int batchSize = maxBatchSize <= 1 ? 1 : Math.clamp(size / 4096, 8, maxBatchSize);
             WorkBatch[] batches = new WorkBatch[batchSize == 1 ? size : size / batchSize + 1];
             if (batchSize > 1)
             {
@@ -783,6 +823,17 @@ public class WorkManager
         return this.executorService != null;
     }
 
+    public boolean hasWorldSeed()
+    {
+        return this.worldOptions != null;
+    }
+
+    public long worldSeed()
+    {
+        WorldOptions options = this.worldOptions;
+        return options != null ? options.seed() : 0L;
+    }
+
     public WorldPreviewConfig config()
     {
         return this.config;
@@ -806,9 +857,12 @@ public class WorkManager
 
     // ----------------------------- Crop suitability -----------------------------
 
-    /** Rebuilds the crop registry from the current block registry + datapack, keeping a valid selection. */
+    /**
+     * Rebuilds the crop registry from the current block registry + datapack, keeping a valid selection.
+     */
     private void rebuildCropRegistry()
     {
+        TFCCropRegistry previous = this.cropRegistry;
         if (this.tfcSampleUtils != null)
         {
             this.cropRegistry = TFCCropRegistry.build(this.sampleUtils.resourceManager());
@@ -818,6 +872,12 @@ public class WorkManager
         {
             TFCCropRegistry.Entry first = this.cropRegistry.first();
             this.selectedCropId = first != null ? first.id() : null;
+        }
+        if (this.previewStorage != null && !previous.entries().equals(this.cropRegistry.entries()))
+        {
+            // Resource/addon climate changes can alter suitability without changing the crop ID.
+            this.cropRevision.incrementAndGet();
+            this.invalidateCropMapState();
         }
     }
 
@@ -877,14 +937,13 @@ public class WorkManager
             growthModifier = 1f;
         }
 
-        return CropCalendarSettings.build(daysInMonth, TFCPreviewClimateSampler.SAMPLES_PER_YEAR, growthModifier);
+        return CropCalendarSettings.build(daysInMonth, growthModifier);
     }
 
     /**
-     * Ensures crop data reflects the current calendar. Called once per crop queue pass (not per frame):
-     * if the resolved settings differ from what the current flag-16 data was generated for, bump the
-     * revision, invalidate flag 16, clear hover caches, and update the captured settings so this pass
-     * regenerates with the new calendar. Returns the settings to use.
+     * Ensures crop data reflects the current calendar. The values are polled cheaply while crop mode
+     * is active; only a real change bumps the revision, invalidates flag 16, clears hover caches, and
+     * causes the current viewport to regenerate. Returns the settings to use.
      */
     private synchronized CropCalendarSettings ensureCropCalendarCurrent()
     {
@@ -894,24 +953,18 @@ public class WorkManager
             boolean firstTime = this.capturedCropCalendar == null;
             this.capturedCropCalendar = resolved;
             this.cropRevision.incrementAndGet();
-            this.cropHoverCache.clear();
-            if (this.previewStorage != null)
-            {
-                synchronized (this.previewStorageSynchro)
-                {
-                    this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
-                }
-            }
+            this.invalidateCropMapState();
             WorldPreview.LOGGER.debug(
-                "[TFC Crop] Crop calendar: daysInMonth={}, samples={}, daysPerSample={}, growthModifier={}, poor={}, good={}, ideal={}{}",
-                resolved.daysInMonth(), resolved.samplesPerYear(), resolved.daysPerSample(), resolved.cropGrowthModifier(),
-                resolved.poorCoreSamples(), resolved.goodCoreSamples(), resolved.idealCoreSamples(),
+                "[TFC Crop] Crop calendar: daysInMonth={}, mapSamples={}, daysPerMapSample={}, growthModifier={}, requiredGrowthDays={}{}",
+                resolved.daysInMonth(), TFCPreviewClimateSampler.MAP_SAMPLES_PER_YEAR,
+                resolved.daysPerSample(TFCPreviewClimateSampler.MAP_SAMPLES_PER_YEAR), resolved.cropGrowthModifier(),
+                resolved.requiredGrowthDays(),
                 firstTime ? " (initial)" : " (changed -> regenerating)");
         }
         return resolved;
     }
 
-    private TFCCropContext buildCropContext()
+    private synchronized TFCCropContext buildCropContext()
     {
         CropCalendarSettings calendar = this.ensureCropCalendarCurrent();
         TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
@@ -920,7 +973,9 @@ public class WorkManager
             this.cropRevision.get(), this.cropRevision::get);
     }
 
-    /** Selects a crop; regenerates only the crop-suitability map (flag 16), leaving other maps intact. */
+    /**
+     * Selects a crop; regenerates only the crop-suitability map (flag 16), leaving other maps intact.
+     */
     public synchronized void setSelectedCrop(@Nullable ResourceLocation cropId)
     {
         if (java.util.Objects.equals(cropId, this.selectedCropId))
@@ -931,7 +986,9 @@ public class WorkManager
         this.regenerateCropMap();
     }
 
-    /** Switches rain-fed / irrigated hydration; regenerates only the crop-suitability map. */
+    /**
+     * Switches rain-fed / irrigated hydration; regenerates only the crop-suitability map.
+     */
     public synchronized void setCropWaterMode(TFCCropSuitability.CropWaterMode mode)
     {
         if (mode == null || mode == this.cropWaterMode)
@@ -951,6 +1008,14 @@ public class WorkManager
     private void regenerateCropMap()
     {
         this.cropRevision.incrementAndGet();
+        this.invalidateCropMapState();
+    }
+
+    /**
+     * Invalidates only flag 16, discards pending hover work, and promptly cancels stale work.
+     */
+    private void invalidateCropMapState()
+    {
         this.cropHoverCache.clear();
         if (this.previewStorage == null)
         {
@@ -974,80 +1039,105 @@ public class WorkManager
     }
 
     /**
-     * The full crop-suitability breakdown for a single quart (hover only), served from a bounded LRU
-     * cache. The cache key includes the selected crop, water mode, crop revision and calendar settings,
-     * so a cached entry is never reused for a different crop/calendar. On a miss it does the heavy work
-     * once (cached ChunkData + chunk-center surface height + 24 samples) and stores the result.
-     *
-     * <p>PreviewDisplay debounces detailed hover so this is only invoked once the cursor settles on a
-     * quart; thereafter it is a cache hit. Never recomputes the same hovered quart every frame.
+     * Polls the detailed result for a quart. A cache miss reserves a bounded pending slot and submits
+     * the daily calculation to a worker; the render thread receives {@code null} until it completes.
+     * Every dependency requested by the task is present in the key and crop revision guards publish.
      */
-    public TFCCropSuitability.CropSuitabilityResult resolveCropAt(int blockX, int blockZ)
+    @Nullable
+    public synchronized TFCCropSuitability.CropSuitabilityResult requestCropDetailsAt(int blockX, int blockZ)
     {
-        if (this.tfcSampleUtils == null)
-        {
-            return TFCCropSuitability.NO_DATA_RESULT;
-        }
-        TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
-        if (entry == null)
+        if (this.tfcSampleUtils == null || this.sampleUtils == null || this.cropHoverExecutor == null)
         {
             return TFCCropSuitability.NO_DATA_RESULT;
         }
 
-        CropCalendarSettings calendar = this.capturedCropCalendar != null ? this.capturedCropCalendar : this.resolveCropCalendarSettings();
-        CropHoverCache.Key key = new CropHoverCache.Key(blockX >> 2, blockZ >> 2, this.selectedCropId, this.cropWaterMode,
-            this.cropRevision.get(), calendar.daysInMonth(), calendar.cropGrowthModifier());
+        CropCalendarSettings calendar = this.ensureCropCalendarCurrent();
+        TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
+        if (entry == null || !entry.hasClimateData())
+        {
+            return TFCCropSuitability.NO_DATA_RESULT;
+        }
+
+        int quartX = blockX >> 2;
+        int quartZ = blockZ >> 2;
+        int revision = this.cropRevision.get();
+        int worldRevision = this.worldGenerationRevision.get();
+        CropHoverCache.Key key = new CropHoverCache.Key(
+            quartX, quartZ, this.selectedCropId, this.cropWaterMode,
+            calendar.daysInMonth(), calendar.cropGrowthModifier(), revision);
 
         TFCCropSuitability.CropSuitabilityResult cached = this.cropHoverCache.get(key);
-        if (cached != null)
+        if (cached != null || !this.cropHoverCache.reserve(key))
         {
             return cached;
         }
 
-        TFCCropSuitability.CropSuitabilityResult result = this.computeCropAt(entry, blockX, blockZ, calendar);
-        this.cropHoverCache.put(key, result);
-        return result;
+        // Snapshot every world/crop dependency before leaving the synchronized section. Computation
+        // uses the canonical quart origin so cache results never depend on where the cursor entered it.
+        TFCSampleUtils tfc = this.tfcSampleUtils;
+        SampleUtils samples = this.sampleUtils;
+        TFCCropSuitability.CropWaterMode waterMode = this.cropWaterMode;
+        int canonicalX = quartX << 2;
+        int canonicalZ = quartZ << 2;
+        try
+        {
+            Future<?> future = this.cropHoverExecutor.submit(() -> {
+                TFCCropSuitability.CropSuitabilityResult result = this.computeCropAt(
+                    entry, canonicalX, canonicalZ, calendar, waterMode, revision, worldRevision, tfc, samples);
+                if (this.cropRevision.get() == revision)
+                {
+                    this.cropHoverCache.complete(key, result);
+                }
+                else
+                {
+                    this.cropHoverCache.discard(key);
+                }
+            });
+            this.cropHoverCache.attach(key, future);
+        }
+        catch (java.util.concurrent.RejectedExecutionException e)
+        {
+            this.cropHoverCache.discard(key);
+        }
+        return null;
     }
 
-    private TFCCropSuitability.CropSuitabilityResult computeCropAt(TFCCropRegistry.Entry entry, int blockX, int blockZ, CropCalendarSettings calendar)
+    private TFCCropSuitability.CropSuitabilityResult computeCropAt(
+        TFCCropRegistry.Entry entry,
+        int blockX,
+        int blockZ,
+        CropCalendarSettings calendar,
+        TFCCropSuitability.CropWaterMode waterMode,
+        int revision,
+        int worldRevision,
+        TFCSampleUtils tfc,
+        SampleUtils samples
+    )
     {
-        BiomeExtension biome = null;
         try
         {
-            biome = this.tfcSampleUtils.sampleBiomeExtension(blockX, blockZ);
-        }
-        catch (Exception ignored)
-        {
-        }
-        if (TFCSampleUtils.isTreeMapWaterBiome(biome))
-        {
-            return TFCCropSuitability.WATER_RESULT;
-        }
-        try
-        {
-            // Reuse the same chunk-center height approximation as map generation (bounded chunk cache),
-            // instead of doHeightSlow at the exact mouse position every frame.
+            BiomeExtension biome = tfc.sampleBiomeExtension(blockX, blockZ);
+            if (TFCSampleUtils.isTreeMapWaterBiome(biome))
+            {
+                return TFCCropSuitability.WATER_RESULT;
+            }
+
             ChunkPos cp = new ChunkPos(blockX >> 4, blockZ >> 4);
-            ChunkDataCache.Entry cd = this.chunkDataHoverCache.get(cp.toLong());
+            ChunkDataCache.Key cacheKey = new ChunkDataCache.Key(cp.toLong(), worldRevision);
+            ChunkDataCache.Entry cd = this.chunkDataHoverCache.get(cacheKey);
             if (cd == null)
             {
-                ChunkData chunkData = this.tfcSampleUtils.sampleChunkData(cp);
-                int surfaceY;
-                try
-                {
-                    surfaceY = this.sampleUtils.doHeightSlow(new BlockPos(cp.getMiddleBlockX(), 0, cp.getMiddleBlockZ()));
-                }
-                catch (Exception e)
-                {
-                    surfaceY = 63;
-                }
-                cd = new ChunkDataCache.Entry(chunkData, surfaceY);
-                this.chunkDataHoverCache.put(cp.toLong(), cd);
+                ChunkData chunkData = tfc.sampleChunkData(cp);
+                QuartSurfaceHeights heights = sampleQuartSurfaceHeights(samples, cp);
+                cd = new ChunkDataCache.Entry(chunkData, heights);
+                this.chunkDataHoverCache.put(cacheKey, cd);
             }
+
+            int surfaceY = cd.surfaceHeights().interpolatedSurfaceY(blockX, blockZ);
+            AnnualClimateSchedule dailySchedule = AnnualClimateSchedule.daily(calendar.daysInMonth());
             return TFCCropSuitability.evaluateDetailed(
-                entry, this.tfcSampleUtils.climateSampler(), cd.chunkData(),
-                blockX, blockZ, cd.surfaceY(), this.cropWaterMode,
-                AnnualClimateSchedule.standard(), calendar);
+                entry, tfc.climateSampler(), cd.chunkData(), blockX, blockZ, surfaceY,
+                waterMode, dailySchedule, calendar);
         }
         catch (Exception e)
         {
@@ -1055,17 +1145,48 @@ public class WorkManager
         }
     }
 
-    /** Bounded LRU of crop-hover breakdowns, keyed by everything a result depends on (no collisions). */
+    private static QuartSurfaceHeights sampleQuartSurfaceHeights(SampleUtils samples, ChunkPos chunk)
+    {
+        int minX = chunk.getMinBlockX();
+        int minZ = chunk.getMinBlockZ();
+        int near = QuartSurfaceHeights.WEST_OR_NORTH_OFFSET;
+        int far = QuartSurfaceHeights.EAST_OR_SOUTH_OFFSET;
+        return new QuartSurfaceHeights(
+            sampleSurfaceY(samples, minX + near, minZ + near),
+            sampleSurfaceY(samples, minX + far, minZ + near),
+            sampleSurfaceY(samples, minX + near, minZ + far),
+            sampleSurfaceY(samples, minX + far, minZ + far));
+    }
+
+    private static int sampleSurfaceY(SampleUtils samples, int blockX, int blockZ)
+    {
+        try
+        {
+            return samples.doHeightSlow(new BlockPos(blockX, 0, blockZ));
+        }
+        catch (Exception e)
+        {
+            return 63;
+        }
+    }
+
+    /**
+     * Bounded result LRU plus a separately bounded/cancelable set of in-flight calculations.
+     */
     private static final class CropHoverCache
     {
-        record Key(int quartX, int quartZ, @Nullable ResourceLocation cropId,
-                   TFCCropSuitability.CropWaterMode waterMode, int revision, int daysInMonth, float growthModifier) {}
+        record Key(int quartX, int quartZ, ResourceLocation cropId,
+                   TFCCropSuitability.CropWaterMode waterMode, int daysInMonth,
+                   float growthModifier, int revision) {}
 
-        private final java.util.LinkedHashMap<Key, TFCCropSuitability.CropSuitabilityResult> map;
+        private final int maxPending;
+        private final java.util.LinkedHashMap<Key, TFCCropSuitability.CropSuitabilityResult> results;
+        private final java.util.LinkedHashMap<Key, Future<?>> pending = new java.util.LinkedHashMap<>();
 
-        CropHoverCache(int maxEntries)
+        CropHoverCache(int maxEntries, int maxPending)
         {
-            this.map = new java.util.LinkedHashMap<>(16, 0.75f, true)
+            this.maxPending = maxPending;
+            this.results = new java.util.LinkedHashMap<>(16, 0.75f, true)
             {
                 @Override
                 protected boolean removeEldestEntry(java.util.Map.Entry<Key, TFCCropSuitability.CropSuitabilityResult> eldest)
@@ -1077,45 +1198,93 @@ public class WorkManager
 
         synchronized TFCCropSuitability.CropSuitabilityResult get(Key key)
         {
-            return this.map.get(key);
+            return this.results.get(key);
         }
 
-        synchronized void put(Key key, TFCCropSuitability.CropSuitabilityResult value)
+        synchronized boolean reserve(Key key)
         {
-            this.map.put(key, value);
+            if (this.results.containsKey(key) || this.pending.containsKey(key))
+            {
+                return false;
+            }
+            while (this.pending.size() >= this.maxPending)
+            {
+                var it = this.pending.entrySet().iterator();
+                var eldest = it.next();
+                if (eldest.getValue() != null) eldest.getValue().cancel(true);
+                it.remove();
+            }
+            this.pending.put(key, null);
+            return true;
+        }
+
+        synchronized void attach(Key key, Future<?> future)
+        {
+            if (this.pending.containsKey(key))
+            {
+                this.pending.put(key, future);
+            }
+            else
+            {
+                future.cancel(true);
+            }
+        }
+
+        synchronized void complete(Key key, TFCCropSuitability.CropSuitabilityResult value)
+        {
+            if (this.pending.containsKey(key))
+            {
+                this.pending.remove(key);
+                this.results.put(key, value);
+            }
+        }
+
+        synchronized void discard(Key key)
+        {
+            Future<?> future = this.pending.remove(key);
+            if (future != null && !future.isDone()) future.cancel(true);
         }
 
         synchronized void clear()
         {
-            this.map.clear();
+            for (Future<?> future : this.pending.values())
+            {
+                if (future != null) future.cancel(true);
+            }
+            this.pending.clear();
+            this.results.clear();
         }
     }
 
-    /** Bounded LRU of ChunkData + chunk-center surface height, for hover detail (no unbounded growth). */
+    /**
+     * Bounded LRU of ChunkData plus the canonical four-height grid, scoped by world generation.
+     */
     private static final class ChunkDataCache
     {
-        record Entry(ChunkData chunkData, int surfaceY) {}
+        record Key(long chunkPos, int worldRevision) {}
 
-        private final java.util.LinkedHashMap<Long, Entry> map;
+        record Entry(ChunkData chunkData, QuartSurfaceHeights surfaceHeights) {}
+
+        private final java.util.LinkedHashMap<Key, Entry> map;
 
         ChunkDataCache(int maxEntries)
         {
             this.map = new java.util.LinkedHashMap<>(16, 0.75f, true)
             {
                 @Override
-                protected boolean removeEldestEntry(java.util.Map.Entry<Long, Entry> eldest)
+                protected boolean removeEldestEntry(java.util.Map.Entry<Key, Entry> eldest)
                 {
                     return size() > maxEntries;
                 }
             };
         }
 
-        synchronized Entry get(long key)
+        synchronized Entry get(Key key)
         {
             return this.map.get(key);
         }
 
-        synchronized void put(long key, Entry value)
+        synchronized void put(Key key, Entry value)
         {
             this.map.put(key, value);
         }
@@ -1166,13 +1335,17 @@ public class WorkManager
         return this.tfcSampleUtils != null;
     }
 
-    /** Current preview-data revision; changes when results are applied or sections are invalidated. */
+    /**
+     * Current preview-data revision; changes when results are applied or sections are invalidated.
+     */
     public long dataRevision()
     {
         return this.dataRevision.get();
     }
 
-    /** Bump the revision so PreviewDisplay rebuilds its texture. Called after a batch applies results. */
+    /**
+     * Bump the revision so PreviewDisplay rebuilds its texture. Called after a batch applies results.
+     */
     public void bumpDataRevision()
     {
         this.dataRevision.incrementAndGet();

@@ -1,16 +1,22 @@
 package com.rustysnail.world.preview.tfc.backend.storage;
 
-import com.rustysnail.world.preview.tfc.WorldPreview;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Arrays;
+import com.rustysnail.world.preview.tfc.RenderSettings;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import org.jetbrains.annotations.NotNull;
 
 public class PreviewBlock implements Serializable
 {
     @Serial
     private static final long serialVersionUID = -6140310220242894115L;
+
+    static int sectionQuartStride(long flags, int visualQuartStride)
+    {
+        return flags == RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag ? 1 : visualQuartStride;
+    }
+
     private final long flags;
     private final PreviewSection[] sections = new PreviewSection[1024];
 
@@ -32,6 +38,11 @@ public class PreviewBlock implements Serializable
         return section;
     }
 
+    public PreviewSection[] sections()
+    {
+        return Arrays.copyOf(this.sections, this.sections.length);
+    }
+
     private PreviewSection sectionFactory(int quartX, int quartZ)
     {
         if (this.flags == 1L)
@@ -40,7 +51,9 @@ public class PreviewBlock implements Serializable
         }
         else
         {
-            int quartStride = WorldPreview.get().renderSettings().quartStride();
+            // Crop suitability is always generated and stored at true quart resolution, independent
+            // of the current visual sampler/zoom. Other flags retain the existing global stride.
+            int quartStride = sectionQuartStride(this.flags, WorldPreview.get().renderSettings().quartStride());
             if (WorldPreview.get().cfg().enableCompression)
             {
                 return (switch (quartStride)
@@ -62,10 +75,5 @@ public class PreviewBlock implements Serializable
                 });
             }
         }
-    }
-
-    public PreviewSection[] sections()
-    {
-        return Arrays.copyOf(this.sections, this.sections.length);
     }
 }

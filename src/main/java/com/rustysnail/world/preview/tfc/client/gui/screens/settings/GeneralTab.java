@@ -1,12 +1,12 @@
 package com.rustysnail.world.preview.tfc.client.gui.screens.settings;
 
+import java.util.ArrayList;
+import java.util.List;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.WorldPreviewConfig;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.SelectionSlider;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.WGLabel;
-import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.Tooltip;
