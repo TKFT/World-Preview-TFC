@@ -1,0 +1,8 @@
+{
+  "world_preview_tfc:impossible": {"r": 102, "g": 45, "b": 45, "name": "Impossible"},
+  "world_preview_tfc:poor": {"r": 181, "g": 87, "b": 50, "name": "Poor"},
+  "world_preview_tfc:marginal": {"r": 212, "g": 173, "b": 63, "name": "Marginal"},
+  "world_preview_tfc:good": {"r": 116, "g": 166, "b": 74, "name": "Good"},
+  "world_preview_tfc:ideal": {"r": 50, "g": 168, "b": 82, "name": "Ideal"},
+  "world_preview_tfc:no_data": {"r": 42, "g": 42, "b": 42, "name": "No Data"}
+}

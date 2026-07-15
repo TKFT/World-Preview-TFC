@@ -1,0 +1,8 @@
+{
+  "world_preview_tfc:ocean": {"r": 0, "g": 0, "b": 139, "name": "Ocean"},
+  "world_preview_tfc:lake": {"r": 0, "g": 0, "b": 255, "name": "Lake"},
+  "world_preview_tfc:river": {"r": 173, "g": 215, "b": 255, "name": "River"},
+  "world_preview_tfc:shore": {"r": 210, "g": 180, "b": 140, "name": "Shore"},
+  "world_preview_tfc:land": {"r": 68, "g": 170, "b": 68, "name": "Land"},
+  "world_preview_tfc:unknown": {"r": 42, "g": 42, "b": 42, "name": "Unknown"}
+}

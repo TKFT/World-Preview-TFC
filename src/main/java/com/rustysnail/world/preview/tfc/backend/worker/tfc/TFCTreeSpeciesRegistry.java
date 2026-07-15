@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import com.rustysnail.world.preview.tfc.WorldPreview;
+import com.rustysnail.world.preview.tfc.backend.color.TFCColorPalettes;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
@@ -16,25 +17,14 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import net.dries007.tfc.world.feature.tree.ForestConfig;
 
-/**
- * Runtime registry of tree species, built from the configured-feature registry so that TFC trees
- * <em>and</em> trees added by addons (AFC, etc.) can appear in the Tree Species legend/map.
- *
- * <p>Species are keyed by a normalized {@link ResourceLocation} (e.g. {@code tfc:oak},
- * {@code afc:baobab}) derived from the {@link ForestConfig.Entry} configured-feature key. Preview
- * short ids are assigned by sorting the species locations deterministically, so a given world
- * yields a stable id per species. Known TFC species keep their curated colors; unknown addon
- * species get a stable, tree-like fallback color from their location hash.
- */
 public final class TFCTreeSpeciesRegistry
 {
     private static final Map<ResourceLocation, Integer> KNOWN_COLORS = buildKnownColors();
-    // Muted, tree-like fallback colors (greens, olives, browns, golds, muted purples) for addon
-    // species that have no curated color. Chosen by location hash so a species is always the same.
     private static final int[] FALLBACK_PALETTE = {
         0xFF6E8B3D, // olive green
         0xFF4E7A4E, // forest green
@@ -50,11 +40,6 @@ public final class TFCTreeSpeciesRegistry
         0xFF8C7853, // taupe
     };
 
-    /**
-     * Builds the registry by scanning every configured feature: for a {@link ForestConfig} it walks
-     * {@code entries()} (each holder points at a {@code ForestConfig.Entry} feature); a feature whose
-     * config is directly a {@link ForestConfig.Entry} is also registered (addon diagnostics).
-     */
     public static TFCTreeSpeciesRegistry build(RegistryAccess registryAccess)
     {
         try
@@ -103,9 +88,6 @@ public final class TFCTreeSpeciesRegistry
         }
     }
 
-    /**
-     * Registry containing only the known TFC species (used before a world loads or on failure).
-     */
     public static TFCTreeSpeciesRegistry fallback()
     {
         List<ResourceLocation> sorted = new ArrayList<>(KNOWN_COLORS.keySet());
@@ -113,13 +95,6 @@ public final class TFCTreeSpeciesRegistry
         return new TFCTreeSpeciesRegistry(sorted, Map.of());
     }
 
-    // ---------------------------------------------------------------- known TFC colors
-
-    /**
-     * Species location for a {@code ForestConfig.Entry} holder. Prefers the entry holder's own key,
-     * falling back to its {@code normal_tree} feature key. E.g. {@code tfc:tree/oak_entry -> tfc:oak},
-     * {@code tfc:tree/dead_oak_entry -> tfc:oak}, {@code afc:tree/baobab_entry -> afc:baobab}.
-     */
     public static ResourceLocation speciesFromHolder(Holder<ConfiguredFeature<?, ?>> holder, ForestConfig.Entry entry)
     {
         ResourceLocation key = holder.unwrapKey()
@@ -165,7 +140,7 @@ public final class TFCTreeSpeciesRegistry
         int slash = path.lastIndexOf('/');
         if (slash >= 0)
         {
-            path = path.substring(slash + 1); // drop "tree/" (or any) prefix
+            path = path.substring(slash + 1);
         }
         if (path.endsWith("_entry"))
         {
@@ -179,12 +154,10 @@ public final class TFCTreeSpeciesRegistry
         {
             path = "tree";
         }
-        return ResourceLocation.fromNamespaceAndPath(key.getNamespace(), path); // keep namespace
+        return ResourceLocation.fromNamespaceAndPath(key.getNamespace(), path);
     }
 
-    // ---------------------------------------------------------------- construction
-
-    private static int fallbackColor(ResourceLocation rl)
+    static int fallbackColor(ResourceLocation rl)
     {
         int idx = Math.floorMod(rl.toString().hashCode(), FALLBACK_PALETTE.length);
         return FALLBACK_PALETTE[idx];
@@ -193,6 +166,11 @@ public final class TFCTreeSpeciesRegistry
     private static String titleCase(String path)
     {
         String raw = path.replace('_', ' ');
+        return getString(raw);
+    }
+
+    static String getString(String raw)
+    {
         StringBuilder sb = new StringBuilder(raw.length());
         boolean cap = true;
         for (int i = 0; i < raw.length(); i++)
@@ -208,8 +186,6 @@ public final class TFCTreeSpeciesRegistry
         }
         return sb.toString();
     }
-
-    // ---------------------------------------------------------------- species id derivation
 
     private static void logDiagnostics(int forestConfigCount, int entryFeatureCount, List<ResourceLocation> sorted)
     {
@@ -235,7 +211,6 @@ public final class TFCTreeSpeciesRegistry
 
     private final Map<ResourceLocation, Short> speciesToId;
 
-    // ---------------------------------------------------------------- accessors
     private final List<ResourceLocation> idToSpecies;
     private final Map<ResourceLocation, ForestConfig.Entry> entryBySpecies;
 
@@ -281,18 +256,21 @@ public final class TFCTreeSpeciesRegistry
             return TFCSampleUtils.COLOR_INVALID;
         }
         Integer known = KNOWN_COLORS.get(rl);
-        return known != null ? known : fallbackColor(rl);
+        int fallback = known != null ? known : fallbackColor(rl);
+        return WorldPreview.get().biomeColorMap().getCategoricalColor(TFCColorPalettes.TREE_SPECIES, rl, fallback);
     }
 
-    /**
-     * Clean display name; addon (non-tfc) species get a {@code [namespace]} suffix to disambiguate.
-     */
     public String name(short id)
     {
         ResourceLocation rl = speciesFor(id);
         if (rl == null)
         {
             return "Unknown";
+        }
+        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.TREE_SPECIES, rl);
+        if (loaded != null)
+        {
+            return loaded;
         }
         String pretty = titleCase(rl.getPath());
         String ns = rl.getNamespace();

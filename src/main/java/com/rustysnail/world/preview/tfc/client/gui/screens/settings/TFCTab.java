@@ -21,9 +21,6 @@ import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.settings.RockLayerSettings;
 import net.dries007.tfc.world.settings.Settings;
 
-/**
- * Settings tab for TerraFirmaCraft world generation options.
- */
 public class TFCTab extends GridLayoutTab
 {
 
@@ -485,10 +482,7 @@ public class TFCTab extends GridLayoutTab
 
         this.previewContainer.workManager().onTFCSettingsChanged();
 
-        if (this.onApplyClose != null)
-        {
-            this.onApplyClose.run();
-        }
+        this.onApplyClose.run();
     }
 
     public record ScaleValue(int value) implements SelectionSlider.SelectionValues

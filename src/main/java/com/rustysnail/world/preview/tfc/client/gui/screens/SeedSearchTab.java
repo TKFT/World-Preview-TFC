@@ -7,7 +7,6 @@ import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.NotNull;
 
 public class SeedSearchTab implements Tab, AutoCloseable
 {
@@ -19,7 +18,6 @@ public class SeedSearchTab implements Tab, AutoCloseable
         this.container = new SeedSearchContainer(screen, previewTab);
     }
 
-    @NotNull
     @Override
     public Component getTabTitle()
     {
@@ -27,13 +25,13 @@ public class SeedSearchTab implements Tab, AutoCloseable
     }
 
     @Override
-    public void visitChildren(@NotNull Consumer<AbstractWidget> consumer)
+    public void visitChildren(Consumer<AbstractWidget> consumer)
     {
         this.container.widgets().forEach(consumer);
     }
 
     @Override
-    public void doLayout(@NotNull ScreenRectangle screenRectangle)
+    public void doLayout(ScreenRectangle screenRectangle)
     {
         this.container.doLayout(screenRectangle);
     }

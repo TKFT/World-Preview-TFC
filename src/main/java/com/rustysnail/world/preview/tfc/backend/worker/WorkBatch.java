@@ -8,28 +8,24 @@ import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
-import org.jetbrains.annotations.NotNull;
 
 public class WorkBatch
 {
-    private static @NotNull PreviewSection getPreviewSection(WorkResult workResult)
+    private static PreviewSection getPreviewSection(WorkResult workResult)
     {
         PreviewSection section = workResult.section();
 
         final int baseQuartX = section.quartX();
         final int baseQuartZ = section.quartZ();
-        if (workResult.results() != null)
+        for (WorkResult.BlockResult x : workResult.results())
         {
-            for (WorkResult.BlockResult x : workResult.results())
+            final int localX = x.quartX() - baseQuartX;
+            final int localZ = x.quartZ() - baseQuartZ;
+            if (localX < 0 || localX >= PreviewSection.SIZE || localZ < 0 || localZ >= PreviewSection.SIZE)
             {
-                final int localX = x.quartX() - baseQuartX;
-                final int localZ = x.quartZ() - baseQuartZ;
-                if (localX < 0 || localX >= PreviewSection.SIZE || localZ < 0 || localZ >= PreviewSection.SIZE)
-                {
-                    continue;
-                }
-                section.set(localX, localZ, x.value());
+                continue;
             }
+            section.set(localX, localZ, x.value());
         }
         return section;
     }
@@ -66,7 +62,6 @@ public class WorkBatch
                 return;
             }
 
-            // 1. Compute all work results for this batch.
             List<WorkResult> res = new ArrayList<>();
 
             for (WorkUnit unit : this.workUnits)
@@ -78,17 +73,13 @@ public class WorkBatch
                 }
             }
 
-            // A crop/calendar revision can change after the final unit finishes but before publish.
             if (this.workUnits.stream().anyMatch(unit -> !unit.isResultValid()))
             {
                 return;
             }
 
-            // 2. Apply every result to its PreviewSection.
             boolean applied = this.applyChunkResult(res);
 
-            // 3. Only mark units completed after a fully successful apply. A section that could not
-            //    be written must not be flagged complete, or it would render permanently empty.
             if (applied && !this.isCanceled()
                 && this.workUnits.stream().allMatch(WorkUnit::isResultValid))
             {
@@ -96,7 +87,6 @@ public class WorkBatch
                 {
                     this.workUnits.forEach(WorkUnit::markCompleted);
                 }
-                // New data is now visible; bump the revision so PreviewDisplay rebuilds its texture.
                 WorldPreview.get().workManager().bumpDataRevision();
             }
         }

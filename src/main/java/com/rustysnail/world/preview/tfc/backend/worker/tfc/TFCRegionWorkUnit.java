@@ -44,14 +44,11 @@ public class TFCRegionWorkUnit extends WorkUnit
     public static final short LAND_WATER_SHORE = 2;
     public static final short LAND_WATER_LAKE = 3;
     public static final short LAND_WATER_RIVER = 4;
-    // Opt-in detailed profiling. Off in production so no System.nanoTime() runs in the per-pixel loop;
-    // when true, the soil/crop per-segment breakdown is measured and logged.
     private static final boolean PROFILE_TIMING = false;
     private static final AtomicInteger totalUnitsQueued = new AtomicInteger(0);
     private static final AtomicInteger unitsCompleted = new AtomicInteger(0);
     private static final AtomicLong totalTimeMs = new AtomicLong(0);
     private static final AtomicInteger gridCellsSampled = new AtomicInteger(0);
-    // Temporary debug counters for tree-map water classification
     private static final AtomicInteger treeMapOceanPoints = new AtomicInteger(0);
     private static final AtomicInteger treeMapLakePoints = new AtomicInteger(0);
     private static final AtomicInteger treeMapRiverPoints = new AtomicInteger(0);
@@ -163,9 +160,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         this.kaolinRules = plan.kaolin() ? kaolinRules : null;
         this.seed = seed;
 
-        // Completion is tracked per output group (see TFCWorkPlan#requiredCompletionFlags), so this
-        // unit is skipped only when the active mode's data is genuinely present. The completion
-        // bitmaps live on the render sections themselves (separate from their pixel data).
         this.completionSections = new ArrayList<>();
         for (long flag : plan.requiredCompletionFlags())
         {
@@ -179,9 +173,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         long startTime = System.currentTimeMillis();
         final int[] gridCellsProcessed = {0};
 
-        // Detailed per-segment timing is opt-in (PROFILE_TIMING). In production it stays off, so no
-        // System.nanoTime() is called per pixel; only coarse per-chunk (chunkData/height) and per-unit
-        // totals are measured. Flip PROFILE_TIMING to profile the soil/crop breakdown.
         final boolean timeSoil = PROFILE_TIMING && this.plan.soilType();
         long soilChunkDataNanos = 0L;
         long soilHeightNanos = 0L;
@@ -217,7 +208,6 @@ public class TFCRegionWorkUnit extends WorkUnit
             {
                 for (int dz = 0; dz < this.numChunks && !this.isCanceled(); dz++)
                 {
-                    // Discard all work if the selected crop / water mode changed while we ran.
                     if (this.isStaleCrop())
                     {
                         return List.of();
@@ -225,7 +215,6 @@ public class TFCRegionWorkUnit extends WorkUnit
 
                     ChunkPos cp = new ChunkPos(baseChunkX + dx, baseChunkZ + dz);
 
-                    // Create sections/results only for outputs this plan needs.
                     WorkResult tempResult = this.plan.temperature() ? newResult(cp, RenderSettings.RenderMode.TFC_TEMPERATURE.flag) : null;
                     WorkResult rainResult = this.plan.rainfall() ? newResult(cp, RenderSettings.RenderMode.TFC_RAINFALL.flag) : null;
                     WorkResult landWaterResult = this.plan.landWater() ? newResult(cp, RenderSettings.RenderMode.TFC_LAND_WATER.flag) : null;
@@ -244,7 +233,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                     boolean detectFeaturesForChunk = this.plan.features()
                         && !this.storage.section4(cp, 0, TFCWorkPlan.FEATURES_FLAG).isCompleted(cp);
 
-                    // ChunkData / forest type only when forest or tree species or soil is requested.
                     short forestTypeId = TFCSampleUtils.VALUE_INVALID;
                     ChunkData chunkData = null;
                     ForestType forestType = null;
@@ -269,10 +257,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                     }
 
-                    // Soil keeps its existing one-center-height approximation. Crop uses four
-                    // quadrant-center heights and allocation-free bilinear interpolation per quart.
-                    // Tree Species deliberately keeps its per-point surface height until its review.
-                    int chunkSurfaceY = 63; // TFC SEA_LEVEL_Y fallback
+                    int chunkSurfaceY = 63;
                     if (this.plan.soilType())
                     {
                         long tH = timeSoil ? System.nanoTime() : 0L;
@@ -296,8 +281,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                         || this.plan.landWater() || this.plan.rocks() || this.plan.hotspot()
                         || this.plan.kaolin() || detectFeaturesForChunk;
                     final boolean needsTreeMap = this.plan.forestType() || this.plan.treeSpecies();
-                    // Crop has an independent full-quart pass below. This visual pass retains the
-                    // configured sampler for every existing mode and for the feature overlay.
                     final boolean needsBiomeSample = needsTreeMap || this.plan.soilType();
 
                     List<BlockPos> visualPositions = needsPoint || needsBiomeSample
@@ -327,7 +310,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                             detectFeatures(point, pos.getX(), pos.getZ(), structureSection);
                         }
 
-                        // Land/water (with river fractal) only when requested; also drives kaolin's land test.
                         short landWaterValue = LAND_WATER_LAND;
                         if (this.plan.landWater() && point != null)
                         {
@@ -397,7 +379,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                             this.sampler.expandRaw(pos, kaolinValue, kaolinResult);
                         }
 
-                        // Forest type / tree species / soil: water via classifyTreeMapWater (no river fractal).
                         if (needsBiomeSample)
                         {
                             BiomeExtension treeMapBiome = null;
@@ -455,7 +436,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 }
                                 else if (chunkData != null && forestType != null)
                                 {
-                                    // Chunk-level elevation (chunkSurfaceY), full-resolution biome/water.
                                     soilValue = TFCSampleUtils.resolveSoilType(
                                         chunkData, treeMapBiome, forestType, pos, chunkSurfaceY, treeMapWater);
                                 }
@@ -472,8 +452,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                         }
                     }
 
-                    // Crop is always sampled at one true point per quart, regardless of the visual
-                    // sampler. Pair expansion with cropSampler so no coarse values are duplicated.
                     long tCropLoop = timeCrop ? System.nanoTime() : 0L;
                     if (this.plan.cropSuitability() && cropResult != null)
                     {
@@ -548,8 +526,6 @@ public class TFCRegionWorkUnit extends WorkUnit
                 }
             }
 
-            // Final stale guard: if the crop changed after we finished computing, discard everything
-            // so a superseded crop's suitability never reaches storage.
             if (this.isStaleCrop())
             {
                 return List.of();
@@ -595,8 +571,6 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public long flags()
     {
-        // Only used by the base class to build an (unused) primary section during construction;
-        // real completion tracking is per-plan via completionSections. Return a valid storage flag.
         return TFCWorkPlan.FEATURES_FLAG;
     }
 
@@ -627,8 +601,6 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public void markCompleted()
     {
-        // Never mark a superseded crop unit complete, or its (discarded) flag-16 section would be
-        // flagged done and never regenerate for the newly-selected crop.
         if (this.isStaleCrop())
         {
             return;
@@ -652,9 +624,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         return super.isResultValid() && !this.isStaleCrop();
     }
 
-    /**
-     * True when this is a crop unit whose captured crop revision no longer matches the current one.
-     */
     private boolean isStaleCrop()
     {
         return this.cropContext != null && this.cropContext.isStale();
@@ -668,7 +637,6 @@ public class TFCRegionWorkUnit extends WorkUnit
     private short sampleLandWater(BlockPos pos, Map<Long, Region.Point> gridCache)
     {
         Region.Point p = getPointCached(pos.getX(), pos.getZ(), gridCache);
-        if (p == null) return Short.MIN_VALUE;
 
         if (isInRiver(pos.getX(), pos.getZ()))
         {
@@ -681,16 +649,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         return LAND_WATER_LAND;
     }
 
-    /**
-     * Per-position water classification for forest, tree, soil, and ecological suitability maps.
-     * Uses only the sampled BiomeExtension from the generator's BiomeSourceExtension - the
-     * same effective biome lookup (including TFC's river overlay) as the normal biome map -
-     * so the water boundary matches the biome map at quart resolution. The coarse
-     * Region.Point land/water grid is deliberately not consulted here; it stays in use for
-     * the standalone TFC_LAND_WATER map only.
-     * Returns VALUE_WATER_OCEAN / VALUE_WATER_LAKE / VALUE_WATER_RIVER for water points,
-     * or -1 for land. Takes the biome sampled once by the caller.
-     */
     private short classifyTreeMapWater(@Nullable BiomeExtension biome)
     {
         if (!TFCSampleUtils.isTreeMapWaterBiome(biome))
@@ -705,7 +663,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         {
             return TFCSampleUtils.VALUE_WATER_RIVER;
         }
-        // LAKE blend type, "lake", "*_lake", "tower_karst_bay"
         return TFCSampleUtils.VALUE_WATER_LAKE;
     }
 
@@ -723,13 +680,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         );
     }
 
-    /**
-     * Surface height for elevation-adjusted climate, via the same per-column path the heightmap
-     * render uses ({@link SampleUtils#doHeightSlow}), which approximates OCEAN_FLOOR_WG. Falls back
-     * to TFC sea level (63) when the height sampler is unavailable, so resolution still works
-     * (without elevation cooling). The fallback is logged once. A dedicated surface-height resolver
-     * can be plugged in here later.
-     */
     private int sampleSurfaceY(BlockPos pos)
     {
         try
@@ -743,7 +693,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                 loggedSeaLevelFallback = true;
                 WorldPreview.LOGGER.warn("[TFC] Ecological elevation using sea-level (63) fallback: {}", e.getMessage());
             }
-            return 63; // TFC SEA_LEVEL_Y fallback
+            return 63;
         }
     }
 

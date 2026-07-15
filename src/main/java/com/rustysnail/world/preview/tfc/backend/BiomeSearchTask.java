@@ -61,7 +61,7 @@ public class BiomeSearchTask implements Runnable
             }
 
             int prevRadius = 0;
-            for (int dist = RING_STEP; dist <= MAX_DISTANCE; dist += RING_STEP)
+            for (int dist = RING_STEP; dist <= MAX_DISTANCE;)
             {
                 if (this.cancelled)
                 {
@@ -71,12 +71,8 @@ public class BiomeSearchTask implements Runnable
                 this.callback.onProgress(dist, MAX_DISTANCE);
 
                 BlockPos result = searchRingBand(cx, cz, prevRadius, dist);
-                if (result != null)
-                {
-                    this.callback.onFound(result);
-                    return;
-                }
-                prevRadius = dist;
+                this.callback.onFound(result);
+                return;
             }
 
             this.callback.onNotFound();
@@ -87,7 +83,7 @@ public class BiomeSearchTask implements Runnable
         }
     }
 
-    private BlockPos searchRingBand(int cx, int cz, int innerRadius, int outerRadius)
+    private @Nullable BlockPos searchRingBand(int cx, int cz, int innerRadius, int outerRadius)
     {
         int spacing = outerRadius > COARSE_THRESHOLD ? COARSE_SPACING : SAMPLE_SPACING;
         int minX = cx - outerRadius;

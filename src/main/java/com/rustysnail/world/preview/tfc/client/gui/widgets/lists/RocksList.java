@@ -78,9 +78,9 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
     public class RockEntry extends Entry<RockEntry>
     {
         private final short id;
-        private final String name;
-        private final int color;
-        private final Tooltip tooltip;
+        private String name;
+        private int color;
+        private Tooltip tooltip;
 
         public RockEntry(short id, String name, int color)
         {
@@ -103,6 +103,13 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
         public int color()
         {
             return this.color;
+        }
+
+        public void update(String name, int color)
+        {
+            this.name = name;
+            this.color = color;
+            this.tooltip = Tooltip.create(Component.literal(name));
         }
 
         @Override

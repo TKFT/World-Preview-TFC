@@ -48,7 +48,6 @@ import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import net.dries007.tfc.world.ChunkGeneratorExtension;
@@ -70,18 +69,17 @@ public class PreviewTab implements Tab, AutoCloseable, PreviewContainerDataProvi
         this.previewContainer = new PreviewContainer(screen, this);
     }
 
-    @NotNull
     public Component getTabTitle()
     {
         return WorldPreviewComponents.TITLE;
     }
 
-    public void visitChildren(@NotNull Consumer<AbstractWidget> consumer)
+    public void visitChildren(Consumer<AbstractWidget> consumer)
     {
         this.previewContainer.widgets().forEach(consumer);
     }
 
-    public void doLayout(@NotNull ScreenRectangle screenRectangle)
+    public void doLayout(ScreenRectangle screenRectangle)
     {
         this.previewContainer.doLayout(screenRectangle);
     }

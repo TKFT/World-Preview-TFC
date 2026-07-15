@@ -90,9 +90,6 @@ public class WorkManager
     private TFCTreeResolver tfcTreeResolver;
     private final KaolinBiomeRules kaolinRules = new KaolinBiomeRules();
 
-    // Crop-suitability state. The registry is rebuilt when the world-gen state changes; the selected
-    // crop + water mode drive the TFC_CROP_SUITABILITY map, and cropRevision guards against stale work
-    // (see TFCCropContext): it is bumped whenever the selection changes so in-flight units discard.
     private TFCCropRegistry cropRegistry = TFCCropRegistry.active();
     @Nullable
     private ResourceLocation selectedCropId;

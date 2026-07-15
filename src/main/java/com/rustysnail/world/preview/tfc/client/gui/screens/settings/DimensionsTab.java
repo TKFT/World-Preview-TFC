@@ -16,7 +16,6 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
-import org.jetbrains.annotations.NotNull;
 
 public class DimensionsTab implements Tab
 {
@@ -33,7 +32,6 @@ public class DimensionsTab implements Tab
         this.dimensionList.select(this.renderSettings.dimension);
     }
 
-    @NotNull
     public Component getTabTitle()
     {
         return WorldPreviewComponents.SETTINGS_DIM_TITLE;
@@ -96,7 +94,6 @@ public class DimensionsTab implements Tab
                 this.component = Component.literal(dimensionKey.toString());
             }
 
-            @NotNull
             public Component getNarration()
             {
                 return Component.literal("");

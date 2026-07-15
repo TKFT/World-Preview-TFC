@@ -1,31 +1,21 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
+import com.rustysnail.world.preview.tfc.WorldPreview;
+import com.rustysnail.world.preview.tfc.backend.color.TFCColorPalettes;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 import net.dries007.tfc.common.blocks.soil.FarmlandBlock;
 import net.dries007.tfc.util.climate.ClimateRange;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 
-/**
- * Evaluates annual crop-growing suitability for the {@link com.rustysnail.world.preview.tfc.RenderSettings.RenderMode#TFC_CROP_SUITABILITY}
- * map. This is a preview classification (categories, not guaranteed yields): for each of
- * {@link TFCPreviewClimateSampler#MAP_SAMPLES_PER_YEAR} annual climate samples it derives temperature and
- * farmland hydration, checks them against the crop's {@link ClimateRange}, and buckets the year into
- * Impossible / Poor / Marginal / Good / Ideal based mainly on the longest continuous core-valid run
- * (the growing window), treating the year as circular.
- */
 public final class TFCCropSuitability
 {
-    // Suitability values stored in the map section (0..4). Water / invalid reuse the shared reserved
-    // values in TFCSampleUtils (VALUE_WATER_* / VALUE_INVALID).
     public static final short CROP_IMPOSSIBLE = 0;
     public static final short CROP_POOR = 1;
     public static final short CROP_MARGINAL = 2;
     public static final short CROP_GOOD = 3;
     public static final short CROP_IDEAL = 4;
-    // Sample-count classification thresholds (poor/good/ideal core-run lengths and ideal coverage) are
-    // now derived from the live calendar in CropCalendarSettings, so they scale with month length and
-    // the crop-growth modifier. Only the closeness gate (not calendar-dependent) stays a constant.
     public static final float CROP_IDEAL_CLOSENESS = 0.70f;
     public static final CropSuitabilityResult NO_DATA_RESULT =
         new CropSuitabilityResult(TFCSampleUtils.VALUE_INVALID, 0, 0, 0, 0, 0f, LimitingFactor.NO_DATA, 0, 0, 0, 0, 0f, 0, 0);
@@ -40,11 +30,11 @@ public final class TFCCropSuitability
         0xFF74A64A, // Good
         0xFF32A852  // Ideal
     };
-    // Irrigation assumes a standard nearby freshwater source: +40 farmland hydration (TFC's water
-    // boost), neutral soil multiplier. Matches FarmlandBlock#getInstantHydrationFromRainHydration.
+    private static final ResourceLocation[] KEYS = {
+        id("impossible"), id("poor"), id("marginal"), id("good"), id("ideal")
+    };
+    private static final ResourceLocation NO_DATA = id("no_data");
     private static final int IRRIGATION_WATER_BOOST = 40;
-    // One mutable primitive scratch per worker/hover thread. Map points reuse it and allocate nothing;
-    // detailed hover copies it into the one result record returned to the UI.
     private static final ThreadLocal<EvaluationScratch> SCRATCH = ThreadLocal.withInitial(EvaluationScratch::new);
 
     public static boolean isSuitabilityValue(short value)
@@ -59,26 +49,36 @@ public final class TFCCropSuitability
 
     public static String getSuitabilityName(short value)
     {
-        if (isSuitabilityValue(value)) return NAMES[value];
-        if (TFCSampleUtils.isWaterValue(value)) return "Water";
-        return "No Data";
+        if (isSuitabilityValue(value))
+        {
+            String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.SUITABILITY, KEYS[value]);
+            return loaded == null ? NAMES[value] : loaded;
+        }
+        if (TFCSampleUtils.isWaterValue(value)) return TFCSampleUtils.getWaterTypeName(value);
+        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.SUITABILITY, NO_DATA);
+        return loaded == null ? "No Data" : loaded;
     }
 
     public static int getSuitabilityColor(short value)
     {
-        if (isSuitabilityValue(value)) return COLORS[value];
-        if (TFCSampleUtils.isWaterValue(value)) return TFCSampleUtils.COLOR_WATER;
-        return TFCSampleUtils.COLOR_INVALID;
+        if (isSuitabilityValue(value))
+        {
+            return WorldPreview.get().biomeColorMap().getCategoricalColor(TFCColorPalettes.SUITABILITY, KEYS[value], COLORS[value]);
+        }
+        if (TFCSampleUtils.isWaterValue(value)) return TFCSampleUtils.getWaterTypeColor(value);
+        return WorldPreview.get().biomeColorMap().getCategoricalColor(TFCColorPalettes.SUITABILITY, NO_DATA, TFCSampleUtils.COLOR_INVALID);
     }
 
-    /**
-     * Farmland hydration for a rain-fed / irrigated sample from seasonal rainfall (mm).
-     */
+    private static ResourceLocation id(String path)
+    {
+        return ResourceLocation.fromNamespaceAndPath("world_preview_tfc", path);
+    }
+
     public static int hydrationFor(float seasonalRainfall, CropWaterMode mode, boolean flooded)
     {
         if (flooded)
         {
-            return 100; // flooded farmland is always fully hydrated (both modes)
+            return 100;
         }
         int rainHydration = FarmlandBlock.getInstantRainHydration(seasonalRainfall); // [0, ~60]
         return mode == CropWaterMode.IRRIGATED
@@ -86,11 +86,6 @@ public final class TFCCropSuitability
             : rainHydration;
     }
 
-    /**
-     * Map-generation entry point: returns only the suitability short and allocates nothing (no record,
-     * list, array, Component or string). Reads the cached {@link AnnualClimateSchedule} arrays and the
-     * dynamic {@link CropCalendarSettings} thresholds. Water points are handled by the caller (land only).
-     */
     public static short evaluateMapValue(
         TFCCropRegistry.Entry crop,
         TFCPreviewClimateSampler sampler,
@@ -103,7 +98,7 @@ public final class TFCCropSuitability
         CropCalendarSettings calendar
     )
     {
-        if (crop == null || !crop.hasClimateData())
+        if (!crop.hasClimateData())
         {
             return TFCSampleUtils.VALUE_INVALID;
         }
@@ -113,10 +108,6 @@ public final class TFCCropSuitability
             schedule.samplesPerYear(), calendar);
     }
 
-    /**
-     * Hover entry point: full breakdown (counts, runs, closeness, limiting factor, calendar). Allocates
-     * one result record; only ever called for a single hovered quart, never in the map loop.
-     */
     public static CropSuitabilityResult evaluateDetailed(
         TFCCropRegistry.Entry crop,
         TFCPreviewClimateSampler sampler,
@@ -129,7 +120,7 @@ public final class TFCCropSuitability
         CropCalendarSettings calendar
     )
     {
-        if (crop == null || !crop.hasClimateData())
+        if (!crop.hasClimateData())
         {
             return NO_DATA_RESULT;
         }
@@ -173,9 +164,6 @@ public final class TFCCropSuitability
         return CROP_GOOD;
     }
 
-    /**
-     * Normalized proximity to the center of a range; open-ended/zero-width ranges avoid div-by-zero.
-     */
     static float axisCloseness(float value, float min, float max)
     {
         if (Float.isInfinite(min) || Float.isInfinite(max))
@@ -192,9 +180,6 @@ public final class TFCCropSuitability
         return Math.max(0f, 1f - d);
     }
 
-    /**
-     * Finalizes a streamed run count, joining the end and start of the year when both are valid.
-     */
     static int finishCircularRun(int count, int prefix, int suffix, int best, int n)
     {
         if (count == 0) return 0;
@@ -202,11 +187,6 @@ public final class TFCCropSuitability
         return Math.min(n, Math.max(best, prefix + suffix));
     }
 
-    /**
-     * Runs an arbitrary-length annual schedule with streaming counters. This avoids the 32-sample
-     * ceiling of int masks and works for both the 48-sample map and daily hover schedules. The only
-     * state written is the caller thread's reusable primitive scratch.
-     */
     private static void sampleYear(
         TFCCropRegistry.Entry crop,
         TFCPreviewClimateSampler sampler,
@@ -226,7 +206,6 @@ public final class TFCCropSuitability
         final float rainAverage = chunkData.getAverageRainfall(blockX, blockZ);
         final float rainVariance = chunkData.getRainVariance(blockX, blockZ);
 
-        // Per-point temperature linear terms: temp = base + slope * monthFactor (exact; see sampler).
         final float tempBase = sampler.temperatureBase(surfaceY, avgSeaLevelTemp);
         final float tempSlope = sampler.temperatureSlope(blockZ, surfaceY, avgSeaLevelTemp);
 
@@ -315,10 +294,8 @@ public final class TFCCropSuitability
         int maxCount = Math.max(Math.max(tooCold, tooHot), Math.max(tooDry, tooWet));
         if (maxCount == 0)
         {
-            // Temperature and hydration are individually fine most of the time; the window is short.
             return LimitingFactor.SHORT_SEASON;
         }
-        // Marginal ratings where no axis dominates are best described as a short season.
         if (suitability == CROP_MARGINAL && maxCount < n / 4)
         {
             return LimitingFactor.SHORT_SEASON;
@@ -342,10 +319,6 @@ public final class TFCCropSuitability
         NONE, TOO_COLD, TOO_HOT, TOO_DRY, TOO_WET, SHORT_SEASON, NO_DATA, WATER
     }
 
-    /**
-     * Detailed per-point result. Only the {@link #suitability} short is stored in the map section;
-     * the rest is recomputed on demand for the hovered quart.
-     */
     public record CropSuitabilityResult(
         short suitability,
         int coreValidSamples,

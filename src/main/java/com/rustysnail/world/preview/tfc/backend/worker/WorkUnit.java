@@ -81,9 +81,6 @@ public abstract class WorkUnit
         return this.isCanceled;
     }
 
-    /**
-     * Checked after computation and immediately before a batch publishes this unit's results.
-     */
     public boolean isResultValid()
     {
         return !this.isCanceled;

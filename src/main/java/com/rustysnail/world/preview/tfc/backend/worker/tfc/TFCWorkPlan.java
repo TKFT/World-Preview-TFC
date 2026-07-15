@@ -2,11 +2,6 @@ package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
 import com.rustysnail.world.preview.tfc.RenderSettings;
 
-/**
- * Describes which outputs a {@link TFCRegionWorkUnit} must compute for the active render mode, so
- * each TFC map only does the work it needs (e.g. Tree Species does not sample rocks; Temperature
- * does not resolve trees). Built once per queue pass from {@link #forMode}.
- */
 public record TFCWorkPlan(
     boolean temperature,
     boolean rainfall,
@@ -22,59 +17,42 @@ public record TFCWorkPlan(
     RenderSettings.RenderMode mode
 )
 {
-    // Dedicated completion flag for TFC feature detection (an unused storage flag, not a render mode).
     public static final long FEATURES_FLAG = 4L;
 
     public static TFCWorkPlan forMode(RenderSettings.RenderMode mode, boolean featureOverlay)
     {
-        boolean f = featureOverlay;
-        // Column order: temperature, rainfall, landWater, rocks, kaolin, forestType, treeSpecies,
-        //               soilType, cropSuitability, hotspot, features, mode
-        if (mode == null)
-        {
-            return new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, f, null);
-        }
         return switch (mode)
         {
             // Ocean coloring in these modes reads the land/water section, so it is included.
-            case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, f, mode);
-            case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, f, mode);
-            case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, f, mode);
-            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, f, mode);
-            case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, f, mode);
+            case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, featureOverlay, mode);
             // Forest/Tree water uses classifyTreeMapWater, not the river-fractal land/water map.
-            case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, f, mode);
-            case TFC_TREE_SPECIES -> new TFCWorkPlan(false, false, false, false, false, true, true, false, false, false, f, mode);
+            case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, featureOverlay, mode);
+            case TFC_TREE_SPECIES -> new TFCWorkPlan(false, false, false, false, false, true, true, false, false, false, featureOverlay, mode);
             // Soil needs ChunkData climate + forest type + the effective biome (water via classifyTreeMapWater).
-            case TFC_SOIL_TYPE -> new TFCWorkPlan(false, false, false, false, false, false, false, true, false, false, f, mode);
+            case TFC_SOIL_TYPE -> new TFCWorkPlan(false, false, false, false, false, false, false, true, false, false, featureOverlay, mode);
             // Crop needs ChunkData climate + the effective biome (water) + chunk-level surface height;
             // no rocks / trees / soil / rainfall / temperature / kaolin / hotspot outputs.
-            case TFC_CROP_SUITABILITY -> new TFCWorkPlan(false, false, false, false, false, false, false, false, true, false, f, mode);
-            case TFC_HOTSPOT -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, true, f, mode);
-            // Non-TFC modes (e.g. biome map with feature overlay on): only detect features.
-            default -> new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, f, mode);
+            case TFC_CROP_SUITABILITY -> new TFCWorkPlan(false, false, false, false, false, false, false, false, true, false, featureOverlay, mode);
+            case TFC_HOTSPOT -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, true, featureOverlay, mode);
+            // Non-TFC modes (e.g., biome map with feature overlay on): only detect features.
+            default -> new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, featureOverlay, mode);
         };
     }
 
-    /**
-     * Any output that needs the per-position Region.Point (climate, rocks, land/water, hotspot, kaolin, features).
-     */
     public boolean needsRegionPoint()
     {
         return temperature || rainfall || landWater || rocks || hotspot || kaolin || features;
     }
 
-    /**
-     * Whether a chunk's ChunkData must be sampled (forest type / tree species / soil type / crop).
-     */
     public boolean needsChunkData()
     {
         return forestType || treeSpecies || soilType || cropSuitability;
     }
 
-    /**
-     * Whether the effective biome must be sampled per point (tree-map water / config / soil / crop).
-     */
     public boolean needsTreeMapBiome()
     {
         return forestType || treeSpecies || soilType || cropSuitability;
@@ -85,13 +63,6 @@ public record TFCWorkPlan(
         return temperature || rainfall || landWater || rocks || kaolin || forestType || treeSpecies || soilType || cropSuitability || hotspot || features;
     }
 
-    /**
-     * Storage flags whose completion bitmap represents "this output is generated for the chunk".
-     * These are the render-section flags themselves (their completion bitmap is separate from the
-     * pixel data), plus the dedicated FEATURES_FLAG. Rocks are tracked by the single TFC_ROCK_TOP
-     * flag since all rock layers are computed together. A work unit is complete only when every
-     * required flag is marked, so e.g. Temperature completion never implies Tree Species completion.
-     */
     public long[] requiredCompletionFlags()
     {
         long[] tmp = new long[11];

@@ -3,10 +3,9 @@ package com.rustysnail.world.preview.tfc.mixin;
 import java.util.ArrayList;
 import java.util.List;
 import com.rustysnail.world.preview.tfc.backend.color.BiomeColorMapReloadListener;
+import com.rustysnail.world.preview.tfc.backend.color.CategoricalColorPaletteReloadListener;
 import com.rustysnail.world.preview.tfc.backend.color.ColormapReloadListener;
 import com.rustysnail.world.preview.tfc.backend.color.HeightmapPresetReloadListener;
-import com.rustysnail.world.preview.tfc.backend.color.RockColorReloadListener;
-import com.rustysnail.world.preview.tfc.backend.color.RockTypeColorReloadListener;
 import com.rustysnail.world.preview.tfc.backend.color.StructureMapReloadListener;
 import net.minecraft.server.ReloadableServerResources;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
@@ -26,8 +25,7 @@ public abstract class ReloadableServerResourcesMixin
         listeners.add(new StructureMapReloadListener());
         listeners.add(new HeightmapPresetReloadListener());
         listeners.add(new ColormapReloadListener());
-        listeners.add(new RockColorReloadListener());
-        listeners.add(new RockTypeColorReloadListener());
+        listeners.add(new CategoricalColorPaletteReloadListener());
         cir.setReturnValue(listeners);
     }
 }

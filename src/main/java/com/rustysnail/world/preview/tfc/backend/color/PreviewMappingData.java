@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import com.rustysnail.world.preview.tfc.WorldPreview;
 import java.util.stream.Collectors;
 import it.unimi.dsi.fastutil.objects.Object2ShortOpenHashMap;
 import net.minecraft.resources.ResourceLocation;
@@ -42,7 +45,10 @@ public class PreviewMappingData
     private final Map<String, RockColorEntry> rockColorData = new HashMap<>();
     private final Map<String, RockColorEntry> rockTypeColorData = new HashMap<>();
     private final List<PreviewData.HeightmapPresetData> heightmapPresets = new ArrayList<>();
-    private final List<ColorMap> colorMaps = new ArrayList<>();
+    private volatile Map<ResourceLocation, ColorMap> colorMaps = Map.of();
+    private volatile Map<ResourceLocation, CategoricalColorPalette> categoricalPalettes = Map.of();
+    private final AtomicLong paletteRevision = new AtomicLong();
+    private final Set<String> warnedMissingColorMaps = ConcurrentHashMap.newKeySet();
 
     public void updateRockColors(Map<ResourceLocation, RockColorEntry> newData)
     {
@@ -106,7 +112,77 @@ public class PreviewMappingData
 
     public void addColormap(ColorMap colorMap)
     {
-        this.colorMaps.add(colorMap);
+        Map<ResourceLocation, ColorMap> updated = new HashMap<>(this.colorMaps);
+        updated.put(colorMap.key(), colorMap);
+        this.colorMaps = Map.copyOf(updated);
+    }
+
+    public void replaceColorMaps(Map<ResourceLocation, ColorMap> colorMaps)
+    {
+        this.colorMaps = Map.copyOf(colorMaps);
+        this.paletteRevision.incrementAndGet();
+    }
+
+    public void replaceCategoricalPalettes(Map<ResourceLocation, CategoricalColorPalette> palettes)
+    {
+        this.categoricalPalettes = Map.copyOf(palettes);
+        this.paletteRevision.incrementAndGet();
+    }
+
+    public long paletteRevision()
+    {
+        return this.paletteRevision.get();
+    }
+
+    @Nullable
+    public ColorMap getColorMap(ResourceLocation id)
+    {
+        return this.colorMaps.get(id);
+    }
+
+    @Nullable
+    public ColorMap resolveColorMap(String configuredId, ResourceLocation fallbackId, String purpose)
+    {
+        ResourceLocation configured = ResourceLocation.tryParse(configuredId);
+        ColorMap selected = configured == null ? null : this.colorMaps.get(configured);
+        if (selected != null)
+        {
+            return selected;
+        }
+
+        String warningKey = purpose + '|' + configuredId;
+        if (this.warnedMissingColorMaps.add(warningKey))
+        {
+            WorldPreview.LOGGER.warn("Configured {} colormap '{}' is invalid or unavailable; using {}",
+                purpose, configuredId, fallbackId);
+        }
+        ColorMap fallback = this.colorMaps.get(fallbackId);
+        if (fallback == null && this.warnedMissingColorMaps.add(purpose + "|missing-default|" + fallbackId))
+        {
+            WorldPreview.LOGGER.warn("Default {} colormap {} is unavailable; using black", purpose, fallbackId);
+        }
+        return fallback;
+    }
+
+    @Nullable
+    public CategoricalColorPalette getCategoricalPalette(ResourceLocation id)
+    {
+        return this.categoricalPalettes.get(id);
+    }
+
+    public int getCategoricalColor(ResourceLocation paletteId, ResourceLocation valueId, int fallbackArgb)
+    {
+        CategoricalColorPalette palette = this.categoricalPalettes.get(paletteId);
+        CategoricalColorPalette.Entry entry = palette == null ? null : palette.get(valueId);
+        return entry == null ? 0xFF000000 | fallbackArgb & 0xFFFFFF : entry.argb();
+    }
+
+    @Nullable
+    public String getCategoricalName(ResourceLocation paletteId, ResourceLocation valueId)
+    {
+        CategoricalColorPalette palette = this.categoricalPalettes.get(paletteId);
+        CategoricalColorPalette.Entry entry = palette == null ? null : palette.get(valueId);
+        return entry == null ? null : entry.name();
     }
 
     public PreviewData generateMapData(
@@ -124,7 +200,7 @@ public class PreviewMappingData
             new Object2ShortOpenHashMap<>(),
             new Object2ShortOpenHashMap<>(),
             this.heightmapPresets,
-            this.colorMaps.stream().collect(Collectors.toMap(x -> x.key().toString(), x -> x))
+            this.colorMaps.values().stream().collect(Collectors.toMap(x -> x.key().toString(), x -> x))
         );
 
         for (short id = 0; id < biomes.size(); id++)
@@ -209,7 +285,7 @@ public class PreviewMappingData
 
     void clearColorMappings()
     {
-        this.colorMaps.clear();
+        this.colorMaps = Map.of();
     }
 
     void clearHeightmapPresets()

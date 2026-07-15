@@ -28,21 +28,20 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource.LevelStorageAccess;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class InGamePreviewScreen extends Screen implements PreviewContainerDataProvider
 {
     private final WorldPreview worldPreview = WorldPreview.get();
-    private IntegratedServer integratedServer;
-    private PreviewContainer previewContainer;
+    @Nullable private IntegratedServer integratedServer;
+    @Nullable private PreviewContainer previewContainer;
 
     public InGamePreviewScreen()
     {
         super(WorldPreviewComponents.TITLE_FULL);
     }
 
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick)
     {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(this.minecraft.font, WorldPreviewComponents.TITLE_FULL, this.width / 2, 6, 16777215);

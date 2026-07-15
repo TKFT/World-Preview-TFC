@@ -10,7 +10,15 @@ final class ColorJsonParsingHelper
     static String parseOptionalName(JsonObject raw)
     {
         JsonElement nameEl = raw.get("name");
-        return nameEl == null ? null : nameEl.getAsString();
+        if (nameEl == null)
+        {
+            return null;
+        }
+        if (!nameEl.isJsonPrimitive() || !nameEl.getAsJsonPrimitive().isString())
+        {
+            throw new IllegalArgumentException("name must be a string");
+        }
+        return nameEl.getAsString();
     }
 
     static int parsePackedRgbColor(JsonObject raw)
@@ -18,7 +26,12 @@ final class ColorJsonParsingHelper
         JsonElement colorEl = raw.get("color");
         if (colorEl != null)
         {
-            return colorEl.getAsInt() & 0xFFFFFF;
+            int color = colorEl.getAsInt();
+            if (color < 0 || color > 0xFFFFFF)
+            {
+                throw new IllegalArgumentException("color must be between 0 and 16777215");
+            }
+            return color;
         }
 
         JsonElement rEl = raw.get("r");
@@ -29,10 +42,20 @@ final class ColorJsonParsingHelper
             throw new IllegalStateException("No color was provided!");
         }
 
-        int r = rEl.getAsInt() & 0xFF;
-        int g = gEl.getAsInt() & 0xFF;
-        int b = bEl.getAsInt() & 0xFF;
+        int r = parseChannel(rEl, "r");
+        int g = parseChannel(gEl, "g");
+        int b = parseChannel(bEl, "b");
         return r << 16 | g << 8 | b;
+    }
+
+    private static int parseChannel(JsonElement element, String name)
+    {
+        int value = element.getAsInt();
+        if (value < 0 || value > 255)
+        {
+            throw new IllegalArgumentException(name + " must be between 0 and 255");
+        }
+        return value;
     }
 
     private ColorJsonParsingHelper()

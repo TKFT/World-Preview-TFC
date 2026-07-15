@@ -11,9 +11,11 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.RandomSupport;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
@@ -33,12 +35,11 @@ public class FeatureProbe
 
     private static final int TFC_MIN_Y = -64;
     private static final int TFC_HEIGHT = 448;
+    private static final int TFC_SEA_LEVEL = 63;
 
     private final RegistryAccess registryAccess;
     private final ChunkGenerator chunkGenerator;
     private final Settings tfcSettings;
-    private final int minY;
-    private final int height;
 
     public FeatureProbe(
         ChunkGenerator chunkGenerator,
@@ -53,9 +54,6 @@ public class FeatureProbe
         this.chunkGenerator = chunkGenerator;
         this.registryAccess = registryAccess;
         this.tfcSettings = ext.settings();
-
-        this.minY = TFC_MIN_Y;
-        this.height = TFC_HEIGHT;
     }
 
     public Map<ResourceLocation, List<BlockPos>> probeRegion(
@@ -66,17 +64,17 @@ public class FeatureProbe
     )
     {
         Seed tfcSeed = Seed.of(seed);
-        RegionGenerator regionGen = new RegionGenerator(tfcSettings, tfcSeed);
+        RegionGenerator regionGen = new RegionGenerator(this.tfcSettings, tfcSeed);
         ChunkDataGenerator chunkDataGen = new RegionChunkDataGenerator(
             regionGen,
-            tfcSettings.rockLayerSettings(),
+            this.tfcSettings.rockLayerSettings(),
             tfcSeed
         );
 
         FeatureProbeLevel probeLevel = new FeatureProbeLevel(
-            registryAccess,
-            minY,
-            height,
+            this.registryAccess,
+            TFC_MIN_Y,
+            TFC_HEIGHT,
             seed
         );
 
@@ -130,7 +128,7 @@ public class FeatureProbe
         FeatureProbeLevel level
     )
     {
-        var biomeRegistry = registryAccess.registryOrThrow(Registries.BIOME);
+        var biomeRegistry = this.registryAccess.registryOrThrow(Registries.BIOME);
 
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, biomeRegistry, null);
 
@@ -144,26 +142,25 @@ public class FeatureProbe
 
     private void fillBasicTerrain(ProtoChunk chunk)
     {
-        int seaLevel = 63;
         ChunkPos pos = chunk.getPos();
 
         for (int x = 0; x < 16; x++)
         {
             for (int z = 0; z < 16; z++)
             {
-                for (int y = minY; y < seaLevel; y++)
+                for (int y = TFC_MIN_Y; y < TFC_SEA_LEVEL; y++)
                 {
                     BlockPos blockPos = new BlockPos(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
-                    chunk.setBlockState(blockPos, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), false);
+                    chunk.setBlockState(blockPos, Blocks.STONE.defaultBlockState(), false);
                 }
             }
         }
 
         var types = Set.of(
-            net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG,
-            net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG
+            Heightmap.Types.OCEAN_FLOOR_WG,
+            Heightmap.Types.WORLD_SURFACE_WG
         );
-        net.minecraft.world.level.levelgen.Heightmap.primeHeightmaps(chunk, types);
+        Heightmap.primeHeightmaps(chunk, types);
     }
 
     private void runFeaturePlacement(
@@ -172,7 +169,7 @@ public class FeatureProbe
         long seed
     )
     {
-        var featureRegistry = registryAccess.registryOrThrow(Registries.PLACED_FEATURE);
+        var featureRegistry = this.registryAccess.registryOrThrow(Registries.PLACED_FEATURE);
 
         BlockPos origin = centerChunk.getWorldPosition();
         WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
@@ -189,7 +186,7 @@ public class FeatureProbe
 
             try
             {
-                feature.place(level, chunkGenerator, random, origin);
+                feature.place(level, this.chunkGenerator, random, origin);
             }
             catch (Exception e)
             {

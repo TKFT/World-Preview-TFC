@@ -1,0 +1,10 @@
+{
+  "world_preview_tfc:entisol": {"r": 184, "g": 154, "b": 106, "name": "Entisol"},
+  "world_preview_tfc:aridisol": {"r": 214, "g": 162, "b": 76, "name": "Aridisol"},
+  "world_preview_tfc:oxisol": {"r": 184, "g": 90, "b": 50, "name": "Oxisol"},
+  "world_preview_tfc:fluvisol": {"r": 109, "g": 143, "b": 117, "name": "Fluvisol"},
+  "world_preview_tfc:andisol": {"r": 78, "g": 74, "b": 68, "name": "Andisol"},
+  "world_preview_tfc:podzol": {"r": 107, "g": 90, "b": 122, "name": "Podzol"},
+  "world_preview_tfc:alfisol": {"r": 138, "g": 110, "b": 69, "name": "Alfisol"},
+  "world_preview_tfc:mollisol": {"r": 79, "g": 111, "b": 58, "name": "Mollisol"}
+}

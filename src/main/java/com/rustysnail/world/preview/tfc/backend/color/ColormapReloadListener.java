@@ -1,5 +1,6 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import com.google.gson.Gson;
@@ -24,14 +25,15 @@ public class ColormapReloadListener extends SimpleJsonResourceReloadListener
     {
         WorldPreview worldPreview = WorldPreview.get();
         PreviewMappingData previewMappingData = worldPreview.biomeColorMap();
-        previewMappingData.clearColorMappings();
+        Map<ResourceLocation, ColorMap> colorMaps = new HashMap<>();
         WorldPreview.LOGGER.debug("Loading colormaps:");
 
         for (Entry<ResourceLocation, JsonElement> entry : object.entrySet())
         {
             ColorMap.RawColorMap value = GSON.fromJson(entry.getValue(), ColorMap.RawColorMap.class);
             WorldPreview.LOGGER.debug(" - {}: {} | {} entries", entry.getKey(), value.name(), value.data().size());
-            previewMappingData.addColormap(new ColorMap(entry.getKey(), value));
+            colorMaps.put(entry.getKey(), new ColorMap(entry.getKey(), value));
         }
+        previewMappingData.replaceColorMaps(colorMaps);
     }
 }

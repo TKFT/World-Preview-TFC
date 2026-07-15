@@ -23,19 +23,6 @@ import net.dries007.tfc.common.blocks.crop.ICropBlock;
 import net.dries007.tfc.common.items.PlantableInfo;
 import net.dries007.tfc.util.climate.ClimateRange;
 
-/**
- * Runtime registry of cultivable TFC crops, discovered from the block registry (any block
- * implementing {@link ICropBlock}) so TFC addon crops participate automatically without hardcoding.
- * Dead / wild crop blocks do not implement {@link ICropBlock} and are therefore excluded; each crop
- * is a single block (double crops are one block with a HALF state), so there are no upper/lower
- * duplicates to dedupe.
- *
- * <p>{@link ClimateRange} data lives in TFC's {@code climate_range} DataManager, which is not
- * populated on the world-creation screen. We therefore load the ranges directly from the datapack
- * {@link ResourceManager} (files under {@code data/&lt;ns&gt;/tfc/climate_range/crop/*.json}), keyed by
- * the matching crop-block id. A crop whose climate range cannot be found is retained with a null
- * range and rendered as "No Data" - never guessed.
- */
 public final class TFCCropRegistry
 {
     private static volatile TFCCropRegistry active = new TFCCropRegistry(List.of());
@@ -88,9 +75,6 @@ public final class TFCCropRegistry
         return new TFCCropRegistry(found);
     }
 
-    /**
-     * Exact block-shaped ID first; then one unambiguous normalized candidate in the same namespace.
-     */
     @Nullable
     static ClimateRange resolveResourceClimate(ResourceLocation blockId, Map<ResourceLocation, ClimateRange> climateById)
     {
@@ -116,9 +100,6 @@ public final class TFCCropRegistry
         return matches == 1 ? match : null;
     }
 
-    /**
-     * Conservative structural normalization; no fuzzy matching or cross-namespace guessing.
-     */
     static String normalizeCropName(String path)
     {
         int slash = path.lastIndexOf('/');
@@ -130,9 +111,6 @@ public final class TFCCropRegistry
         return name;
     }
 
-    /**
-     * Direct block range, exact/normalized resources, optional block item, then retained No Data.
-     */
     @Nullable
     private static ClimateRange resolveClimateRange(
         ICropBlock crop,
@@ -143,11 +121,7 @@ public final class TFCCropRegistry
     {
         try
         {
-            ClimateRange range = crop.getClimateRange();
-            if (range != null)
-            {
-                return range;
-            }
+            return crop.getClimateRange();
         }
         catch (Throwable ignored)
         {
@@ -174,11 +148,6 @@ public final class TFCCropRegistry
         return null;
     }
 
-    /**
-     * Scans {@code tfc/climate_range/crop/*.json} across all datapacks. The DataManager id for a file
-     * {@code ns:tfc/climate_range/crop/wheat.json} is {@code ns:crop/wheat}, which matches the crop
-     * block id, so entries are keyed by that block-id-shaped ResourceLocation.
-     */
     private static Map<ResourceLocation, ClimateRange> loadClimateRanges(ResourceManager rm)
     {
         Map<ResourceLocation, ClimateRange> out = new HashMap<>();
@@ -195,8 +164,6 @@ public final class TFCCropRegistry
             try (var in = e.getValue().open())
             {
                 var json = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-                // ClimateRange.CODEC currently contains only primitive fields, so JsonOps is safe on
-                // the create-world screen and exactly preserves TFC's defaults without RegistryOps.
                 ClimateRange.CODEC.parse(JsonOps.INSTANCE, json).result().ifPresent(range -> out.put(cropId, range));
             }
             catch (Exception ignored)
@@ -207,9 +174,6 @@ public final class TFCCropRegistry
         return out;
     }
 
-    /**
-     * Title-cases the crop name from its registry path; non-TFC namespaces get a "[ns]" suffix.
-     */
     private static String deriveName(ResourceLocation id)
     {
         String path = id.getPath();
@@ -271,21 +235,15 @@ public final class TFCCropRegistry
     @Nullable
     public Entry get(ResourceLocation id)
     {
-        return id == null ? null : this.byId.get(id);
+        return this.byId.get(id);
     }
 
-    /**
-     * First crop by id order (alphabetical), used as the default selection. Null if none.
-     */
     @Nullable
     public Entry first()
     {
-        return this.entries.isEmpty() ? null : this.entries.get(0);
+        return this.entries.isEmpty() ? null : this.entries.getFirst();
     }
 
-    /**
-     * One cultivable crop. {@code climateRange == null} means the range could not be loaded (No Data).
-     */
     public record Entry(
         ResourceLocation id,
         ICropBlock block,

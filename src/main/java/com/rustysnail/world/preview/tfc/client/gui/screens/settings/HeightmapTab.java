@@ -29,7 +29,6 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
-import org.jetbrains.annotations.NotNull;
 
 public class HeightmapTab implements Tab
 {
@@ -122,13 +121,12 @@ public class HeightmapTab implements Tab
         this.toRender.add(this.colormapList);
     }
 
-    @NotNull
     public Component getTabTitle()
     {
         return WorldPreviewComponents.SETTINGS_HEIGHTMAP_TITLE;
     }
 
-    public void visitChildren(@NotNull Consumer<AbstractWidget> consumer)
+    public void visitChildren(Consumer<AbstractWidget> consumer)
     {
         this.toRender.forEach(consumer);
     }
@@ -214,7 +212,6 @@ public class HeightmapTab implements Tab
                 this.colormapTexture.upload();
             }
 
-            @NotNull
             public Component getNarration()
             {
                 return Component.empty();
@@ -274,7 +271,6 @@ public class HeightmapTab implements Tab
                 this.displayString = String.format("%s: §3y=§b%d§r§3-§b%d§r", this.name, this.minY, this.maxY);
             }
 
-            @NotNull
             public Component getNarration()
             {
                 return Component.empty();

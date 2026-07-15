@@ -296,7 +296,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         // Water is the first entry in both tree modes, then every forest type / species.
         this.forestTypeEntries = new ArrayList<>();
         this.forestTypeEntries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER)));
         for (short fi = 0; fi < TFCSampleUtils.forestTypeCount(); fi++)
         {
             this.forestTypeEntries.add(this.tfcMapValueList.createEntry(
@@ -306,7 +306,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         // Soil type legend: Water first, then every soil order (fixed set, so built once here).
         this.soilTypeEntries = new ArrayList<>();
         this.soilTypeEntries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER)));
         for (short si = 0; si < TFCSampleUtils.soilTypeCount(); si++)
         {
             this.soilTypeEntries.add(this.tfcMapValueList.createEntry(
@@ -321,9 +321,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 cv, TFCCropSuitability.getSuitabilityName(cv), TFCCropSuitability.getSuitabilityColor(cv)));
         }
         this.suitabilityEntries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER)));
         this.suitabilityEntries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_INVALID, "No Data", TFCSampleUtils.COLOR_INVALID));
+            TFCSampleUtils.VALUE_INVALID, TFCCropSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
+            TFCCropSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID)));
 
         // Crop selector list (main list in crop mode).
         this.cropList = new TFCCropList(this.minecraft, 200, 300, 4, 100);
@@ -708,7 +709,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     {
         List<TFCMapValueList.ValueEntry> entries = new ArrayList<>();
         entries.add(this.tfcMapValueList.createEntry(
-            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.COLOR_WATER));
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER)));
         int count = TFCSampleUtils.treeSpeciesCount();
         for (short ti = 0; ti < count; ti++)
         {
@@ -1973,7 +1974,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public int[] tfcTemperatureColorMap()
     {
-        ColorMap colorMap = this.previewData.colorMaps().get("world_preview_tfc:tfc_temperature");
+        ColorMap colorMap = this.previewMappingData.resolveColorMap(
+            this.cfg.temperatureColorMap,
+            ResourceLocation.fromNamespaceAndPath("world_preview_tfc", "tfc_temperature"),
+            "temperature"
+        );
         if (colorMap == null)
         {
             int[] black = new int[1024];
@@ -1989,7 +1994,11 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public int[] tfcRainfallColorMap()
     {
-        ColorMap colorMap = this.previewData.colorMaps().get("world_preview_tfc:tfc_rainfall");
+        ColorMap colorMap = this.previewMappingData.resolveColorMap(
+            this.cfg.rainfallColorMap,
+            ResourceLocation.fromNamespaceAndPath("world_preview_tfc", "tfc_rainfall"),
+            "rainfall"
+        );
         if (colorMap == null)
         {
             int[] black = new int[1024];
@@ -2000,6 +2009,49 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         {
             return colorMap.bake(1024);
         }
+    }
+
+    @Override
+    public void onColorPalettesChanged(long revision)
+    {
+        for (short i = 0; i < this.allRocks.length; i++)
+        {
+            this.allRocks[i].update(TFCSampleUtils.getRockName(i), TFCSampleUtils.getRockColor(i));
+        }
+        for (short i = 0; i < this.allRockTypes.length; i++)
+        {
+            this.allRockTypes[i].update(TFCSampleUtils.getRockTypeName(i), TFCSampleUtils.getRockTypeColor(i));
+        }
+
+        this.forestTypeEntries.getFirst().update("Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER));
+        for (short i = 0; i < TFCSampleUtils.forestTypeCount(); i++)
+        {
+            this.forestTypeEntries.get(i + 1).update(TFCSampleUtils.getForestTypeName(i), TFCSampleUtils.getForestTypeColor(i));
+        }
+        this.soilTypeEntries.getFirst().update("Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER));
+        for (short i = 0; i < TFCSampleUtils.soilTypeCount(); i++)
+        {
+            this.soilTypeEntries.get(i + 1).update(TFCSampleUtils.getSoilTypeName(i), TFCSampleUtils.getSoilTypeColor(i));
+        }
+        for (short i = 0; i < TFCCropSuitability.suitabilityCount(); i++)
+        {
+            this.suitabilityEntries.get(i).update(TFCCropSuitability.getSuitabilityName(i), TFCCropSuitability.getSuitabilityColor(i));
+        }
+        this.suitabilityEntries.get(TFCCropSuitability.suitabilityCount()).update(
+            "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER));
+        this.suitabilityEntries.get(TFCCropSuitability.suitabilityCount() + 1).update(
+            TFCCropSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
+            TFCCropSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID));
+
+        if (this.renderSettings.mode == RenderSettings.RenderMode.TFC_TREE_SPECIES)
+        {
+            short selected = this.tfcMapValueList.getSelected() == null
+                ? Short.MIN_VALUE : this.tfcMapValueList.getSelected().id();
+            this.treeSpeciesEntries = this.buildTreeSpeciesEntries();
+            this.tfcMapValueList.replaceEntries(this.treeSpeciesEntries);
+            this.tfcMapValueList.setSelected(selected == Short.MIN_VALUE ? null : this.tfcMapValueList.getEntryById(selected));
+        }
+        WorldPreview.LOGGER.debug("Refreshed preview palette swatches at revision {}", revision);
     }
 
     @Override

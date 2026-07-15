@@ -1,0 +1,22 @@
+{
+  "tfc:granite": {"r": 74, "g": 70, "b": 85, "name": "Granite"},
+  "tfc:diorite": {"r": 142, "g": 142, "b": 142, "name": "Diorite"},
+  "tfc:gabbro": {"r": 68, "g": 85, "b": 68, "name": "Gabbro"},
+  "tfc:shale": {"r": 67, "g": 67, "b": 70, "name": "Shale"},
+  "tfc:claystone": {"r": 68, "g": 102, "b": 136, "name": "Claystone"},
+  "tfc:limestone": {"r": 107, "g": 127, "b": 136, "name": "Limestone"},
+  "tfc:conglomerate": {"r": 101, "g": 113, "b": 111, "name": "Conglomerate"},
+  "tfc:dolomite": {"r": 60, "g": 70, "b": 89, "name": "Dolomite"},
+  "tfc:chert": {"r": 78, "g": 78, "b": 122, "name": "Chert"},
+  "tfc:chalk": {"r": 193, "g": 199, "b": 199, "name": "Chalk"},
+  "tfc:rhyolite": {"r": 103, "g": 98, "b": 115, "name": "Rhyolite"},
+  "tfc:basalt": {"r": 29, "g": 32, "b": 33, "name": "Basalt"},
+  "tfc:andesite": {"r": 96, "g": 96, "b": 96, "name": "Andesite"},
+  "tfc:dacite": {"r": 122, "g": 123, "b": 123, "name": "Dacite"},
+  "tfc:quartzite": {"r": 128, "g": 129, "b": 140, "name": "Quartzite"},
+  "tfc:slate": {"r": 103, "g": 116, "b": 125, "name": "Slate"},
+  "tfc:phyllite": {"r": 148, "g": 157, "b": 169, "name": "Phyllite"},
+  "tfc:schist": {"r": 65, "g": 84, "b": 68, "name": "Schist"},
+  "tfc:gneiss": {"r": 96, "g": 109, "b": 115, "name": "Gneiss"},
+  "tfc:marble": {"r": 227, "g": 235, "b": 235, "name": "Marble"}
+}

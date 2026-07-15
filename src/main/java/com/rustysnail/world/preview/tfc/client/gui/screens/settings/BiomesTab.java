@@ -32,7 +32,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.dimension.LevelStem;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class BiomesTab implements Tab
 {
@@ -45,7 +45,7 @@ public class BiomesTab implements Tab
     private final Button resetBtn;
     private final Button applyBtn;
     private final Checkbox isCaveCB;
-    private BiomesList.BiomeEntry selectedEntry;
+    @Nullable private BiomesList.BiomeEntry selectedEntry;
     private boolean blockUpdates = false;
 
     public BiomesTab(Minecraft _minecraft, PreviewContainer _previewTab)
@@ -134,13 +134,12 @@ public class BiomesTab implements Tab
         rowHelper.addChild(statusLabel, 2);
     }
 
-    @NotNull
     public Component getTabTitle()
     {
         return WorldPreviewComponents.SETTINGS_BIOMES_TITLE;
     }
 
-    public void visitChildren(@NotNull Consumer<AbstractWidget> consumer)
+    public void visitChildren(Consumer<AbstractWidget> consumer)
     {
         this.toRender.forEach(consumer);
         this.layout.visitWidgets(consumer);

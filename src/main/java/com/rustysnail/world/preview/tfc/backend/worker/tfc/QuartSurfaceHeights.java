@@ -1,10 +1,5 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
-/**
- * Four surface-height samples taken near the centers of a chunk's 8x8 quadrants. Crop evaluation
- * bilinearly interpolates this grid for each quart; the same model is intentionally reusable by the
- * future fruit-tree suitability map.
- */
 public record QuartSurfaceHeights(int northWest, int northEast, int southWest, int southEast)
 {
     public static final int WEST_OR_NORTH_OFFSET = 4;
@@ -20,9 +15,6 @@ public record QuartSurfaceHeights(int northWest, int northEast, int southWest, i
         return value < 0d ? 0d : Math.min(value, 1d);
     }
 
-    /**
-     * Allocation-free interpolation at the center of the quart containing {@code blockX/blockZ}.
-     */
     public int interpolatedSurfaceY(int blockX, int blockZ)
     {
         int localQuartCenterX = (blockX & 15) + 2;

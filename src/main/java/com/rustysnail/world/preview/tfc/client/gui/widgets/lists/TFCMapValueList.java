@@ -87,9 +87,9 @@ public class TFCMapValueList extends BaseObjectSelectionList<TFCMapValueList.Val
     public class ValueEntry extends Entry<ValueEntry>
     {
         private final short id;
-        private final String name;
-        private final int color;
-        private final Tooltip tooltip;
+        private String name;
+        private int color;
+        private Tooltip tooltip;
 
         public ValueEntry(short id, String name, int color)
         {
@@ -112,6 +112,13 @@ public class TFCMapValueList extends BaseObjectSelectionList<TFCMapValueList.Val
         public int color()
         {
             return this.color;
+        }
+
+        public void update(String name, int color)
+        {
+            this.name = name;
+            this.color = color;
+            this.tooltip = Tooltip.create(Component.literal(name));
         }
 
         @Override

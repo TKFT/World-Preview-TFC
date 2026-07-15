@@ -2,6 +2,7 @@ package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
+import com.rustysnail.world.preview.tfc.backend.color.TFCColorPalettes;
 import com.rustysnail.world.preview.tfc.backend.search.FeatureQuery;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
@@ -30,24 +31,24 @@ import net.dries007.tfc.world.settings.RockLayerSettings;
 import net.dries007.tfc.world.settings.RockSettings;
 import net.dries007.tfc.world.settings.Settings;
 
+import static com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCTreeSpeciesRegistry.*;
+
 public class TFCSampleUtils
 {
-    // Reserved special values stored in the forest-type / tree-species maps. Kept near the top of
-    // the short range so they never collide with runtime species ids (assigned 0, 1, 2, ... by
-    // TFCTreeSpeciesRegistry) even when many addon trees are present. Generation still writes the
-    // three distinct water subtypes (used for hover naming), but the map / list / selection treat
-    // all water as one category (VALUE_WATER / COLOR_WATER).
     public static final short VALUE_WATER_OCEAN = 32760;
     public static final short VALUE_WATER_LAKE = 32761;
     public static final short VALUE_WATER_RIVER = 32762;
     public static final short VALUE_WATER = VALUE_WATER_OCEAN;
     public static final short VALUE_INVALID = 32763;
 
-    // Canonical water color for the map, side list, and selection. All palette constants are normal
-    // ARGB (0xAARRGGBB) for readability and GUI legend use; PreviewDisplay converts to NativeImage
-    // byte order via textureColor(...) before writing pixels.
     public static final int COLOR_WATER = 0xFF2868B2;
     public static final int COLOR_INVALID = 0xFF2A2A2A;
+    public static final ResourceLocation WATER_OCEAN = previewId("ocean");
+    public static final ResourceLocation WATER_LAKE = previewId("lake");
+    public static final ResourceLocation WATER_RIVER = previewId("river");
+    public static final ResourceLocation WATER_SHORE = previewId("shore");
+    public static final ResourceLocation WATER_LAND = previewId("land");
+    public static final ResourceLocation WATER_UNKNOWN = previewId("unknown");
     public static final String[] ROCK_TYPE_NAMES = {
         "Oceanic", "Volcanic", "Land", "Uplift"
     };
@@ -96,8 +97,6 @@ public class TFCSampleUtils
     public static final short SOIL_PODZOL = 5;
     public static final short SOIL_ALFISOL = 6;
     public static final short SOIL_MOLLISOL = 7;
-    // Classification thresholds. Named so they can be tuned later. Groundwater is on TFC's
-    // 0-500 scale (rivers + rainfall); temperature is in degrees C (elevation-adjusted).
     public static final float SOIL_HOT_TEMP = 20.0f;
     public static final float SOIL_COOL_TEMP = 5.0f;
     public static final float SOIL_DRY_GROUNDWATER = 80.0f;
@@ -117,9 +116,10 @@ public class TFCSampleUtils
         0xFF8A6E45,  // Alfisol  - temperate brown
         0xFF4F6F3A   // Mollisol - grassland dark green
     };
-    // The registry backing the static tree-species helpers used by UI code. Points at the most
-    // recently created TFCSampleUtils' runtime registry, or a fallback (known TFC species) before
-    // any world loads / if runtime loading fails.
+    private static final ResourceLocation[] SOIL_KEYS = {
+        previewId("entisol"), previewId("aridisol"), previewId("oxisol"), previewId("fluvisol"),
+        previewId("andisol"), previewId("podzol"), previewId("alfisol"), previewId("mollisol")
+    };
     private static volatile TFCTreeSpeciesRegistry activeRegistry = TFCTreeSpeciesRegistry.fallback();
 
     public static boolean isWaterValue(short value)
@@ -127,9 +127,6 @@ public class TFCSampleUtils
         return value == VALUE_WATER_OCEAN || value == VALUE_WATER_LAKE || value == VALUE_WATER_RIVER;
     }
 
-    /**
-     * Collapses the three water subtypes to VALUE_WATER; passes other ids through unchanged.
-     */
     public static short canonicalMapValue(short value)
     {
         return isWaterValue(value) ? VALUE_WATER : value;
@@ -137,22 +134,36 @@ public class TFCSampleUtils
 
     public static String getWaterTypeName(short value)
     {
-        return switch (value)
+        ResourceLocation key = waterKey(value);
+        String fallback = switch (value)
         {
             case VALUE_WATER_OCEAN -> "Ocean";
             case VALUE_WATER_LAKE -> "Lake";
             case VALUE_WATER_RIVER -> "River";
             default -> "Water";
         };
+        if (key == null) return fallback;
+        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.WATER, key);
+        return loaded == null ? fallback : loaded;
     }
 
-    /**
-     * Classifies a biome as water for the forest-type / tree-species maps.
-     * Uses the blend type for oceans and lakes plus exact/suffix path matches
-     * for river and lake variants; deliberately avoids substring checks like
-     * contains("ocean") or contains("river") which would swallow
-     * oceanic_mountains and river_valley.
-     */
+    public static int getWaterTypeColor(short value)
+    {
+        ResourceLocation key = waterKey(value);
+        return key == null ? COLOR_WATER : getWaterColor(key, COLOR_WATER);
+    }
+
+    public static int getWaterColor(ResourceLocation category, int fallbackArgb)
+    {
+        return WorldPreview.get().biomeColorMap().getCategoricalColor(TFCColorPalettes.WATER, category, fallbackArgb);
+    }
+
+    public static String getWaterName(ResourceLocation category, String fallback)
+    {
+        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.WATER, category);
+        return loaded == null ? fallback : loaded;
+    }
+
     public static boolean isTreeMapWaterBiome(@Nullable BiomeExtension biome)
     {
         if (biome == null)
@@ -184,9 +195,6 @@ public class TFCSampleUtils
         return null;
     }
 
-    /**
-     * Runtime short id for a species location, or VALUE_INVALID if not registered.
-     */
     public static short treeSpeciesId(ResourceLocation species)
     {
         return activeRegistry.idFor(species).orElse(VALUE_INVALID);
@@ -233,12 +241,9 @@ public class TFCSampleUtils
         if (rockType < 0 || rockType >= ROCK_TYPE_KEYS.length) return "Unknown";
 
         PreviewMappingData mappingData = WorldPreview.get().biomeColorMap();
-        String name = mappingData.getRockTypeName(ROCK_TYPE_KEYS[rockType]);
-        if (name != null && !name.equals(ROCK_TYPE_KEYS[rockType]))
-        {
-            return name;
-        }
-        return ROCK_TYPE_NAMES[rockType];
+        ResourceLocation key = ResourceLocation.parse(ROCK_TYPE_KEYS[rockType]);
+        String name = mappingData.getCategoricalName(TFCColorPalettes.ROCK_TYPES, key);
+        return name == null ? ROCK_TYPE_NAMES[rockType] : name;
     }
 
     public static int getRockTypeColor(int rockType)
@@ -246,12 +251,11 @@ public class TFCSampleUtils
         if (rockType < 0 || rockType >= ROCK_TYPE_COLORS.length) return 0xFF888888;
 
         PreviewMappingData mappingData = WorldPreview.get().biomeColorMap();
-        int loadedColor = mappingData.getRockTypeColor(ROCK_TYPE_KEYS[rockType]);
-        if (loadedColor != -1)
-        {
-            return 0xFF000000 | loadedColor;
-        }
-        return ROCK_TYPE_COLORS[rockType];
+        return mappingData.getCategoricalColor(
+            TFCColorPalettes.ROCK_TYPES,
+            ResourceLocation.parse(ROCK_TYPE_KEYS[rockType]),
+            ROCK_TYPE_COLORS[rockType]
+        );
     }
 
     public static short getRockId(RockSettings rock)
@@ -277,12 +281,12 @@ public class TFCSampleUtils
     {
         if (rockId < 0 || rockId >= ROCK_NAMES.length) return "Unknown";
 
-        String key = getRockKey(rockId);
+        ResourceLocation key = getRockKey(rockId);
         if (key != null)
         {
             PreviewMappingData mappingData = WorldPreview.get().biomeColorMap();
-            String name = mappingData.getRockName(key);
-            if (name != null && !name.equals(key))
+            String name = mappingData.getCategoricalName(TFCColorPalettes.ROCKS, key);
+            if (name != null)
             {
                 return name;
             }
@@ -295,26 +299,15 @@ public class TFCSampleUtils
     {
         if (rockId < 0 || rockId >= ROCK_COLORS.length) return 0xFF888888;
 
-        String key = getRockKey(rockId);
+        ResourceLocation key = getRockKey(rockId);
         if (key != null)
         {
             PreviewMappingData mappingData = WorldPreview.get().biomeColorMap();
-            int loadedColor = mappingData.getRockColor(key);
-            if (loadedColor != -1)
-            {
-                return 0xFF000000 | loadedColor;
-            }
+            return mappingData.getCategoricalColor(TFCColorPalettes.ROCKS, key, ROCK_COLORS[rockId]);
         }
         return ROCK_COLORS[rockId];
     }
 
-    /**
-     * ForestType values that place neither trees nor bushes (their treeCount and bushCount are both
-     * {@code ConstantInt(0)} in TFC's ForestType enum) — GRASSLAND and CLEARING. These have no
-     * dominant species. SHRUBLAND (bush-only) and SPARSE (few trees) still resolve normally, so
-     * useful shrub/sparse behavior is preserved. ForestType is a fixed enum (not datapack-driven),
-     * so this explicit check is stable.
-     */
     public static boolean forestTypeHasVegetation(ForestType type)
     {
         return type != ForestType.GRASSLAND && type != ForestType.CLEARING;
@@ -324,11 +317,6 @@ public class TFCSampleUtils
     {
         return activeRegistry.size();
     }
-
-    // --------------- Dominant Tree Species ---------------
-    // Species ids/names/colors are now owned by the runtime TFCTreeSpeciesRegistry (built from the
-    // configured-feature registry), so TFC and addon trees are handled uniformly. The static helpers
-    // below delegate to the currently active registry for UI code.
 
     public static int getTreeSpeciesColor(short treeId)
     {
@@ -347,30 +335,11 @@ public class TFCSampleUtils
             return "Unknown";
         }
 
-        String name = ForestType.valueOf(forestId).getSerializedName().replace('_', ' ');
-        StringBuilder result = new StringBuilder(name.length());
-
-        boolean capitalize = true;
-        for (int i = 0; i < name.length(); i++)
-        {
-            char c = name.charAt(i);
-            if (capitalize && Character.isLetter(c))
-            {
-                result.append(Character.toUpperCase(c));
-                capitalize = false;
-            }
-            else
-            {
-                result.append(c);
-            }
-
-            if (c == ' ')
-            {
-                capitalize = true;
-            }
-        }
-
-        return result.toString();
+        ForestType type = ForestType.valueOf(forestId);
+        ResourceLocation key = ResourceLocation.fromNamespaceAndPath("tfc", type.getSerializedName());
+        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.FOREST_TYPES, key);
+        if (loaded != null) return loaded;
+        return getString(type.getSerializedName().replace('_', ' '));
     }
 
     public static int getForestTypeColor(short forestId)
@@ -380,7 +349,12 @@ public class TFCSampleUtils
             return COLOR_INVALID;
         }
 
-        return forestColor(ForestType.valueOf(forestId));
+        ForestType type = ForestType.valueOf(forestId);
+        return WorldPreview.get().biomeColorMap().getCategoricalColor(
+            TFCColorPalettes.FOREST_TYPES,
+            ResourceLocation.fromNamespaceAndPath("tfc", type.getSerializedName()),
+            forestColor(type)
+        );
     }
 
     public static int forestTypeCount()
@@ -419,7 +393,8 @@ public class TFCSampleUtils
     {
         if (isSoilTypeValue(value))
         {
-            return SOIL_NAMES[value];
+            String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.SOIL_TYPES, SOIL_KEYS[value]);
+            return loaded == null ? SOIL_NAMES[value] : loaded;
         }
         if (isWaterValue(value))
         {
@@ -432,28 +407,15 @@ public class TFCSampleUtils
     {
         if (isSoilTypeValue(value))
         {
-            return SOIL_COLORS[value];
+            return WorldPreview.get().biomeColorMap().getCategoricalColor(TFCColorPalettes.SOIL_TYPES, SOIL_KEYS[value], SOIL_COLORS[value]);
         }
         if (isWaterValue(value))
         {
-            return COLOR_WATER;
+            return getWaterTypeColor(value);
         }
         return COLOR_INVALID;
     }
 
-    // --------------- TFC Soil Type (ecological preview map) ---------------
-    // A deterministic classification map: it predicts a soil order from climate, water, volcanic
-    // influence, forest type, and biome context. It does not claim exact surface-block placement.
-    // Soil orders use plain positive short ids (0..7); water/invalid reuse the shared reserved
-    // values above (VALUE_WATER_* / VALUE_INVALID). Palette constants are normal ARGB - GUI legend
-    // swatches use them directly; PreviewDisplay converts via textureColor(...) before writing pixels.
-
-    /**
-     * Deterministically predicts a TFC soil order for a sampled point from climate, water, volcanic
-     * influence, forest type and biome context. Returns a soil id (0..7), a reserved water value
-     * (when {@code waterValue} is ocean/lake/river), or {@link #VALUE_INVALID} for no-soil contexts.
-     * This is a preview/classification map - it does not resolve the exact surface block.
-     */
     public static short resolveSoilType(
         ChunkData chunkData,
         @Nullable BiomeExtension biome,
@@ -463,13 +425,11 @@ public class TFCSampleUtils
         short waterValue
     )
     {
-        // 1. Water: reuse the shared water classification (ocean/lake/river).
         if (isWaterValue(waterValue))
         {
             return waterValue;
         }
 
-        // 2. Unknown / No Soil.
         if (biome == null)
         {
             return VALUE_INVALID;
@@ -480,39 +440,33 @@ public class TFCSampleUtils
             return VALUE_INVALID;
         }
 
-        // Climate inputs at the sampled position, temperature adjusted for elevation.
         float groundwater = chunkData.getAverageGroundwater(pos);
         float seaLevelTemp = chunkData.getAverageSeaLevelTemp(pos);
         float rainVariance = chunkData.getRainVariance(pos);
         float adjustedTemp = EnvironmentHelpers.adjustAvgTempForElev(surfaceY, seaLevelTemp);
 
-        // 3. Andisol - volcanic parent material.
         if (isVolcanicSoilBiome(path))
         {
             return SOIL_ANDISOL;
         }
 
-        // 4. Fluvisol - rivers, lakes, alluvial flats, or wet + high rain variance.
         if (isFluvisolBiome(path)
             || (groundwater > SOIL_WET_GROUNDWATER && Math.abs(rainVariance) > SOIL_FLUVISOL_RAIN_VARIANCE))
         {
             return SOIL_FLUVISOL;
         }
 
-        // 5. Aridisol - dry, or hot and not moist.
         if (groundwater < SOIL_DRY_GROUNDWATER
             || (adjustedTemp > SOIL_HOT_TEMP && groundwater < SOIL_MODERATE_GROUNDWATER))
         {
             return SOIL_ARIDISOL;
         }
 
-        // 6. Oxisol - hot and wet (tropical weathering).
         if (adjustedTemp > SOIL_HOT_TEMP && groundwater >= SOIL_WET_GROUNDWATER)
         {
             return SOIL_OXISOL;
         }
 
-        // 7. Podzol - cold, forested, moist (boreal).
         if (adjustedTemp < SOIL_COOL_TEMP
             && isForested(forestType)
             && groundwater >= SOIL_MODERATE_GROUNDWATER)
@@ -520,26 +474,41 @@ public class TFCSampleUtils
             return SOIL_PODZOL;
         }
 
-        // 8. Mollisol - grassland-like with at least some moisture.
         if (isGrasslandLike(forestType, path) && groundwater >= SOIL_DRY_GROUNDWATER)
         {
             return SOIL_MOLLISOL;
         }
 
-        // 9. Alfisol - temperate forested.
         if (isForested(forestType))
         {
             return SOIL_ALFISOL;
         }
 
-        // 10. Fallback.
         return SOIL_ENTISOL;
     }
 
-    private static String getRockKey(short rockId)
+    @Nullable
+    private static ResourceLocation getRockKey(short rockId)
     {
         if (rockId < 0 || rockId >= ROCK_NAMES.length) return null;
-        return "tfc:" + ROCK_NAMES[rockId];
+        return ResourceLocation.fromNamespaceAndPath("tfc", ROCK_NAMES[rockId]);
+    }
+
+    @Nullable
+    private static ResourceLocation waterKey(short value)
+    {
+        return switch (value)
+        {
+            case VALUE_WATER_OCEAN -> WATER_OCEAN;
+            case VALUE_WATER_LAKE -> WATER_LAKE;
+            case VALUE_WATER_RIVER -> WATER_RIVER;
+            default -> null;
+        };
+    }
+
+    private static ResourceLocation previewId(String path)
+    {
+        return ResourceLocation.fromNamespaceAndPath("world_preview_tfc", path);
     }
 
     private static int forestColor(ForestType type)
@@ -591,17 +560,11 @@ public class TFCSampleUtils
         };
     }
 
-    /**
-     * ForestType values that place woody vegetation (trees or shrubs) - used for Alfisol/Podzol.
-     */
     private static boolean isForested(ForestType forestType)
     {
         return forestType != null && forestTypeHasVegetation(forestType);
     }
 
-    /**
-     * Open, grass-dominated contexts: no forest, or an explicitly grassy/plains-like biome path.
-     */
     private static boolean isGrasslandLike(ForestType forestType, String biomePath)
     {
         if (forestType != null && !forestTypeHasVegetation(forestType))
@@ -619,9 +582,6 @@ public class TFCSampleUtils
             || biomePath.contains("steppe");
     }
 
-    /**
-     * Volcanic-influenced biomes (Andisol parent material). Deliberately kept version-agnostic.
-     */
     private static boolean isVolcanicSoilBiome(String path)
     {
         if (path == null)
@@ -634,9 +594,6 @@ public class TFCSampleUtils
             || path.contains("tuyas");
     }
 
-    /**
-     * River/lake/alluvial-flat contexts that deposit Fluvisols.
-     */
     private static boolean isFluvisolBiome(String path)
     {
         if (path == null)
@@ -650,9 +607,6 @@ public class TFCSampleUtils
             || path.contains("flats");
     }
 
-    /**
-     * Conservative "no soil" contexts: ice sheets, glaciers, bare rock. Kept narrow on purpose.
-     */
     private static boolean isNoSoilBiome(String path)
     {
         if (path == null)
@@ -685,8 +639,6 @@ public class TFCSampleUtils
         AreaFactory biomeFactory = TFCLayers.createRegionBiomeLayer(this.regionGenerator, tfcSeed);
         this.biomeLayer = new ConcurrentArea<>(biomeFactory, TFCLayers::getFromLayerId);
         this.chunkDataGenerator = chunkDataGenerator;
-        // Level-free climate model for the crop-suitability map (reused for hover). Derives its
-        // climate seed from the world seed exactly as TFC's OverworldClimateModel does.
         this.climateSampler = new TFCPreviewClimateSampler(seed, settings.temperatureScale());
     }
 
@@ -715,18 +667,11 @@ public class TFCSampleUtils
         return this.biomeLayer::get;
     }
 
-    /**
-     * Samples the effective biome the way the normal biome map does: through the generator's
-     * {@link BiomeSourceExtension}, whose getBiomeExtension applies TFC's river overlay on top
-     * of the raw biome layer. Do not swap this back to the raw ConcurrentArea biomeLayer -
-     * that layer has no rivers.
-     */
     public @Nullable BiomeExtension sampleBiomeExtension(int blockX, int blockZ)
     {
         return sampleBiomeExtensionQuart(QuartPos.fromBlock(blockX), QuartPos.fromBlock(blockZ));
     }
 
-    /** Direct quart-coordinate variant used by large diagnostic exports. */
     public @Nullable BiomeExtension sampleBiomeExtensionQuart(int quartX, int quartZ)
     {
         return this.biomeSource.getBiomeExtension(quartX, quartZ);

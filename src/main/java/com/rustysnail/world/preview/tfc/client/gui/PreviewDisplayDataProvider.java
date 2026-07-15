@@ -62,6 +62,8 @@ public interface PreviewDisplayDataProvider
 
     int[] tfcRainfallColorMap();
 
+    void onColorPalettesChanged(long revision);
+
     int yMin();
 
     int yMax();

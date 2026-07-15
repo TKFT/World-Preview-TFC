@@ -141,16 +141,19 @@ public final class LandWaterExportTab extends GridLayoutTab
         }
 
         Path outputDirectory = current.outputDirectory();
-        if (outputDirectory != null)
+        Component outputText;
+        if (outputDirectory == null)
         {
-            this.output.setText(Component.translatable("world_preview_tfc.export.land_water.output", outputDirectory));
-            this.output.setTooltip(Tooltip.create(Component.literal(outputDirectory.toAbsolutePath().toString())));
+            outputText = Component.translatable("world_preview_tfc.export.land_water.output.not_set");
+            this.output.setTooltip(null);
         }
         else
         {
-            this.output.setText(Component.empty());
-            this.output.setTooltip(null);
+            String outputPath = outputDirectory.toAbsolutePath().normalize().toString();
+            outputText = Component.literal(outputPath);
+            this.output.setTooltip(Tooltip.create(Component.literal(outputPath)));
         }
+        this.output.setText(Component.translatable("world_preview_tfc.export.land_water.output", outputText));
     }
 
     private static EditBox coordinateBox(Minecraft minecraft, Component label)

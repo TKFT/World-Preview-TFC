@@ -208,5 +208,6 @@
   "world_preview_tfc.export.land_water.cancelled": "Land/water export cancelled; no incomplete PNG was kept.",
   "world_preview_tfc.export.land_water.failed": "Export failed: %s",
   "world_preview_tfc.export.land_water.timing": "Elapsed %s | Estimated remaining %s",
-  "world_preview_tfc.export.land_water.output": "Output: %s"
+  "world_preview_tfc.export.land_water.output": "Output: %s",
+  "world_preview_tfc.export.land_water.output.not_set": "Not selected"
 }
