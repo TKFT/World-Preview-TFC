@@ -1,9 +1,9 @@
 package com.rustysnail.world.preview.tfc.mixin.client;
 
+import java.util.Objects;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.gui.screens.PreviewTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.SeedSearchTab;
-import java.util.Objects;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;

@@ -21,7 +21,9 @@ import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
-/** Loads mergeable categorical palettes from data packs in normal pack priority order. */
+/**
+ * Loads mergeable categorical palettes from data packs in normal pack priority order.
+ */
 public final class CategoricalColorPaletteReloadListener extends SimplePreparableReloadListener<Map<ResourceLocation, CategoricalColorPalette>>
 {
     static final String DIRECTORY = "world_preview_tfc/colors";

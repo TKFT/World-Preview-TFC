@@ -2,13 +2,10 @@ package com.rustysnail.world.preview.tfc.backend.export;
 
 import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Bounds;
 import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Spec;
-
 import net.minecraft.core.QuartPos;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class LandWaterPresetAndAggregationTest
 {

@@ -2,7 +2,7 @@ package com.rustysnail.world.preview.tfc.backend.export;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 class TFCLandWaterClassifierTest
 {

@@ -2,11 +2,13 @@ package com.rustysnail.world.preview.tfc.backend.export;
 
 import java.util.IdentityHashMap;
 import java.util.Locale;
-
-import net.dries007.tfc.world.biome.BiomeExtension;
 import org.jetbrains.annotations.Nullable;
 
-/** Classifies final TFC biome extensions without consulting the underlying no-river layer. */
+import net.dries007.tfc.world.biome.BiomeExtension;
+
+/**
+ * Classifies final TFC biome extensions without consulting the underlying no-river layer.
+ */
 public final class TFCLandWaterClassifier
 {
     private final ThreadLocal<IdentityHashMap<BiomeExtension, Byte>> cache =

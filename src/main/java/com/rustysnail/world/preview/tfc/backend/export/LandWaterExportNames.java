@@ -28,7 +28,7 @@ public final class LandWaterExportNames
         StringBuilder result = new StringBuilder(Math.min(normalized.length(), MAX_COMPONENT_LENGTH));
         boolean previousUnderscore = false;
 
-        for (int offset = 0; offset < normalized.length() && result.length() < MAX_COMPONENT_LENGTH;)
+        for (int offset = 0; offset < normalized.length() && result.length() < MAX_COMPONENT_LENGTH; )
         {
             int codePoint = normalized.codePointAt(offset);
             offset += Character.charCount(codePoint);

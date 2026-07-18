@@ -1,27 +1,22 @@
 package com.rustysnail.world.preview.tfc.backend.export;
 
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Sampling;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Spec;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.Context;
-
 import java.awt.image.BufferedImage;
 import java.awt.image.IndexColorModel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
-
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Sampling;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Spec;
+import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.Context;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
-import java.util.Iterator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BinaryPngAndCancellationTest
 {
@@ -88,7 +83,7 @@ class BinaryPngAndCancellationTest
                 return LandWaterSample.LAND;
             },
             () -> calls.get() >= 8,
-            ignored -> { }
+            ignored -> {}
         ));
 
         Path png = this.tempDirectory.resolve(LandWaterExportNames.pngFilename("cancel-seed", "test", 0, 0));

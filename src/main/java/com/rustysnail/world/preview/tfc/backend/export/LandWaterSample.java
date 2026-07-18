@@ -1,6 +1,8 @@
 package com.rustysnail.world.preview.tfc.backend.export;
 
-/** Compact sampler result used in the exporter hot loop. */
+/**
+ * Compact sampler result used in the exporter hot loop.
+ */
 public final class LandWaterSample
 {
     public static final byte LAND = 0;

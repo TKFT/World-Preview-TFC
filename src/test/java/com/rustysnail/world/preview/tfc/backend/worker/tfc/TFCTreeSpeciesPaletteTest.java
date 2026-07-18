@@ -3,8 +3,7 @@ package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 class TFCTreeSpeciesPaletteTest
 {

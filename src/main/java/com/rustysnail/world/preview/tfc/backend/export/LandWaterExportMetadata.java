@@ -1,7 +1,6 @@
 package com.rustysnail.world.preview.tfc.backend.export;
 
 import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Bounds;
-
 import org.jetbrains.annotations.Nullable;
 
 public record LandWaterExportMetadata(
