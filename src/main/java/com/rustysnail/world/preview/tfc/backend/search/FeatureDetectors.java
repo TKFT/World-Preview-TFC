@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
@@ -313,12 +312,15 @@ public final class FeatureDetectors
         BlockPos cellCenter = sampler.calculateCenter(q.blockX(), 64, q.blockZ(), 1);
         if (cellCenter == null) return null;
 
-        BiomeExtension biome = Objects.requireNonNull(q.biomeLookup()).getBiome(
+        FeatureQuery.BiomeLookup biomeLookup = q.biomeLookup();
+        if (biomeLookup == null) return null;
+
+        BiomeExtension biome = biomeLookup.getBiome(
             QuartPos.fromBlock(cellCenter.getX()),
             QuartPos.fromBlock(cellCenter.getZ())
         );
 
-        if (!sampler.isValidBiome(biome)) return null;
+        if (biome == null || !sampler.isValidBiome(biome)) return null;
 
         return sampler.calculateCenter(q.blockX(), 64, q.blockZ(), sampler.getFrequency(biome));
     }

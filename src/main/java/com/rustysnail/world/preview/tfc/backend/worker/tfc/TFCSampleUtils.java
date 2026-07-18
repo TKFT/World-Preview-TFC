@@ -146,8 +146,7 @@ public class TFCSampleUtils
             default -> "Water";
         };
         if (key == null) return fallback;
-        String loaded = WorldPreview.get().biomeColorMap().getCategoricalName(TFCColorPalettes.WATER, key);
-        return loaded == null ? fallback : loaded;
+        return getWaterName(key, fallback);
     }
 
     public static int getWaterTypeColor(short value)

@@ -107,8 +107,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private ItemStack[] structureItems;
     private PreviewDisplayDataProvider.StructureRenderInfo[] structureRenderInfoMap;
     private boolean showFeatures = false;
-    private Component coordinatesCopiedMsg = null;
-    private Instant coordinatesCopiedTime = null;
+    @Nullable private Component coordinatesCopiedMsg = null;
+    @Nullable private Instant coordinatesCopiedTime = null;
     // Crop-hover detail debounce: only compute the detailed breakdown after the cursor has rested on
     // the same quart for CROP_HOVER_DETAIL_MS, so panning across quarts never triggers per-frame work.
     private static final long CROP_HOVER_DETAIL_MS = 90L;
@@ -138,11 +138,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
 
     // --- Texture dirty/revision tracking (rebuild the texture only when something actually changed) ---
     private static final long DRAG_REBUILD_THROTTLE_MS = 60L;
-    private List<RenderHelper> cachedRenderData = null;
+    @Nullable private List<RenderHelper> cachedRenderData = null;
     private long lastRenderedRevision = Long.MIN_VALUE;
     private long lastRenderedPaletteRevision = Long.MIN_VALUE;
     private long builtPaletteRevision = Long.MIN_VALUE;
-    private RenderSettings.RenderMode lastRenderedMode = null;
+    @Nullable private RenderSettings.RenderMode lastRenderedMode = null;
     private short lastRenderedBiomeId = Short.MIN_VALUE;
     private short lastRenderedRockId = Short.MIN_VALUE;
     private short lastRenderedTFCMapValue = Short.MIN_VALUE;
@@ -1883,13 +1883,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
         boolean detailReady = (now - this.cropHoverSinceMs) >= CROP_HOVER_DETAIL_MS;
 
+        final var formatted = "\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium());
         if (!detailReady)
         {
             if (entry.hasClimateData())
             {
                 var cr = entry.climateRange();
                 tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
-                tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+                tfcInfo.append(formatted);
             }
             tfcInfo.append("\n§8Hold to show growing details…§r");
             return;
@@ -1903,7 +1904,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 var cr = entry.climateRange();
                 tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
             }
-            tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+            tfcInfo.append(formatted);
             tfcInfo.append("\n§8Calculating daily growing details…§r");
             return;
         }
@@ -1920,7 +1921,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             var cr = entry.climateRange();
             tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
         }
-        tfcInfo.append("\n§3Nutrients:§r §bN %.1f, P %.1f, K %.1f§r".formatted(entry.nitrogen(), entry.phosphorus(), entry.potassium()));
+        tfcInfo.append(formatted);
         if (result.daysInMonth() > 0)
         {
             tfcInfo.append("\n§8Calendar: %d days/month§r".formatted(result.daysInMonth()));
@@ -2111,7 +2112,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         int blockX,
         int blockY,
         int blockZ,
-        BiomesList.BiomeEntry entry,
+        @Nullable BiomesList.BiomeEntry entry,
         short height,
         double temperature,
         double humidity,

@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import org.jetbrains.annotations.Nullable;
 
 public final class LandWaterExportController implements AutoCloseable
 {
@@ -24,7 +25,7 @@ public final class LandWaterExportController implements AutoCloseable
     private volatile Phase phase = Phase.IDLE;
     private volatile String preset = "";
     private volatile String error = "";
-    private volatile Path outputDirectory;
+    @Nullable private volatile Path outputDirectory;
 
     public LandWaterExportController(int workerThreads)
     {
@@ -137,7 +138,7 @@ public final class LandWaterExportController implements AutoCloseable
         long totalWork,
         long elapsedNanos,
         long estimatedRemainingNanos,
-        Path outputDirectory,
+        @Nullable Path outputDirectory,
         String error
     )
     {

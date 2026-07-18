@@ -2,6 +2,7 @@ package com.rustysnail.world.preview.tfc.backend;
 
 import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
+import java.util.function.BiPredicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.biome.Biome;
@@ -15,13 +16,9 @@ public class BiomeSearchTask implements Runnable
     private static final int SAMPLE_SPACING = 16;
     private static final int COARSE_SPACING = 32;
     private static final int COARSE_THRESHOLD = 20_000;
-    private final SampleUtils sampleUtils;
-    @Nullable
-    private final TFCSampleUtils tfcSampleUtils;
-    private final ResourceKey<Biome> targetBiome;
+    private final BiPredicate<Integer, Integer> pointMatcher;
     private final BlockPos searchCenter;
     private final Callback callback;
-    private final boolean requireIsland;
     private volatile boolean cancelled = false;
 
     public BiomeSearchTask(
@@ -33,11 +30,24 @@ public class BiomeSearchTask implements Runnable
         Callback callback
     )
     {
-        this.sampleUtils = sampleUtils;
-        this.tfcSampleUtils = tfcSampleUtils;
-        this.targetBiome = targetBiome;
+        this(
+            (x, z) -> {
+                ResourceKey<Biome> found = sampleUtils.getBiomeKey(new BlockPos(x, 64, z));
+                if (!found.equals(targetBiome))
+                {
+                    return false;
+                }
+                return !requireIsland || tfcSampleUtils == null || tfcSampleUtils.samplePoint(x, z).island();
+            },
+            searchCenter,
+            callback
+        );
+    }
+
+    BiomeSearchTask(BiPredicate<Integer, Integer> pointMatcher, BlockPos searchCenter, Callback callback)
+    {
+        this.pointMatcher = pointMatcher;
         this.searchCenter = searchCenter;
-        this.requireIsland = requireIsland;
         this.callback = callback;
     }
 
@@ -61,7 +71,7 @@ public class BiomeSearchTask implements Runnable
             }
 
             int prevRadius = 0;
-            for (int dist = RING_STEP; dist <= MAX_DISTANCE;)
+            for (int dist = RING_STEP; dist <= MAX_DISTANCE; dist += RING_STEP)
             {
                 if (this.cancelled)
                 {
@@ -71,8 +81,12 @@ public class BiomeSearchTask implements Runnable
                 this.callback.onProgress(dist, MAX_DISTANCE);
 
                 BlockPos result = searchRingBand(cx, cz, prevRadius, dist);
-                this.callback.onFound(result);
-                return;
+                if (result != null)
+                {
+                    this.callback.onFound(result);
+                    return;
+                }
+                prevRadius = dist;
             }
 
             this.callback.onNotFound();
@@ -114,16 +128,7 @@ public class BiomeSearchTask implements Runnable
 
     private boolean checkPoint(int x, int z)
     {
-        ResourceKey<Biome> found = this.sampleUtils.getBiomeKey(new BlockPos(x, 64, z));
-        if (!found.equals(this.targetBiome))
-        {
-            return false;
-        }
-        if (this.requireIsland && this.tfcSampleUtils != null)
-        {
-            return this.tfcSampleUtils.samplePoint(x, z).island();
-        }
-        return true;
+        return this.pointMatcher.test(x, z);
     }
 
     public interface Callback

@@ -313,7 +313,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                         short landWaterValue = LAND_WATER_LAND;
                         if (this.plan.landWater() && point != null)
                         {
-                            landWaterValue = sampleLandWater(pos, gridCache);
+                            landWaterValue = sampleLandWater(pos, point);
                             this.sampler.expandRaw(pos, landWaterValue, landWaterResult);
                         }
 
@@ -634,18 +634,25 @@ public class TFCRegionWorkUnit extends WorkUnit
         return new WorkResult(this, 0, this.storage.section4(cp, 0, flag), new ArrayList<>(16), List.of());
     }
 
-    private short sampleLandWater(BlockPos pos, Map<Long, Region.Point> gridCache)
+    private short sampleLandWater(BlockPos pos, Region.Point point)
     {
-        Region.Point p = getPointCached(pos.getX(), pos.getZ(), gridCache);
+        return classifyLandWater(point, isInRiver(pos.getX(), pos.getZ()));
+    }
 
-        if (isInRiver(pos.getX(), pos.getZ()))
+    static short classifyLandWater(@Nullable Region.Point point, boolean inRiver)
+    {
+        if (point == null)
+        {
+            return Short.MIN_VALUE;
+        }
+        if (inRiver)
         {
             return LAND_WATER_RIVER;
         }
 
-        if (p.lake()) return LAND_WATER_LAKE;
-        if (p.shore()) return LAND_WATER_SHORE;
-        if (!p.land()) return LAND_WATER_OCEAN;
+        if (point.lake()) return LAND_WATER_LAKE;
+        if (point.shore()) return LAND_WATER_SHORE;
+        if (!point.land()) return LAND_WATER_OCEAN;
         return LAND_WATER_LAND;
     }
 
@@ -727,6 +734,7 @@ public class TFCRegionWorkUnit extends WorkUnit
         return false;
     }
 
+    @Nullable
     private Region.Point getPointCached(int blockX, int blockZ, Map<Long, Region.Point> gridCache)
     {
         int gridX = Units.blockToGrid(blockX);

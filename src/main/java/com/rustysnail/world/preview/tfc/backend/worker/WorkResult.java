@@ -1,6 +1,7 @@
 package com.rustysnail.world.preview.tfc.backend.worker;
 
 import java.util.List;
+import java.util.Objects;
 import com.mojang.datafixers.util.Pair;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import net.minecraft.resources.ResourceLocation;
@@ -10,6 +11,12 @@ public record WorkResult(
     WorkUnit workUnit, int quartY, PreviewSection section, List<BlockResult> results, List<Pair<ResourceLocation, StructureStart>> structures
 )
 {
+    public WorkResult
+    {
+        Objects.requireNonNull(results, "WorkResult results list");
+        Objects.requireNonNull(structures, "WorkResult structures list");
+    }
+
     public record BlockResult(int quartX, int quartZ, short value)
     {
     }

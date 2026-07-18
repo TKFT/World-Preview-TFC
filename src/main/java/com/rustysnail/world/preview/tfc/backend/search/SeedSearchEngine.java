@@ -38,7 +38,7 @@ public class SeedSearchEngine implements Runnable
 
     private static final int KNOWN_LOCATION_PROBE_RADIUS = 8;
     private final ChunkGenerator chunkGenerator;
-    private final net.minecraft.world.level.LevelHeightAccessor heightAccessor;
+    @Nullable private final net.minecraft.world.level.LevelHeightAccessor heightAccessor;
     @Nullable private final RegistryAccess registryAccess;
     @Nullable private final Settings tfcSettings;
     private final boolean isTFC;
@@ -53,7 +53,7 @@ public class SeedSearchEngine implements Runnable
     public SeedSearchEngine(
         ChunkGenerator chunkGenerator,
         @Nullable RegistryAccess registryAccess,
-        net.minecraft.world.level.LevelHeightAccessor heightAccessor,
+        @Nullable net.minecraft.world.level.LevelHeightAccessor heightAccessor,
         SearchCriteria criteria,
         Callback callback
     )
@@ -186,7 +186,7 @@ public class SeedSearchEngine implements Runnable
             }
 
             HeightSampler heights = null;
-            if (this.registryAccess != null)
+            if (this.registryAccess != null && this.heightAccessor != null)
             {
                 final NoiseGeneratorSettings settings =
                     (seededGen instanceof NoiseBasedChunkGenerator nbg)

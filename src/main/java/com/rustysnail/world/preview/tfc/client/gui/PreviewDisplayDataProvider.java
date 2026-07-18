@@ -16,8 +16,10 @@ public interface PreviewDisplayDataProvider
 {
     PreviewData previewData();
 
+    @Nullable
     BiomesList.BiomeEntry biome4Id(int id);
 
+    @Nullable
     StructuresList.StructureEntry structure4Id(int id);
 
     NativeImage[] structureIcons();

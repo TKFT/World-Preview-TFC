@@ -173,9 +173,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private StructuresList.StructureEntry[] allStructures;
     private NativeImage[] allStructureIcons;
     private NativeImage[] allFeatureIcons;
-    private NativeImage playerIcon;
-    private NativeImage spawnIcon;
-    private NativeImage worldSpawnIcon;
+    @Nullable private NativeImage playerIcon;
+    @Nullable private NativeImage spawnIcon;
+    @Nullable private NativeImage worldSpawnIcon;
     private ScreenRectangle lastScreenRectangle;
     private boolean inhibitUpdates = true;
     private boolean isUpdating = false;
@@ -188,7 +188,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final Checkbox islandCheckbox;
     private final ExecutorService biomeSearchExecutor = Executors.newSingleThreadExecutor();
     private final LandWaterExportController landWaterExporter;
-    private BiomeSearchTask currentSearchTask = null;
+    @Nullable private BiomeSearchTask currentSearchTask = null;
     private boolean isSearching = false;
 
     public PreviewContainer(Screen screen, PreviewContainerDataProvider previewContainerDataProvider)
@@ -1856,6 +1856,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     }
 
     @Override
+    @Nullable
     public BiomesList.BiomeEntry biome4Id(int id)
     {
         if (id < 0 || id >= this.allBiomes.length)
@@ -1867,6 +1868,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     }
 
     @Override
+    @Nullable
     public StructuresList.StructureEntry structure4Id(int id)
     {
         if (id < 0 || id >= this.allStructures.length)
@@ -1899,7 +1901,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Nullable
     public Component featureVariantName(int featureId, BlockPos center)
     {
-        if (!this.workManager.hasWorldSeed())
+        if (this.workManager.hasWorldSeed())
         {
             return null;
         }
@@ -1910,19 +1912,19 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public NativeImage playerIcon()
     {
-        return this.playerIcon;
+        return Objects.requireNonNull(this.playerIcon, "Player icon is unavailable outside the active preview lifecycle");
     }
 
     @Override
     public NativeImage spawnIcon()
     {
-        return this.spawnIcon;
+        return Objects.requireNonNull(this.spawnIcon, "Spawn icon is unavailable outside the active preview lifecycle");
     }
 
     @Override
     public NativeImage worldSpawnIcon()
     {
-        return this.worldSpawnIcon;
+        return Objects.requireNonNull(this.worldSpawnIcon, "World-spawn icon is unavailable outside the active preview lifecycle");
     }
 
     @Override
@@ -2163,7 +2165,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
 
     public @Nullable String startLandWaterExport(List<LandWaterExportPreset> presets, int centerX, int centerZ)
     {
-        if (this.isUpdating || !this.workManager.hasWorldSeed())
+        if (this.isUpdating || this.workManager.hasWorldSeed())
         {
             return "The preview world-generation state is still loading.";
         }

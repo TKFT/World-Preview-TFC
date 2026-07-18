@@ -41,6 +41,10 @@ public class HeightmapWorkUnit extends WorkUnit
         WorkResult result = new WorkResult(this, QuartPos.fromBlock(0), this.primarySection, new ArrayList<>(this.numChunks * this.numChunks * 4 * 4), List.of());
         NoiseGeneratorSettings noiseGeneratorSettings = this.sampleUtils.noiseGeneratorSettings();
         WorldPreviewConfig config = this.workManager.config();
+        if (noiseGeneratorSettings == null)
+        {
+            return List.of(result);
+        }
 
         NoiseSettings noiseSettings = noiseGeneratorSettings.noiseSettings();
         NoiseChunk noiseChunk = this.sampleUtils.getNoiseChunk(this.chunkPos, this.numChunks, false);
@@ -95,6 +99,10 @@ public class HeightmapWorkUnit extends WorkUnit
                                 noiseChunk.updateForX(curr.x, curr.dX);
                                 noiseChunk.updateForZ(curr.z, curr.dZ);
                                 BlockState blockState = ((NoiseChunkAccessor) noiseChunk).invokeGetInterpolatedState();
+                                if (blockState == null)
+                                {
+                                    blockState = noiseGeneratorSettings.defaultBlock();
+                                }
 
                                 if (isOpaque.test(blockState))
                                 {

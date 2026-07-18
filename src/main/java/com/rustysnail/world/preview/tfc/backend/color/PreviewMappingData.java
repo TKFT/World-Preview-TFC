@@ -315,7 +315,7 @@ public class PreviewMappingData
         public int color;
         @Nullable
         public Boolean cave = null;
-        public String name = null;
+        @Nullable public String name = null;
 
         public ColorEntry()
         {
@@ -333,15 +333,15 @@ public class PreviewMappingData
     public static class StructureEntry
     {
         public PreviewData.DataSource dataSource;
-        public String name = null;
-        public String texture = null;
-        public String item = null;
+        @Nullable public String name = null;
+        @Nullable public String texture = null;
+        @Nullable public String item = null;
     }
 
     public static class RockColorEntry
     {
         public int color;
-        public String name = null;
+        @Nullable public String name = null;
 
         public RockColorEntry()
         {

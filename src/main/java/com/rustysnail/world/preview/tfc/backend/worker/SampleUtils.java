@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -124,7 +125,7 @@ public class SampleUtils implements AutoCloseable
         return (short) Math.clamp((long) (val * factor * 32767.0), -32768L, 32767L);
     }
 
-    private final Path tempDir;
+    @Nullable private final Path tempDir;
     private final DataFixer dataFixer;
     private final LevelStorageAccess levelStorageAccess;
     private final LevelHeightAccessor levelHeightAccessor;
@@ -140,13 +141,13 @@ public class SampleUtils implements AutoCloseable
     private final PreviewLevel previewLevel;
     private final Registry<Structure> structureRegistry;
     private final ResourceKey<Level> dimension;
-    private final NoiseGeneratorSettings noiseGeneratorSettings;
+    @Nullable private final NoiseGeneratorSettings noiseGeneratorSettings;
     private final MinecraftServer minecraftServer;
-    private final ServerLevel serverLevel;
+    @Nullable private final ServerLevel serverLevel;
     private final WorldPreviewConfig cfg = WorldPreview.get().cfg();
 
     public SampleUtils(
-        @NotNull MinecraftServer server,
+        MinecraftServer server,
         BiomeSource biomeSource,
         ChunkGenerator chunkGenerator,
         WorldOptions worldOptions,
@@ -475,8 +476,10 @@ public class SampleUtils implements AutoCloseable
 
     public List<Pair<ResourceLocation, StructureStart>> doStructures(ChunkPos chunkPos)
     {
-        ProtoChunk protoChunk = (ProtoChunk) this.previewLevel.getChunk(chunkPos.x, chunkPos.z, ChunkStatus.FULL, false);
-        assert protoChunk != null;
+        ProtoChunk protoChunk = Objects.requireNonNull(
+            (ProtoChunk) this.previewLevel.getChunk(chunkPos.x, chunkPos.z, ChunkStatus.FULL, false),
+            "Expected a full proto chunk at [" + chunkPos.x + ", " + chunkPos.z + "]"
+        );
         this.chunkGenerator
             .createStructures(this.registryAccess, this.chunkGeneratorStructureState, this.structureManager, protoChunk, this.structureTemplateManager);
         Map<Structure, StructureStart> raw = protoChunk.getAllStarts();
@@ -512,6 +515,7 @@ public class SampleUtils implements AutoCloseable
         return noiseChunk;
     }
 
+    @Nullable
     public NoiseGeneratorSettings noiseGeneratorSettings()
     {
         return this.noiseGeneratorSettings;
@@ -556,7 +560,7 @@ public class SampleUtils implements AutoCloseable
         return this.dimension;
     }
 
-    public record BiomeResult(ResourceKey<Biome> biome, short[] noiseResult)
+    public record BiomeResult(ResourceKey<Biome> biome, @Nullable short[] noiseResult)
     {
     }
 }

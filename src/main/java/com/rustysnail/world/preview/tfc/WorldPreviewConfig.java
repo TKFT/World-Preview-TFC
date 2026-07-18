@@ -20,10 +20,10 @@ public class WorldPreviewConfig
     public boolean cacheInNew = false;
     public boolean enableCompression = true;
     public String colorMap = "world_preview_tfc:inferno";
-    public String temperatureColorMap = "world_preview_tfc:tfc_temperature";
-    public String rainfallColorMap = "world_preview_tfc:tfc_rainfall";
-    public int landWaterExportLandColor = 0x8B9B65;
-    public int landWaterExportWaterColor = 0x173F5F;
+    public final String temperatureColorMap = "world_preview_tfc:tfc_temperature";
+    public final String rainfallColorMap = "world_preview_tfc:tfc_rainfall";
+    public final int landWaterExportLandColor = 0x8B9B65;
+    public final int landWaterExportWaterColor = 0x173F5F;
     private int numThreads = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
 
     public int numThreads()

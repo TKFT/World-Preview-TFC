@@ -76,18 +76,18 @@ public class WorkManager
 {
     private final Object completedSynchro = new Object();
     private final Object previewStorageSynchro = new Object();
-    private WorldOptions worldOptions;
-    private LevelStem levelStem;
-    private DimensionType dimensionType;
-    private ChunkGenerator chunkGenerator;
+    @Nullable private WorldOptions worldOptions;
+    @Nullable private LevelStem levelStem;
+    @Nullable private DimensionType dimensionType;
+    @Nullable private ChunkGenerator chunkGenerator;
     private ChunkSampler chunkSampler;
     private final ChunkSampler cropSampler = new FullQuartSampler();
-    private SampleUtils sampleUtils;
+    @Nullable private SampleUtils sampleUtils;
     private PreviewData previewData;
-    private PreviewStorage previewStorage;
-    private PreviewStorageCacheManager previewStorageCacheManager;
-    private TFCSampleUtils tfcSampleUtils;
-    private TFCTreeResolver tfcTreeResolver;
+    @Nullable private PreviewStorage previewStorage;
+    @Nullable private PreviewStorageCacheManager previewStorageCacheManager;
+    @Nullable private TFCSampleUtils tfcSampleUtils;
+    @Nullable private TFCTreeResolver tfcTreeResolver;
     private final KaolinBiomeRules kaolinRules = new KaolinBiomeRules();
 
     private TFCCropRegistry cropRegistry = TFCCropRegistry.active();
@@ -117,11 +117,11 @@ public class WorkManager
     private final List<Future<?>> futures = new ArrayList<>();
     private final List<Future<?>> queueFutures = new ArrayList<>();
     private final SplittableRandom random = new SplittableRandom();
-    private ExecutorService executorService;
-    private ExecutorService queueChunksService;
-    private ExecutorService cropHoverExecutor;
-    private ChunkPos lastQueuedTopLeft;
-    private ChunkPos lastQueuedBotRight;
+    @Nullable private ExecutorService executorService;
+    @Nullable private ExecutorService queueChunksService;
+    @Nullable private ExecutorService cropHoverExecutor;
+    @Nullable private ChunkPos lastQueuedTopLeft;
+    @Nullable private ChunkPos lastQueuedBotRight;
 
     private boolean lastQueuedWasTfc = false;
     private long lastQueuedModeFlag = Long.MIN_VALUE;
@@ -405,7 +405,10 @@ public class WorkManager
             this.cropHoverExecutor.shutdownNow();
             try
             {
-                this.cropHoverExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!this.cropHoverExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS))
+                {
+                    WorldPreview.LOGGER.warn("Crop hover executor did not terminate within 5 seconds");
+                }
             }
             catch (InterruptedException e)
             {
@@ -446,7 +449,10 @@ public class WorkManager
             this.queueChunksService.shutdownNow();
             try
             {
-                this.executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!this.executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS))
+                {
+                    WorldPreview.LOGGER.warn("Preview worker executor did not terminate within 5 seconds");
+                }
             }
             catch (InterruptedException e)
             {
@@ -487,7 +493,7 @@ public class WorkManager
             }
         }
 
-        if (this.previewStorageCacheManager != null)
+        if (this.previewStorageCacheManager != null && this.worldOptions != null && this.previewStorage != null)
         {
             this.previewStorageCacheManager.storePreviewStorage(this.worldOptions.seed(), this.previewStorage);
         }
@@ -720,7 +726,7 @@ public class WorkManager
      * data. Per-group completion tracking then skips chunks whose data already exists, so re-queuing
      * an already-generated mode is cheap.
      */
-    private long effectiveModeKey(RenderSettings.RenderMode mode)
+    private long effectiveModeKey(@Nullable RenderSettings.RenderMode mode)
     {
         return mode == null ? Long.MIN_VALUE : mode.flag;
     }
@@ -822,7 +828,7 @@ public class WorkManager
 
     public boolean hasWorldSeed()
     {
-        return this.worldOptions != null;
+        return this.worldOptions == null;
     }
 
     public long worldSeed()
@@ -899,12 +905,6 @@ public class WorkManager
         return this.cropRevision.get();
     }
 
-    /**
-     * The calendar assumptions crop suitability should use right now. In-game the world's live calendar
-     * wins (TFC lets {@code /time} change month length in an existing world); on the create-world screen
-     * we fall back to the configured default month length, and to {@link Calendar#DEFAULT_MONTH_LENGTH}
-     * only if the config read throws.
-     */
     private CropCalendarSettings resolveCropCalendarSettings()
     {
         int daysInMonth;
@@ -937,11 +937,6 @@ public class WorkManager
         return CropCalendarSettings.build(daysInMonth, growthModifier);
     }
 
-    /**
-     * Ensures crop data reflects the current calendar. The values are polled cheaply while crop mode
-     * is active; only a real change bumps the revision, invalidates flag 16, clears hover caches, and
-     * causes the current viewport to regenerate. Returns the settings to use.
-     */
     private synchronized CropCalendarSettings ensureCropCalendarCurrent()
     {
         CropCalendarSettings resolved = this.resolveCropCalendarSettings();
@@ -970,9 +965,6 @@ public class WorkManager
             this.cropRevision.get(), this.cropRevision::get);
     }
 
-    /**
-     * Selects a crop; regenerates only the crop-suitability map (flag 16), leaving other maps intact.
-     */
     public synchronized void setSelectedCrop(@Nullable ResourceLocation cropId)
     {
         if (java.util.Objects.equals(cropId, this.selectedCropId))
@@ -983,9 +975,6 @@ public class WorkManager
         this.regenerateCropMap();
     }
 
-    /**
-     * Switches rain-fed / irrigated hydration; regenerates only the crop-suitability map.
-     */
     public synchronized void setCropWaterMode(TFCCropSuitability.CropWaterMode mode)
     {
         if (mode == null || mode == this.cropWaterMode)
@@ -996,21 +985,12 @@ public class WorkManager
         this.regenerateCropMap();
     }
 
-    /**
-     * Bumps the crop revision (so in-flight units go stale), invalidates only flag-16 sections, cancels
-     * running batches, and forces the next queue pass to regenerate. All other cached maps (biome, soil,
-     * forest, rocks, ...) are untouched. Safe to call outside crop mode - it just clears flag-16 so the
-     * next entry into crop mode regenerates for the new selection instead of showing another crop's data.
-     */
     private void regenerateCropMap()
     {
         this.cropRevision.incrementAndGet();
         this.invalidateCropMapState();
     }
 
-    /**
-     * Invalidates only flag 16, discards pending hover work, and promptly cancels stale work.
-     */
     private void invalidateCropMapState()
     {
         this.cropHoverCache.clear();
@@ -1035,11 +1015,6 @@ public class WorkManager
         this.bumpDataRevision();
     }
 
-    /**
-     * Polls the detailed result for a quart. A cache miss reserves a bounded pending slot and submits
-     * the daily calculation to a worker; the render thread receives {@code null} until it completes.
-     * Every dependency requested by the task is present in the key and crop revision guards publish.
-     */
     @Nullable
     public synchronized TFCCropSuitability.CropSuitabilityResult requestCropDetailsAt(int blockX, int blockZ)
     {
@@ -1253,9 +1228,6 @@ public class WorkManager
         }
     }
 
-    /**
-     * Bounded LRU of ChunkData plus the canonical four-height grid, scoped by world generation.
-     */
     private static final class ChunkDataCache
     {
         record Key(long chunkPos, int worldRevision) {}

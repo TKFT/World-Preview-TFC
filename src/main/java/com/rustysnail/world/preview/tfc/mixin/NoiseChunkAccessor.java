@@ -4,6 +4,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseSettings;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -14,7 +15,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface NoiseChunkAccessor
 {
     @Invoker
-    BlockState invokeGetInterpolatedState();
+    @Nullable BlockState invokeGetInterpolatedState();
 
     @Final
     @Mutable

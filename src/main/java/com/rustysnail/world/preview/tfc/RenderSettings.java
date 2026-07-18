@@ -7,11 +7,12 @@ import com.rustysnail.world.preview.tfc.backend.sampler.QuarterQuartSampler;
 import com.rustysnail.world.preview.tfc.backend.sampler.SingleQuartSampler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 public class RenderSettings
 {
     public SamplerType samplerType = SamplerType.AUTO;
-    public ResourceLocation dimension = null;
+    @Nullable public ResourceLocation dimension = null;
     public boolean hideAllStructures = false;
     public transient RenderMode mode = RenderMode.BIOMES;
     public transient boolean featureOverlay = false;

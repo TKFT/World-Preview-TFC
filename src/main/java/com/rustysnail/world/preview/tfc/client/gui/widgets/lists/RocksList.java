@@ -32,7 +32,10 @@ public class RocksList extends BaseObjectSelectionList<RocksList.RockEntry>
         super.setSelected(entry);
         if (centerScroll)
         {
-            assert entry != null;
+            if (entry == null)
+            {
+                throw new IllegalArgumentException("Cannot center-scroll to a null rock entry");
+            }
             super.centerScrollOn(entry);
         }
 

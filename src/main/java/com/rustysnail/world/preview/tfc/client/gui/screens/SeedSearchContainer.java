@@ -203,12 +203,6 @@ public class SeedSearchContainer implements AutoCloseable
 
     public void doLayout(ScreenRectangle rect)
     {
-        if (rect == null)
-        {
-            assert this.minecraft.screen != null;
-            rect = this.minecraft.screen.getRectangle();
-        }
-
         int totalWidth = rect.width();
         int biomeLeft = rect.left() + 4;
         int top = rect.top() + 4;

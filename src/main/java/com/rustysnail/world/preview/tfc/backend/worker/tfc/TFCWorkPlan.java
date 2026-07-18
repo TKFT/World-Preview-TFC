@@ -1,6 +1,7 @@
 package com.rustysnail.world.preview.tfc.backend.worker.tfc;
 
 import com.rustysnail.world.preview.tfc.RenderSettings;
+import org.jetbrains.annotations.Nullable;
 
 public record TFCWorkPlan(
     boolean temperature,
@@ -14,13 +15,17 @@ public record TFCWorkPlan(
     boolean cropSuitability,
     boolean hotspot,
     boolean features,
-    RenderSettings.RenderMode mode
+    @Nullable RenderSettings.RenderMode mode
 )
 {
     public static final long FEATURES_FLAG = 4L;
 
-    public static TFCWorkPlan forMode(RenderSettings.RenderMode mode, boolean featureOverlay)
+    public static TFCWorkPlan forMode(@Nullable RenderSettings.RenderMode mode, boolean featureOverlay)
     {
+        if (mode == null)
+        {
+            return new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, featureOverlay, null);
+        }
         return switch (mode)
         {
             // Ocean coloring in these modes reads the land/water section, so it is included.

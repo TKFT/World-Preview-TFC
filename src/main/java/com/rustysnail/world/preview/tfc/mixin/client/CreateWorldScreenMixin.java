@@ -3,6 +3,7 @@ package com.rustysnail.world.preview.tfc.mixin.client;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import com.rustysnail.world.preview.tfc.client.gui.screens.PreviewTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.SeedSearchTab;
+import java.util.Objects;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
@@ -46,9 +47,11 @@ public abstract class CreateWorldScreenMixin
     {
         this.worldPreview_TFC$previewTab = new PreviewTab((CreateWorldScreen) (Object) this, ((ScreenAccessor) this).getMinecraft());
         this.worldPreview_TFC$seedSearchTab = new SeedSearchTab((CreateWorldScreen) (Object) this, this.worldPreview_TFC$previewTab);
-        TabNavigationBar originalRaw = this.tabNavigationBar;
+        TabNavigationBar originalRaw = Objects.requireNonNull(
+            this.tabNavigationBar,
+            "CreateWorldScreen tab navigation bar must be initialized before preview tabs are appended"
+        );
         TabNavigationBarAccessor original = (TabNavigationBarAccessor) originalRaw;
-        assert original != null;
         this.tabNavigationBar = TabNavigationBar.builder(original.getTabManager(), original.getWidth())
             .addTabs(original.getTabs().toArray(new Tab[0]))
             .addTabs(new Tab[] {this.worldPreview_TFC$previewTab, this.worldPreview_TFC$seedSearchTab})
