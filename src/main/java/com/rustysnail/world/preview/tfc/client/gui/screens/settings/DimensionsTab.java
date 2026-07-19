@@ -16,6 +16,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import org.jetbrains.annotations.Nullable;
 
 public class DimensionsTab implements Tab
 {
@@ -69,7 +70,7 @@ public class DimensionsTab implements Tab
             return new DimensionEntry(dimensionKey);
         }
 
-        public void select(ResourceLocation dimensionKey)
+        public void select(@Nullable ResourceLocation dimensionKey)
         {
             for (DimensionEntry entry : this.children())
             {

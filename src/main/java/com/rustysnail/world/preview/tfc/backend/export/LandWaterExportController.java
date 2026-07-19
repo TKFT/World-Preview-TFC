@@ -36,7 +36,7 @@ public final class LandWaterExportController implements AutoCloseable
         });
     }
 
-    public synchronized boolean start(List<LandWaterExportPreset> presets, Context context, QuartSampler sampler)
+    public synchronized boolean start(@Nullable List<LandWaterExportPreset> presets, Context context, QuartSampler sampler)
     {
         if (this.phase.running() || presets == null || presets.isEmpty())
         {

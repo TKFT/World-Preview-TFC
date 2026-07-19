@@ -38,7 +38,7 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
         int initialColor,
         boolean isCave,
         boolean initialIsCave,
-        String explicitName,
+        @Nullable String explicitName,
         PreviewData.DataSource dataSource
     )
     {
@@ -104,7 +104,7 @@ public class BiomesList extends BaseObjectSelectionList<BiomesList.BiomeEntry>
             int initialColor,
             boolean isCave,
             boolean initialIsCave,
-            String explicitName,
+            @Nullable String explicitName,
             PreviewData.DataSource dataSource
         )
         {

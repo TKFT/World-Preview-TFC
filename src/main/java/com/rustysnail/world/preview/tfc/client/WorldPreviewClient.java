@@ -43,7 +43,7 @@ public class WorldPreviewClient
 
     public static String toTitleCase(String input)
     {
-        return input != null && !input.isBlank()
+        return !input.isBlank()
             ? Arrays.stream(input.split(" ")).<CharSequence>map(StringUtils::capitalize).collect(Collectors.joining(" "))
             : input;
     }

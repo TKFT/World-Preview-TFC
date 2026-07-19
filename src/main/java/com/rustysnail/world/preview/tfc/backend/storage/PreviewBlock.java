@@ -2,7 +2,6 @@ package com.rustysnail.world.preview.tfc.backend.storage;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Arrays;
 import com.rustysnail.world.preview.tfc.RenderSettings;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 
@@ -34,11 +33,6 @@ public class PreviewBlock implements Serializable
         }
 
         return section;
-    }
-
-    public PreviewSection[] sections()
-    {
-        return Arrays.copyOf(this.sections, this.sections.length);
     }
 
     private PreviewSection sectionFactory(int quartX, int quartZ)

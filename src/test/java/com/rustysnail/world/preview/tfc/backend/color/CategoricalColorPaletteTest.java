@@ -101,7 +101,7 @@ class CategoricalColorPaletteTest
             {
                 JsonElement json = JsonParser.parseReader(reader);
                 assertTrue(json.isJsonObject());
-                assertTrue(json.getAsJsonObject().size() > 0);
+                assertFalse(json.getAsJsonObject().isEmpty());
             }
             catch (Exception e)
             {

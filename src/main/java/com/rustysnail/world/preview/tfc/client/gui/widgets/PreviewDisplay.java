@@ -594,11 +594,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         guiGraphics.fill(xMax, yMin, xMax + 1, yMax, -10066330);
         guiGraphics.fill(xMin - 1, yMax, xMax + 1, yMax + 1, -10066330);
         guiGraphics.fill(xMin - 1, yMin, xMin, yMax, -10066330);
-        if (this.coordinatesCopiedMsg != null)
+        Component coordinatesCopiedMsg = this.coordinatesCopiedMsg;
+        Instant coordinatesCopiedTime = this.coordinatesCopiedTime;
+        if (coordinatesCopiedMsg != null && coordinatesCopiedTime != null)
         {
             guiGraphics.fill(xMin, yMax - 38, xMax, yMax - 19, -1442840576);
-            guiGraphics.drawCenteredString(this.minecraft.font, this.coordinatesCopiedMsg, xMin + (xMax - xMin) / 2, yMax - 32, 16777215);
-            if (Duration.between(this.coordinatesCopiedTime, Instant.now()).toSeconds() >= 8L)
+            guiGraphics.drawCenteredString(this.minecraft.font, coordinatesCopiedMsg, xMin + (xMax - xMin) / 2, yMax - 32, 16777215);
+            if (Duration.between(coordinatesCopiedTime, Instant.now()).toSeconds() >= 8L)
             {
                 this.coordinatesCopiedMsg = null;
                 this.coordinatesCopiedTime = null;

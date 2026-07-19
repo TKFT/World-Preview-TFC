@@ -65,7 +65,7 @@ class BinaryPngAndCancellationTest
     }
 
     @Test
-    void cancellationRemovesAllIncompleteFiles() throws Exception
+    void cancellationRemovesAllIncompleteFiles()
     {
         Spec spec = new Spec("test", 32, 4, 8, 8, Sampling.QUART);
         Context context = new Context(

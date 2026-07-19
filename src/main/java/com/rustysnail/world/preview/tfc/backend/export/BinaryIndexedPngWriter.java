@@ -44,7 +44,7 @@ public final class BinaryIndexedPngWriter implements Closeable
         this.output.write(SIGNATURE);
         writeHeader();
         writePalette(landRgb, waterRgb);
-        this.idat = new ChunkedIdatOutputStream(this.output, IDAT_CHUNK_SIZE);
+        this.idat = new ChunkedIdatOutputStream(this.output);
         this.deflater = new Deflater(Deflater.BEST_SPEED);
         this.compressed = new DeflaterOutputStream(this.idat, this.deflater, IDAT_CHUNK_SIZE);
     }
@@ -152,10 +152,10 @@ public final class BinaryIndexedPngWriter implements Closeable
         private final byte[] buffer;
         private int position;
 
-        private ChunkedIdatOutputStream(DataOutputStream output, int chunkSize)
+        private ChunkedIdatOutputStream(DataOutputStream output)
         {
             this.output = output;
-            this.buffer = new byte[chunkSize];
+            this.buffer = new byte[IDAT_CHUNK_SIZE];
         }
 
         @Override

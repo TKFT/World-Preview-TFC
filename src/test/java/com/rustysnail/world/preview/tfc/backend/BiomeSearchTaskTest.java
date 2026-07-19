@@ -24,7 +24,7 @@ class BiomeSearchTaskTest
             new BiomeSearchTask.Callback()
             {
                 @Override
-                public void onProgress(int currentDistance, int maxDistance)
+                public void onProgress(int currentDistance)
                 {
                     progress.add(currentDistance);
                 }

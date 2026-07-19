@@ -744,7 +744,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         BiomeSearchTask.Callback callback = new BiomeSearchTask.Callback()
         {
             @Override
-            public void onProgress(int currentDistance, int maxDistance)
+            public void onProgress(int currentDistance)
             {
                 minecraft.execute(() ->
                     previewDisplay.setOverlayMessage(

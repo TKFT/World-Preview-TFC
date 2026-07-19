@@ -70,16 +70,20 @@ public class BiomesTab implements Tab
             .onValueChange((x, y) -> this.updateStatus())
             .build();
         this.resetBtn = Button.builder(WorldPreviewComponents.COLOR_RESET, x -> {
-            this.selectedEntry.reset();
-            ((CheckboxAccessor) this.isCaveCB).setSelected(this.selectedEntry.isCave());
-            this.colorChooser.updateRGB(this.selectedEntry.color());
-            statusLabel.setText(this.selectedEntry.statusComponent());
+            BiomesList.BiomeEntry selected = this.selectedEntry;
+            if (selected == null) return;
+            selected.reset();
+            ((CheckboxAccessor) this.isCaveCB).setSelected(selected.isCave());
+            this.colorChooser.updateRGB(selected.color());
+            statusLabel.setText(selected.statusComponent());
         }).width(120).build();
         this.applyBtn = Button.builder(WorldPreviewComponents.COLOR_APPLY, x -> {
-            this.selectedEntry.changeColor(this.colorChooser.colorRGB());
-            this.selectedEntry.setCave(this.isCaveCB.selected());
-            this.colorChooser.updateRGB(this.selectedEntry.color());
-            statusLabel.setText(this.selectedEntry.statusComponent());
+            BiomesList.BiomeEntry selected = this.selectedEntry;
+            if (selected == null) return;
+            selected.changeColor(this.colorChooser.colorRGB());
+            selected.setCave(this.isCaveCB.selected());
+            this.colorChooser.updateRGB(selected.color());
+            statusLabel.setText(selected.statusComponent());
         }).width(120).build();
         hueBox.setFilter(x -> this.validateMaxInt(x, 360));
         satBox.setFilter(x -> this.validateMaxInt(x, 100));

@@ -15,6 +15,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.CommonComponents;
 import org.joml.Matrix4f;
+import org.jetbrains.annotations.Nullable;
 
 public class ColorChooser extends AbstractWidget
 {
@@ -26,7 +27,7 @@ public class ColorChooser extends AbstractWidget
     private float value = 0.0F;
     private int argbColor = -16777216;
     private int argbHueOnly = -16777216;
-    private ColorUpdater updater;
+    @Nullable private ColorUpdater updater;
 
     public ColorChooser(int x, int y)
     {

@@ -291,7 +291,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                         if (this.isCanceled()) break;
                         gridCellsProcessed[0]++;
 
-                        Region.Point point = null;
+                        @Nullable Region.Point point = null;
                         if (needsPoint)
                         {
                             try

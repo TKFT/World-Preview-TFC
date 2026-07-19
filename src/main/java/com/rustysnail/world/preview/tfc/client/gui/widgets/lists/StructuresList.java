@@ -50,8 +50,7 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
     {
         public final ToggleButton toggleVisible;
         private final short id;
-        private final Item item;
-        private final ItemStack itemStack;
+        @Nullable private final ItemStack itemStack;
         private final DynamicTexture iconTexture;
         private final int iconWidth;
         private final int iconHeight;
@@ -66,14 +65,13 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             @NotNull ResourceLocation resourceLocation,
             @NotNull NativeImage icon,
             @Nullable Item item,
-            String name,
+            @Nullable String name,
             boolean show,
             boolean showByDefault
         )
         {
             this.id = id;
-            this.item = item;
-            this.itemStack = this.item == null ? null : new ItemStack(this.item, 1);
+            this.itemStack = item == null ? null : new ItemStack(item, 1);
             this.iconTexture = new DynamicTexture(icon);
             this.iconWidth = icon.getWidth();
             this.iconHeight = icon.getHeight();
@@ -131,9 +129,10 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             int yMin = top + 2;
             int xMax = xMin + this.iconWidth;
             int yMax = yMin + this.iconHeight;
-            if (this.item != null)
+            ItemStack itemStack = this.itemStack;
+            if (itemStack != null)
             {
-                guiGraphics.renderItem(this.itemStack, xMin, yMin);
+                guiGraphics.renderItem(itemStack, xMin, yMin);
             }
             else
             {
@@ -162,7 +161,7 @@ public class StructuresList extends BaseObjectSelectionList<StructuresList.Struc
             return this.id;
         }
 
-        public ItemStack itemStack()
+        public @Nullable ItemStack itemStack()
         {
             return this.itemStack;
         }

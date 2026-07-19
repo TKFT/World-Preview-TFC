@@ -78,7 +78,7 @@ public class BiomeSearchTask implements Runnable
                     this.callback.onCancelled();
                     return;
                 }
-                this.callback.onProgress(dist, MAX_DISTANCE);
+                this.callback.onProgress(dist);
 
                 BlockPos result = searchRingBand(cx, cz, prevRadius, dist);
                 if (result != null)
@@ -133,7 +133,7 @@ public class BiomeSearchTask implements Runnable
 
     public interface Callback
     {
-        void onProgress(int currentDistance, int maxDistance);
+        void onProgress(int currentDistance);
 
         void onFound(BlockPos pos);
 

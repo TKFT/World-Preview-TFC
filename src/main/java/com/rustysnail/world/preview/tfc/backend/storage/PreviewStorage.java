@@ -34,7 +34,7 @@ public class PreviewStorage implements Serializable
     private final int yMax;
     private transient Long2ObjectMap<PreviewBlock>[] blocks;
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     public PreviewStorage(int yMin, int yMax)
     {
         this.blocks = (Long2ObjectMap<PreviewBlock>[]) new Long2ObjectMap[(yMax - yMin >> 3) + 1];
@@ -149,7 +149,7 @@ public class PreviewStorage implements Serializable
     }
 
     @Serial
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private void readObject(ObjectInputStream ois) throws ClassNotFoundException, IOException
     {
         ois.defaultReadObject();

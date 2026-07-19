@@ -153,7 +153,7 @@ public class SampleUtils implements AutoCloseable
         WorldOptions worldOptions,
         LevelStem levelStem,
         LevelHeightAccessor levelHeightAccessor
-    ) throws IOException
+    )
     {
         this.tempDir = null;
         this.minecraftServer = server;

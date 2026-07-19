@@ -18,6 +18,6 @@ public record FeatureQuery(
     @FunctionalInterface
     public interface BiomeLookup
     {
-        BiomeExtension getBiome(int quartX, int quartZ);
+        @Nullable BiomeExtension getBiome(int quartX, int quartZ);
     }
 }

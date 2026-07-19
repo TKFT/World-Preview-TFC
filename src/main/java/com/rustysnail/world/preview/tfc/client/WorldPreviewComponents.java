@@ -81,8 +81,6 @@ public class WorldPreviewComponents
     public static final Component BTN_SEARCH_BIOME_CANCEL = Component.translatable("world_preview_tfc.preview.btn-search-biome.cancel");
     public static final Component ISLAND_CHECKBOX = Component.translatable("world_preview_tfc.preview.island");
     public static final Component ISLAND_CHECKBOX_TOOLTIP = Component.translatable("world_preview_tfc.preview.island.tooltip");
-    public static final Component SEARCH_BIOME_PROGRESS = Component.translatable("world_preview_tfc.preview.search.progress");
-    public static final Component SEARCH_BIOME_FOUND = Component.translatable("world_preview_tfc.preview.search.found");
     public static final Component SEARCH_BIOME_NOT_FOUND = Component.translatable("world_preview_tfc.preview.search.not-found");
     public static final Component SEARCH_BIOME_CANCELLED = Component.translatable("world_preview_tfc.preview.search.cancelled");
     public static final Component SEARCH_BIOME_ERROR = Component.translatable("world_preview_tfc.preview.search.error");

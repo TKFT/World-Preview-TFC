@@ -246,7 +246,7 @@ public class PreviewMappingData
                 booleanOr(resourceOnlyColor.cave, caveBiomesSet.contains(biomeRes)),
                 color.name,
                 resourceOnlyColor.name,
-                color.dataSource
+                color.dataSource == null ? PreviewData.DataSource.MISSING : color.dataSource
             );
         }
 
@@ -271,7 +271,7 @@ public class PreviewMappingData
                 structure.texture == null ? null : ResourceLocation.parse(structure.texture),
                 structure.item == null ? null : ResourceLocation.parse(structure.item),
                 booleanOr(null, displayByDefaultStructuresSet.contains(structureRes)),
-                structure.dataSource
+                structure.dataSource == null ? PreviewData.DataSource.MISSING : structure.dataSource
             );
         }
 
@@ -311,7 +311,7 @@ public class PreviewMappingData
 
     public static class ColorEntry
     {
-        public PreviewData.DataSource dataSource;
+        @Nullable public PreviewData.DataSource dataSource;
         public int color;
         @Nullable
         public Boolean cave = null;
@@ -332,7 +332,7 @@ public class PreviewMappingData
 
     public static class StructureEntry
     {
-        public PreviewData.DataSource dataSource;
+        @Nullable public PreviewData.DataSource dataSource;
         @Nullable public String name = null;
         @Nullable public String texture = null;
         @Nullable public String item = null;

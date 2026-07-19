@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.rustysnail.world.preview.tfc.WorldPreview;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -114,7 +115,7 @@ public final class CategoricalColorPaletteReloadListener extends SimplePreparabl
     static void mergeJson(
         Map<ResourceLocation, CategoricalColorPalette.Entry> target,
         ResourceLocation paletteId,
-        JsonElement json,
+        @Nullable JsonElement json,
         String source
     )
     {

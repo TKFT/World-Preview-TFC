@@ -43,7 +43,13 @@ public final class TFCLandWaterClassifier
      * Pure compatibility classifier. Salinity is intentionally not sufficient: TFC lakes and
      * rivers are fresh water, while a salty shore is still land.
      */
-    public static byte classifyMetadata(String blendType, boolean salty, boolean shore, String namespace, String path)
+    public static byte classifyMetadata(
+        @Nullable String blendType,
+        boolean salty,
+        boolean shore,
+        String namespace,
+        @Nullable String path
+    )
     {
         if (shore)
         {

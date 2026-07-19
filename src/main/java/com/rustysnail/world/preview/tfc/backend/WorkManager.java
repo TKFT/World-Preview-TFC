@@ -816,7 +816,7 @@ public class WorkManager
         return this.yMin() + (this.dimensionType == null ? 256 : this.dimensionType.height());
     }
 
-    public PreviewStorage previewStorage()
+    public @Nullable PreviewStorage previewStorage()
     {
         return this.previewStorage;
     }
@@ -847,7 +847,7 @@ public class WorkManager
         return this.sampleUtils.resourceManager();
     }
 
-    public SampleUtils sampleUtils()
+    public @Nullable SampleUtils sampleUtils()
     {
         return this.sampleUtils;
     }
@@ -1018,13 +1018,17 @@ public class WorkManager
     @Nullable
     public synchronized TFCCropSuitability.CropSuitabilityResult requestCropDetailsAt(int blockX, int blockZ)
     {
-        if (this.tfcSampleUtils == null || this.sampleUtils == null || this.cropHoverExecutor == null)
+        TFCSampleUtils tfc = this.tfcSampleUtils;
+        SampleUtils samples = this.sampleUtils;
+        ExecutorService cropHoverExecutor = this.cropHoverExecutor;
+        ResourceLocation cropId = this.selectedCropId;
+        if (tfc == null || samples == null || cropHoverExecutor == null || cropId == null)
         {
             return TFCCropSuitability.NO_DATA_RESULT;
         }
 
         CropCalendarSettings calendar = this.ensureCropCalendarCurrent();
-        TFCCropRegistry.Entry entry = this.selectedCropId != null ? this.cropRegistry.get(this.selectedCropId) : null;
+        TFCCropRegistry.Entry entry = this.cropRegistry.get(cropId);
         if (entry == null || !entry.hasClimateData())
         {
             return TFCCropSuitability.NO_DATA_RESULT;
@@ -1035,7 +1039,7 @@ public class WorkManager
         int revision = this.cropRevision.get();
         int worldRevision = this.worldGenerationRevision.get();
         CropHoverCache.Key key = new CropHoverCache.Key(
-            quartX, quartZ, this.selectedCropId, this.cropWaterMode,
+            quartX, quartZ, cropId, this.cropWaterMode,
             calendar.daysInMonth(), calendar.cropGrowthModifier(), revision);
 
         TFCCropSuitability.CropSuitabilityResult cached = this.cropHoverCache.get(key);
@@ -1046,16 +1050,14 @@ public class WorkManager
 
         // Snapshot every world/crop dependency before leaving the synchronized section. Computation
         // uses the canonical quart origin so cache results never depend on where the cursor entered it.
-        TFCSampleUtils tfc = this.tfcSampleUtils;
-        SampleUtils samples = this.sampleUtils;
         TFCCropSuitability.CropWaterMode waterMode = this.cropWaterMode;
         int canonicalX = quartX << 2;
         int canonicalZ = quartZ << 2;
         try
         {
-            Future<?> future = this.cropHoverExecutor.submit(() -> {
+            Future<?> future = cropHoverExecutor.submit(() -> {
                 TFCCropSuitability.CropSuitabilityResult result = this.computeCropAt(
-                    entry, canonicalX, canonicalZ, calendar, waterMode, revision, worldRevision, tfc, samples);
+                    entry, canonicalX, canonicalZ, calendar, waterMode, worldRevision, tfc, samples);
                 if (this.cropRevision.get() == revision)
                 {
                     this.cropHoverCache.complete(key, result);
@@ -1080,7 +1082,6 @@ public class WorkManager
         int blockZ,
         CropCalendarSettings calendar,
         TFCCropSuitability.CropWaterMode waterMode,
-        int revision,
         int worldRevision,
         TFCSampleUtils tfc,
         SampleUtils samples
@@ -1168,6 +1169,7 @@ public class WorkManager
             };
         }
 
+        @Nullable
         synchronized TFCCropSuitability.CropSuitabilityResult get(Key key)
         {
             return this.results.get(key);
@@ -1248,6 +1250,7 @@ public class WorkManager
             };
         }
 
+        @Nullable
         synchronized Entry get(Key key)
         {
             return this.map.get(key);
@@ -1320,7 +1323,7 @@ public class WorkManager
         this.dataRevision.incrementAndGet();
     }
 
-    public ChunkGenerator chunkGenerator()
+    public @Nullable ChunkGenerator chunkGenerator()
     {
         return this.chunkGenerator;
     }

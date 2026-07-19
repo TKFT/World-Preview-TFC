@@ -1,5 +1,7 @@
 package com.rustysnail.world.preview.tfc.backend.color;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 import it.unimi.dsi.fastutil.objects.Object2ShortMap;
@@ -28,8 +30,8 @@ public record PreviewData(
         int resourceOnlyColor,
         boolean isCave,
         boolean resourceOnlyIsCave,
-        String name,
-        String resourceOnlyName,
+        @Nullable String name,
+        @Nullable String resourceOnlyName,
         DataSource dataSource
     )
     {
@@ -40,7 +42,13 @@ public record PreviewData(
     }
 
     public record StructureData(
-        int id, ResourceLocation tag, String name, ResourceLocation icon, ResourceLocation item, boolean showByDefault, DataSource dataSource
+        int id,
+        ResourceLocation tag,
+        @Nullable String name,
+        @Nullable ResourceLocation icon,
+        @Nullable ResourceLocation item,
+        boolean showByDefault,
+        DataSource dataSource
     )
     {
     }

@@ -98,12 +98,13 @@ public final class TFCCropSuitability
         CropCalendarSettings calendar
     )
     {
-        if (!crop.hasClimateData())
+        ClimateRange range = crop.climateRange();
+        if (range == null)
         {
             return TFCSampleUtils.VALUE_INVALID;
         }
         EvaluationScratch stats = SCRATCH.get();
-        sampleYear(crop, sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, stats, false);
+        sampleYear(range, crop.flooded(), sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, stats, false);
         return classify(stats.wiggleCount, stats.coreCount, stats.longestCore, stats.averageCloseness,
             schedule.samplesPerYear(), calendar);
     }
@@ -120,12 +121,13 @@ public final class TFCCropSuitability
         CropCalendarSettings calendar
     )
     {
-        if (!crop.hasClimateData())
+        ClimateRange range = crop.climateRange();
+        if (range == null)
         {
             return NO_DATA_RESULT;
         }
         EvaluationScratch stats = SCRATCH.get();
-        sampleYear(crop, sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, stats, true);
+        sampleYear(range, crop.flooded(), sampler, chunkData, blockX, blockZ, surfaceY, waterMode, schedule, stats, true);
         int n = schedule.samplesPerYear();
 
         short suitability = classify(stats.wiggleCount, stats.coreCount, stats.longestCore,
@@ -188,7 +190,8 @@ public final class TFCCropSuitability
     }
 
     private static void sampleYear(
-        TFCCropRegistry.Entry crop,
+        ClimateRange range,
+        boolean flooded,
         TFCPreviewClimateSampler sampler,
         ChunkData chunkData,
         int blockX,
@@ -200,8 +203,6 @@ public final class TFCCropSuitability
         boolean detailed
     )
     {
-        final ClimateRange range = crop.climateRange();
-        final boolean flooded = crop.flooded();
         final float avgSeaLevelTemp = chunkData.getAverageSeaLevelTemp(blockX, blockZ);
         final float rainAverage = chunkData.getAverageRainfall(blockX, blockZ);
         final float rainVariance = chunkData.getRainVariance(blockX, blockZ);

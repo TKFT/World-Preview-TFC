@@ -12,9 +12,9 @@ class TFCNullabilityRegressionTest
         TFCWorkPlan plan = assertDoesNotThrow(() -> TFCWorkPlan.forMode(null, true));
 
         assertNull(plan.mode());
-        assertEquals(true, plan.features());
-        assertEquals(false, plan.temperature());
-        assertEquals(false, plan.landWater());
+        assertTrue(plan.features());
+        assertFalse(plan.temperature());
+        assertFalse(plan.landWater());
     }
 
     @Test

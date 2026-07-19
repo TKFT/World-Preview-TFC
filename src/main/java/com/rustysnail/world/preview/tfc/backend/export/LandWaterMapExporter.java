@@ -24,6 +24,7 @@ import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Bou
 import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Sampling;
 import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Spec;
 import net.minecraft.core.QuartPos;
+import org.jetbrains.annotations.Nullable;
 
 public final class LandWaterMapExporter
 {
@@ -255,8 +256,8 @@ public final class LandWaterMapExporter
         int waterRgb,
         String exporterVersion,
         boolean tfcDetected,
-        String tfcVersion,
-        String tfcLargeBiomesVersion
+        @Nullable String tfcVersion,
+        @Nullable String tfcLargeBiomesVersion
     )
     {
     }

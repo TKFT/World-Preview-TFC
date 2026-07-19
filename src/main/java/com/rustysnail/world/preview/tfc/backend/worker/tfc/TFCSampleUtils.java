@@ -120,9 +120,6 @@ public class TFCSampleUtils
         previewId("entisol"), previewId("aridisol"), previewId("oxisol"), previewId("fluvisol"),
         previewId("andisol"), previewId("podzol"), previewId("alfisol"), previewId("mollisol")
     };
-    private static final int[] STABLE_CATEGORY_COLORS = {
-        0xFF6E8B3D, 0xFF4E7A4E, 0xFF8A9A5B, 0xFFB5A642, 0xFF7C6A40, 0xFF5F8A6B
-    };
     private static volatile TFCTreeSpeciesRegistry activeRegistry = TFCTreeSpeciesRegistry.fallback();
 
     public static boolean isWaterValue(short value)
@@ -190,9 +187,8 @@ public class TFCSampleUtils
         if (generator instanceof ChunkGeneratorExtension ext
             && generator.getBiomeSource() instanceof BiomeSourceExtension biomeSource)
         {
-            TFCTreeSpeciesRegistry registry = TFCTreeSpeciesRegistry.build(registryAccess);
-            activeRegistry = registry;
-            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), biomeSource, registry, seed);
+            activeRegistry = TFCTreeSpeciesRegistry.build(registryAccess);
+            return new TFCSampleUtils(ext.settings(), ext.rockLayerSettings(), ext.chunkDataGenerator(), biomeSource, seed);
         }
         return null;
     }
@@ -260,7 +256,7 @@ public class TFCSampleUtils
         );
     }
 
-    public static short getRockId(RockSettings rock)
+    public static short getRockId(@Nullable RockSettings rock)
     {
         if (rock == null || rock.raw() == null) return -1;
 
@@ -364,7 +360,7 @@ public class TFCSampleUtils
         return ForestType.values().length;
     }
 
-    public static String getForestDensityLabel(short forestId)
+    public static @Nullable String getForestDensityLabel(short forestId)
     {
         if (forestId < 0 || forestId >= ForestType.values().length) return null;
         ForestType type = ForestType.valueOf(forestId);
@@ -559,21 +555,15 @@ public class TFCSampleUtils
             case DEAD_DIVERSE -> 0xFF776857;
             case DEAD_ALTERNATE -> 0xFF65574A;
             case DEAD_BAMBOO -> 0xFF7A7561;
-            default -> stableCategoryColor(ResourceLocation.fromNamespaceAndPath("tfc", type.getSerializedName()));
         };
     }
 
-    private static int stableCategoryColor(ResourceLocation id)
-    {
-        return STABLE_CATEGORY_COLORS[Math.floorMod(id.toString().hashCode(), STABLE_CATEGORY_COLORS.length)];
-    }
-
-    private static boolean isForested(ForestType forestType)
+    private static boolean isForested(@Nullable ForestType forestType)
     {
         return forestType != null && forestTypeHasVegetation(forestType);
     }
 
-    private static boolean isGrasslandLike(ForestType forestType, String biomePath)
+    private static boolean isGrasslandLike(@Nullable ForestType forestType, @Nullable String biomePath)
     {
         if (forestType != null && !forestTypeHasVegetation(forestType))
         {
@@ -590,7 +580,7 @@ public class TFCSampleUtils
             || biomePath.contains("steppe");
     }
 
-    private static boolean isVolcanicSoilBiome(String path)
+    private static boolean isVolcanicSoilBiome(@Nullable String path)
     {
         if (path == null)
         {
@@ -602,7 +592,7 @@ public class TFCSampleUtils
             || path.contains("tuyas");
     }
 
-    private static boolean isFluvisolBiome(String path)
+    private static boolean isFluvisolBiome(@Nullable String path)
     {
         if (path == null)
         {
@@ -615,7 +605,7 @@ public class TFCSampleUtils
             || path.contains("flats");
     }
 
-    private static boolean isNoSoilBiome(String path)
+    private static boolean isNoSoilBiome(@Nullable String path)
     {
         if (path == null)
         {
@@ -630,17 +620,15 @@ public class TFCSampleUtils
     private final Settings settings;
     private final RockLayerSettings rockLayerSettings;
     private final ChunkDataGenerator chunkDataGenerator;
-    private final TFCTreeSpeciesRegistry treeSpeciesRegistry;
     private final ConcurrentArea<BiomeExtension> biomeLayer;
     private final BiomeSourceExtension biomeSource;
     private final TFCPreviewClimateSampler climateSampler;
 
-    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, TFCTreeSpeciesRegistry treeSpeciesRegistry, long seed)
+    private TFCSampleUtils(Settings settings, RockLayerSettings rockLayerSettings, ChunkDataGenerator chunkDataGenerator, BiomeSourceExtension biomeSource, long seed)
     {
         this.settings = settings;
         this.rockLayerSettings = rockLayerSettings;
         this.biomeSource = biomeSource;
-        this.treeSpeciesRegistry = treeSpeciesRegistry;
         Seed tfcSeed = Seed.of(seed);
         this.regionGenerator = new RegionGenerator(settings, tfcSeed);
 
@@ -653,11 +641,6 @@ public class TFCSampleUtils
     public TFCPreviewClimateSampler climateSampler()
     {
         return this.climateSampler;
-    }
-
-    public TFCTreeSpeciesRegistry treeSpeciesRegistry()
-    {
-        return this.treeSpeciesRegistry;
     }
 
     public Settings settings()
