@@ -4,7 +4,7 @@
   "refmap": "world_preview.refmap.json",
   "minVersion": "0.8",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["ChunkGeneratorStructureStateMixin", "MinecraftServerAccessor", "MixinPlacedFeature", "NoiseBasedAquiferMixin", "NoiseBasedChunkGeneratorAccessor", "NoiseChunkAccessor", "ReloadableServerResourcesMixin", "StructureTemplatePaletteAccessor", "StructureTemplatePaletteMixin"],
+  "mixins": ["ChunkGeneratorStructureStateMixin", "FruitTreeSaplingBlockAccessor", "MinecraftServerAccessor", "MixinPlacedFeature", "NoiseBasedAquiferMixin", "NoiseBasedChunkGeneratorAccessor", "NoiseChunkAccessor", "ReloadableServerResourcesMixin", "SeasonalPlantBlockAccessor", "SpreadingBushBlockAccessor", "StructureTemplatePaletteAccessor", "StructureTemplatePaletteMixin"],
   "client": [
     "client.CheckboxAccessor",
     "client.CreateWorldScreenAccessor",

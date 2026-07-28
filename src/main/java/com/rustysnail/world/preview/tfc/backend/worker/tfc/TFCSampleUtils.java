@@ -181,6 +181,23 @@ public class TFCSampleUtils
             || path.equals("tower_karst_bay");
     }
 
+    public static short classifyTreeMapWater(@Nullable BiomeExtension biome)
+    {
+        if (!isTreeMapWaterBiome(biome))
+        {
+            return -1;
+        }
+        if (biome.biomeBlendType() == BiomeBlendType.OCEAN)
+        {
+            return VALUE_WATER_OCEAN;
+        }
+        if (biome.key().location().getPath().equals("river"))
+        {
+            return VALUE_WATER_RIVER;
+        }
+        return VALUE_WATER_LAKE;
+    }
+
     @Nullable
     public static TFCSampleUtils create(ChunkGenerator generator, RegistryAccess registryAccess, long seed)
     {

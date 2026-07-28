@@ -97,7 +97,8 @@ public class RenderSettings
         TFC_FOREST_TYPE(13L, false), // TFC forest type/density
         TFC_HOTSPOT(14L, false),     // Hotspot/Volcanic map (land/water base + hotspot age overlay)
         TFC_TREE_SPECIES(15L, false),// TFC Tree Species Map
-        TFC_CROP_SUITABILITY(16L, false); // Annual growing suitability for the selected crop
+        TFC_CROP_SUITABILITY(16L, false), // Annual growing suitability for the selected crop
+        TFC_PERENNIAL_SUITABILITY(17L, false); // Recurring perennial climate suitability
 
         public final long flag;
         public final boolean useY;

@@ -11,6 +11,7 @@ public final class TFCColorPalettes
     public static final ResourceLocation ROCKS = id("rocks");
     public static final ResourceLocation WATER = id("water");
     public static final ResourceLocation SUITABILITY = id("suitability");
+    public static final ResourceLocation PERENNIAL_SUITABILITY = id("perennial_suitability");
 
     private static ResourceLocation id(String path)
     {

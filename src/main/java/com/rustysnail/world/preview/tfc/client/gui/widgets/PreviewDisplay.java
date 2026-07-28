@@ -22,6 +22,8 @@ import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialSuitability;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
@@ -44,6 +46,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.QuartPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.levelgen.NoiseRouterData;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -81,6 +84,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int[] soilTexPaletteGray;
     private int[] cropTexPalette;
     private int[] cropTexPaletteGray;
+    private int[] perennialTexPalette;
+    private int[] perennialTexPaletteGray;
     private int[][] rockTexPalette;
     private int[][] rockTexPaletteGray;
     private int[][] rockTexPaletteBright;
@@ -98,6 +103,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     private int tfcUnknownTex;
     private int tfcInvalidTex;
     private int tfcInvalidTexGray;
+    private int perennialInvalidTex;
+    private int perennialInvalidTexGray;
     private boolean loggedInvalidBiomeId = false;
     private IconData[] structureIcons;
     private IconData[] featureIcons;
@@ -358,6 +365,16 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             this.cropTexPaletteGray[i] = grayScale(tex);
         }
 
+        int pc = TFCPerennialSuitability.suitabilityCount();
+        this.perennialTexPalette = new int[pc];
+        this.perennialTexPaletteGray = new int[pc];
+        for (short i = 0; i < pc; i++)
+        {
+            int tex = textureColor(TFCPerennialSuitability.getSuitabilityColor(i));
+            this.perennialTexPalette[i] = tex;
+            this.perennialTexPaletteGray[i] = grayScale(tex);
+        }
+
         this.tfcOceanTex = textureColor(TFCSampleUtils.getWaterColor(TFCSampleUtils.WATER_OCEAN, TFCSampleUtils.COLOR_WATER));
         this.tfcOceanTexGray = grayScale(this.tfcOceanTex);
         this.tfcLakeTex = textureColor(TFCSampleUtils.getWaterColor(TFCSampleUtils.WATER_LAKE, TFCSampleUtils.COLOR_WATER));
@@ -369,6 +386,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         this.tfcUnknownTex = textureColor(TFCSampleUtils.getWaterColor(TFCSampleUtils.WATER_UNKNOWN, TFCSampleUtils.COLOR_INVALID));
         this.tfcInvalidTex = textureColor(TFCCropSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID));
         this.tfcInvalidTexGray = grayScale(this.tfcInvalidTex);
+        this.perennialInvalidTex =
+            textureColor(TFCPerennialSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID));
+        this.perennialInvalidTexGray = grayScale(this.perennialInvalidTex);
 
         int rc = TFCSampleUtils.ROCK_COLORS.length;
         this.rockTexPalette = new int[3][rc];
@@ -947,6 +967,26 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             else
                             {
                                 color = hi ? this.tfcInvalidTex : this.tfcInvalidTexGray;
+                            }
+                            break;
+                        }
+                        case TFC_PERENNIAL_SUITABILITY:
+                        {
+                            boolean hi = this.selectedTFCMapValue == Short.MIN_VALUE
+                                || TFCSampleUtils.canonicalMapValue(rawData) == this.selectedTFCMapValue;
+                            if (TFCSampleUtils.isWaterValue(rawData))
+                            {
+                                color = this.waterTexture(rawData, hi);
+                            }
+                            else if (rawData >= 0 && rawData < this.perennialTexPalette.length)
+                            {
+                                color = hi
+                                    ? this.perennialTexPalette[rawData]
+                                    : this.perennialTexPaletteGray[rawData];
+                            }
+                            else
+                            {
+                                color = hi ? this.perennialInvalidTex : this.perennialInvalidTexGray;
                             }
                             break;
                         }
@@ -1619,6 +1659,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_CROP_SUITABILITY:
                             this.appendCropTooltip(tfcInfo, hoverInfo);
                             break;
+                        case TFC_PERENNIAL_SUITABILITY:
+                            this.appendPerennialTooltip(tfcInfo, hoverInfo);
+                            break;
                         default:
                             break;
                     }
@@ -1796,6 +1839,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_CROP_SUITABILITY:
                             this.handleTFCMapValueClick(RenderSettings.RenderMode.TFC_CROP_SUITABILITY, this.readCropRawAt(hoverInfo.blockX, hoverInfo.blockZ));
                             break;
+                        case TFC_PERENNIAL_SUITABILITY:
+                            this.handleTFCMapValueClick(
+                                RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY,
+                                this.readPerennialRawAt(hoverInfo.blockX, hoverInfo.blockZ));
+                            break;
                         default:
                             break;
                     }
@@ -1826,6 +1874,13 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return this.workManager.previewStorage().getRawData4(
             QuartPos.fromBlock(blockX), 0, QuartPos.fromBlock(blockZ),
             RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
+    }
+
+    private short readPerennialRawAt(int blockX, int blockZ)
+    {
+        return this.workManager.previewStorage().getRawData4(
+            QuartPos.fromBlock(blockX), 0, QuartPos.fromBlock(blockZ),
+            RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag);
     }
 
     /**
@@ -1930,6 +1985,236 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
     }
 
+    private void appendPerennialTooltip(StringBuilder text, HoverInfo hoverInfo)
+    {
+        ResourceLocation perennialId = this.workManager.selectedPerennialId();
+        TFCPerennialRegistry.PerennialEntry entry =
+            perennialId != null ? this.workManager.perennialRegistry().get(perennialId) : null;
+        if (entry == null)
+        {
+            text.append("\n\u00A73Plant:\u00A7r \u00A7bNone selected\u00A7r");
+            return;
+        }
+
+        short raw = this.readPerennialRawAt(hoverInfo.blockX, hoverInfo.blockZ);
+        text.append("\n\u00A73Plant:\u00A7r \u00A7b").append(entry.displayName()).append("\u00A7r");
+        text.append("\n\u00A73Type:\u00A7r \u00A7b").append(perennialTypeName(entry.type())).append("\u00A7r");
+        text.append("\n\u00A73Suitability:\u00A7r \u00A7b")
+            .append(TFCPerennialSuitability.getSuitabilityName(raw)).append("\u00A7r");
+        text.append("\n\u00A73Water Mode:\u00A7r \u00A7b")
+            .append(this.workManager.perennialWaterMode()
+                == TFCPerennialSuitability.PerennialWaterMode.IRRIGATED ? "Irrigated" : "Rain-Fed")
+            .append("\u00A7r");
+
+        int quartX = hoverInfo.blockX >> 2;
+        int quartZ = hoverInfo.blockZ >> 2;
+        int revision = this.workManager.perennialRevision();
+        long now = Util.getMillis();
+        if (quartX != this.lastCropHoverQuartX || quartZ != this.lastCropHoverQuartZ
+            || revision != this.lastCropHoverRevision)
+        {
+            this.lastCropHoverQuartX = quartX;
+            this.lastCropHoverQuartZ = quartZ;
+            this.lastCropHoverRevision = revision;
+            this.cropHoverSinceMs = now;
+        }
+        if (now - this.cropHoverSinceMs < CROP_HOVER_DETAIL_MS)
+        {
+            text.append("\n\u00A78Hold to show perennial details\u2026\u00A7r");
+            return;
+        }
+
+        TFCPerennialSuitability.PerennialSuitabilityResult result =
+            this.workManager.requestPerennialDetailsAt(hoverInfo.blockX, hoverInfo.blockZ);
+        if (result == null)
+        {
+            text.append("\n\u00A78Calculating perennial details\u2026\u00A7r");
+            return;
+        }
+
+        text.append("\n\n\u00A73Average Temperature:\u00A7r \u00A7b")
+            .append("%.1f\u00B0C".formatted(result.averageTemperature())).append("\u00A7r");
+        text.append("\n\u00A73Root Hydration:\u00A7r \u00A7b").append(result.hydration()).append("\u00A7r");
+        if (entry.climateRange() != null)
+        {
+            var range = entry.climateRange();
+            text.append("\n\u00A73Temperature Range:\u00A7r \u00A7b")
+                .append(cropTempRange(range)).append("\u00A7r");
+            text.append("\n\u00A73Hydration Range:\u00A7r \u00A7b")
+                .append(range.minHydration()).append('\u2013').append(range.maxHydration()).append("\u00A7r");
+            float fit = Math.min(result.temperatureMargin(), result.hydrationMargin());
+            if (!Float.isNaN(fit))
+            {
+                text.append("\n\u00A73Climate Safety Margin:\u00A7r \u00A7b")
+                    .append("%.0f%%".formatted(Math.max(0f, fit) * 100f)).append("\u00A7r");
+            }
+        }
+        text.append("\n\u00A73Limiting Factor:\u00A7r \u00A7b")
+            .append(perennialLimitingName(result.limitingFactor())).append("\u00A7r");
+        text.append("\n\u00A78Borderline through Ideal are preview safety margins; TFC's core check is binary.\u00A7r");
+
+        if (result.hasLifecycleData())
+        {
+            text.append("\n\n\u00A73Active Months:\u00A7r \u00A7b")
+                .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 0)).append("\u00A7r");
+            text.append("\n\u00A73Flowering Months:\u00A7r \u00A7b")
+                .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 1)).append("\u00A7r");
+            text.append("\n\u00A73Fruiting Months:\u00A7r \u00A7b")
+                .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 2)).append("\u00A7r");
+            text.append("\n\u00A73Fruiting Windows:\u00A7r \u00A7b")
+                .append(result.distinctFruitingWindows()).append("\u00A7r");
+            text.append("\n\u00A73Dormant Months:\u00A7r \u00A7b")
+                .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 3)).append("\u00A7r");
+        }
+        else
+        {
+            text.append("\n\n\u00A73Lifecycle Data:\u00A7r \u00A7bUnavailable\u00A7r");
+        }
+
+        if (entry.type() == TFCPerennialRegistry.PerennialType.FRUIT_TREE
+            || entry.type() == TFCPerennialRegistry.PerennialType.BANANA)
+        {
+            appendApproximateTicks(text, "Growth Time", entry.growthTicks());
+            if (result.hasLifecycleData())
+            {
+                text.append("\n\u00A73Growth-Active Months:\u00A7r \u00A7b")
+                    .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 0))
+                    .append("\u00A7r");
+            }
+        }
+        else if (entry.type() == TFCPerennialRegistry.PerennialType.STATIONARY_BERRY
+            || entry.type() == TFCPerennialRegistry.PerennialType.SPREADING_BERRY
+            || entry.type() == TFCPerennialRegistry.PerennialType.WATERLOGGED_BERRY)
+        {
+            appendApproximateTicks(text, "Growth Interval", this.workManager.perennialBerryGrowthTicks());
+        }
+        else
+        {
+            appendApproximateTicks(text, "Growth Time", entry.growthTicks());
+        }
+        appendApproximateTicks(text, "Repeat Bloom Delay", this.workManager.perennialBloomDelayTicks());
+        text.append("\n\u00A78Calendar: ").append(this.workManager.perennialDaysInMonth())
+            .append(" days/month\u00A7r");
+
+        text.append("\n\u00A73Habitat:\u00A7r \u00A7b").append(perennialHabitatName(entry.habitat())).append("\u00A7r");
+        if (entry.type() == TFCPerennialRegistry.PerennialType.SPREADING_BERRY)
+        {
+            text.append("\n\u00A73Propagation:\u00A7r \u00A7bYes\u00A7r");
+            int maxHeight = entry.spreadingMaxHeight();
+            if (maxHeight > 0)
+            {
+                text.append("\n\u00A73Maximum Height:\u00A7r \u00A7b").append(maxHeight).append(" blocks\u00A7r");
+            }
+        }
+        if (entry.habitat() == TFCPerennialRegistry.PerennialHabitat.FRESHWATER_WATERLOGGED)
+        {
+            text.append("\n\u00A73Special Requirement:\u00A7r \u00A7bWaterlogged freshwater habitat\u00A7r");
+            text.append("\n\u00A73Ocean Result:\u00A7r \u00A7bSaltwater is not valid\u00A7r");
+        }
+        text.append("\n\u00A73Source:\u00A7r \u00A7b").append(entry.plantedBlockId()).append("\u00A7r");
+        text.append("\n\u00A78Actual root hydration may also include nearby freshwater and block-below modifiers.\u00A7r");
+        text.append("\n\u00A78Exact harvest counts also depend on lifecycle advancement and random ticks.\u00A7r");
+    }
+
+    private static void appendApproximateTicks(StringBuilder text, String label, int ticks)
+    {
+        if (ticks <= 0) return;
+        double days = ticks / (double) net.dries007.tfc.util.calendar.ICalendar.TICKS_IN_DAY;
+        text.append("\n\u00A73").append(label).append(":\u00A7r \u00A7bApproximately ")
+            .append("%.1f TFC days".formatted(days)).append("\u00A7r");
+    }
+
+    private static String formatLifecycleMonths(
+        @Nullable List<net.dries007.tfc.common.blocks.plant.fruit.Lifecycle> lifecycle,
+        boolean northern,
+        int kind
+    )
+    {
+        if (lifecycle == null || lifecycle.size() != 12) return "Unavailable";
+        boolean[] included = new boolean[12];
+        int count = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            var stage = TFCPerennialSuitability.lifecycleForLocalMonth(
+                lifecycle, net.dries007.tfc.util.calendar.Month.valueOf(i), northern);
+            boolean match = switch (kind)
+            {
+                case 0 -> stage != null && stage.active();
+                case 1 -> stage == net.dries007.tfc.common.blocks.plant.fruit.Lifecycle.FLOWERING;
+                case 2 -> stage == net.dries007.tfc.common.blocks.plant.fruit.Lifecycle.FRUITING;
+                default -> stage == net.dries007.tfc.common.blocks.plant.fruit.Lifecycle.DORMANT;
+            };
+            included[i] = match;
+            if (match) count++;
+        }
+        if (count == 0) return "None";
+        if (count == 12) return "Year-round";
+
+        int excluded = 0;
+        while (included[excluded]) excluded++;
+        StringBuilder out = new StringBuilder();
+        int runStart = -1;
+        for (int step = 1; step <= 12; step++)
+        {
+            int month = (excluded + step) % 12;
+            if (included[month] && runStart < 0) runStart = month;
+            boolean runEnds = runStart >= 0 && (!included[(month + 1) % 12] || step == 12);
+            if (runEnds)
+            {
+                if (!out.isEmpty()) out.append(", ");
+                out.append(monthName(runStart));
+                if (runStart != month) out.append('\u2013').append(monthName(month));
+                runStart = -1;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String monthName(int ordinal)
+    {
+        String value = net.dries007.tfc.util.calendar.Month.valueOf(ordinal).getSerializedName();
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+    }
+
+    private static String perennialTypeName(TFCPerennialRegistry.PerennialType type)
+    {
+        return switch (type)
+        {
+            case FRUIT_TREE -> "Fruit Tree";
+            case BANANA -> "Banana";
+            case STATIONARY_BERRY -> "Stationary Berry";
+            case SPREADING_BERRY -> "Spreading Berry";
+            case WATERLOGGED_BERRY -> "Waterlogged Berry";
+            case ADDON_PERENNIAL -> "Addon Perennial";
+        };
+    }
+
+    private static String perennialHabitatName(TFCPerennialRegistry.PerennialHabitat habitat)
+    {
+        return switch (habitat)
+        {
+            case NORMAL_LAND -> "Normal Land";
+            case FRESHWATER_WATERLOGGED -> "Waterlogged Freshwater";
+            case CUSTOM -> "Custom / Addon";
+        };
+    }
+
+    private static String perennialLimitingName(TFCPerennialSuitability.LimitingFactor factor)
+    {
+        return switch (factor)
+        {
+            case NONE -> "None";
+            case TOO_COLD -> "Too Cold";
+            case TOO_HOT -> "Too Hot";
+            case TOO_DRY -> "Too Dry";
+            case TOO_WET -> "Too Wet";
+            case FRESHWATER_REQUIRED -> "Freshwater Required";
+            case SALTWATER -> "Saltwater";
+            case NO_DATA -> "No Data";
+            case WATER -> "Open Water";
+        };
+    }
+
     private static String cropAxisStatus(int lowCount, int highCount, int samplesPerYear, String lowWord, String highWord)
     {
         int n = samplesPerYear > 0 ? samplesPerYear : TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
@@ -1982,6 +2267,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 case TFC_TREE_SPECIES -> TFCSampleUtils.treeSpeciesCount();
                 case TFC_SOIL_TYPE -> TFCSampleUtils.soilTypeCount();
                 case TFC_CROP_SUITABILITY -> TFCCropSuitability.suitabilityCount();
+                case TFC_PERENNIAL_SUITABILITY -> TFCPerennialSuitability.suitabilityCount();
                 default -> 0;
             };
             if (rawValue < 0 || rawValue >= count)

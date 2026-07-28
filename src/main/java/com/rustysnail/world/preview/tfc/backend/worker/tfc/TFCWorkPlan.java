@@ -13,6 +13,7 @@ public record TFCWorkPlan(
     boolean treeSpecies,
     boolean soilType,
     boolean cropSuitability,
+    boolean perennialSuitability,
     boolean hotspot,
     boolean features,
     @Nullable RenderSettings.RenderMode mode
@@ -24,27 +25,28 @@ public record TFCWorkPlan(
     {
         if (mode == null)
         {
-            return new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, featureOverlay, null);
+            return new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, false, featureOverlay, null);
         }
         return switch (mode)
         {
             // Ocean coloring in these modes reads the land/water section, so it is included.
-            case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, featureOverlay, mode);
-            case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, featureOverlay, mode);
-            case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, featureOverlay, mode);
-            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, featureOverlay, mode);
-            case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, featureOverlay, mode);
+            case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, false, featureOverlay, mode);
             // Forest/Tree water uses classifyTreeMapWater, not the river-fractal land/water map.
-            case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, featureOverlay, mode);
-            case TFC_TREE_SPECIES -> new TFCWorkPlan(false, false, false, false, false, true, true, false, false, false, featureOverlay, mode);
+            case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, false, featureOverlay, mode);
+            case TFC_TREE_SPECIES -> new TFCWorkPlan(false, false, false, false, false, true, true, false, false, false, false, featureOverlay, mode);
             // Soil needs ChunkData climate + forest type + the effective biome (water via classifyTreeMapWater).
-            case TFC_SOIL_TYPE -> new TFCWorkPlan(false, false, false, false, false, false, false, true, false, false, featureOverlay, mode);
+            case TFC_SOIL_TYPE -> new TFCWorkPlan(false, false, false, false, false, false, false, true, false, false, false, featureOverlay, mode);
             // Crop needs ChunkData climate + the effective biome (water) + chunk-level surface height;
             // no rocks / trees / soil / rainfall / temperature / kaolin / hotspot outputs.
-            case TFC_CROP_SUITABILITY -> new TFCWorkPlan(false, false, false, false, false, false, false, false, true, false, featureOverlay, mode);
-            case TFC_HOTSPOT -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, true, featureOverlay, mode);
+            case TFC_CROP_SUITABILITY -> new TFCWorkPlan(false, false, false, false, false, false, false, false, true, false, false, featureOverlay, mode);
+            case TFC_PERENNIAL_SUITABILITY -> new TFCWorkPlan(false, false, false, false, false, false, false, false, false, true, false, featureOverlay, mode);
+            case TFC_HOTSPOT -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, true, featureOverlay, mode);
             // Non-TFC modes (e.g., biome map with feature overlay on): only detect features.
-            default -> new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, featureOverlay, mode);
+            default -> new TFCWorkPlan(false, false, false, false, false, false, false, false, false, false, false, featureOverlay, mode);
         };
     }
 
@@ -55,22 +57,23 @@ public record TFCWorkPlan(
 
     public boolean needsChunkData()
     {
-        return forestType || treeSpecies || soilType || cropSuitability;
+        return forestType || treeSpecies || soilType || cropSuitability || perennialSuitability;
     }
 
     public boolean needsTreeMapBiome()
     {
-        return forestType || treeSpecies || soilType || cropSuitability;
+        return forestType || treeSpecies || soilType || cropSuitability || perennialSuitability;
     }
 
     public boolean anyOutput()
     {
-        return temperature || rainfall || landWater || rocks || kaolin || forestType || treeSpecies || soilType || cropSuitability || hotspot || features;
+        return temperature || rainfall || landWater || rocks || kaolin || forestType || treeSpecies || soilType
+            || cropSuitability || perennialSuitability || hotspot || features;
     }
 
     public long[] requiredCompletionFlags()
     {
-        long[] tmp = new long[11];
+        long[] tmp = new long[12];
         int n = 0;
         if (temperature) tmp[n++] = RenderSettings.RenderMode.TFC_TEMPERATURE.flag;
         if (rainfall) tmp[n++] = RenderSettings.RenderMode.TFC_RAINFALL.flag;
@@ -82,6 +85,7 @@ public record TFCWorkPlan(
         if (treeSpecies) tmp[n++] = RenderSettings.RenderMode.TFC_TREE_SPECIES.flag;
         if (soilType) tmp[n++] = RenderSettings.RenderMode.TFC_SOIL_TYPE.flag;
         if (cropSuitability) tmp[n++] = RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag;
+        if (perennialSuitability) tmp[n++] = RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag;
         if (features) tmp[n++] = FEATURES_FLAG;
         long[] out = new long[n];
         System.arraycopy(tmp, 0, out, 0, n);
@@ -100,6 +104,7 @@ public record TFCWorkPlan(
         if (treeSpecies) sb.append("tree ");
         if (soilType) sb.append("soil ");
         if (cropSuitability) sb.append("crop ");
+        if (perennialSuitability) sb.append("perennial ");
         if (hotspot) sb.append("hotspot ");
         if (features) sb.append("features ");
         return sb.toString().trim();

@@ -27,7 +27,6 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import org.jetbrains.annotations.Nullable;
 
-import net.dries007.tfc.world.biome.BiomeBlendType;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
 import net.dries007.tfc.world.chunkdata.ForestType;
@@ -119,7 +118,7 @@ public class TFCRegionWorkUnit extends WorkUnit
 
     private final KaolinBiomeRules kaolinRules;
     private final ChunkSampler sampler;
-    private final ChunkSampler cropSampler;
+    private final ChunkSampler fullQuartSampler;
     private final RegionGenerator regionGenerator;
     private final TFCSampleUtils tfcSampleUtils;
     @Nullable
@@ -129,12 +128,14 @@ public class TFCRegionWorkUnit extends WorkUnit
     private final TFCWorkPlan plan;
     @Nullable
     private final TFCCropContext cropContext;
+    @Nullable
+    private final TFCPerennialContext perennialContext;
     private final List<PreviewSection> completionSections;
     private final Set<Long> detectedFeatureCenters = new HashSet<>();
 
     public TFCRegionWorkUnit(
         ChunkSampler sampler,
-        ChunkSampler cropSampler,
+        ChunkSampler fullQuartSampler,
         SampleUtils sampleUtils,
         ChunkPos chunkPos,
         int numChunks,
@@ -145,18 +146,20 @@ public class TFCRegionWorkUnit extends WorkUnit
         KaolinBiomeRules kaolinRules,
         TFCWorkPlan plan,
         @Nullable TFCCropContext cropContext,
+        @Nullable TFCPerennialContext perennialContext,
         long seed
     )
     {
         super(sampleUtils, chunkPos, previewData, 0);
         this.sampler = sampler;
-        this.cropSampler = cropSampler;
+        this.fullQuartSampler = fullQuartSampler;
         this.numChunks = numChunks;
         this.regionGenerator = regionGenerator;
         this.tfcSampleUtils = tfcSampleUtils;
         this.treeResolver = treeResolver;
         this.plan = plan;
         this.cropContext = plan.cropSuitability() ? cropContext : null;
+        this.perennialContext = plan.perennialSuitability() ? perennialContext : null;
         this.kaolinRules = plan.kaolin() ? kaolinRules : null;
         this.seed = seed;
 
@@ -189,8 +192,11 @@ public class TFCRegionWorkUnit extends WorkUnit
         final AnnualClimateSchedule cropSchedule = this.cropContext != null ? this.cropContext.schedule() : null;
         final boolean cropHasClimateData = this.cropContext != null
             && this.cropContext.crop() != null && this.cropContext.crop().hasClimateData();
+        final boolean perennialHasClimateData = this.perennialContext != null
+            && this.perennialContext.perennial() != null && this.perennialContext.perennial().hasClimateData();
         final boolean needsChunkData = this.plan.forestType() || this.plan.treeSpecies() || this.plan.soilType()
-            || (this.plan.cropSuitability() && cropHasClimateData);
+            || (this.plan.cropSuitability() && cropHasClimateData)
+            || (this.plan.perennialSuitability() && perennialHasClimateData);
 
         try
         {
@@ -208,7 +214,7 @@ public class TFCRegionWorkUnit extends WorkUnit
             {
                 for (int dz = 0; dz < this.numChunks && !this.isCanceled(); dz++)
                 {
-                    if (this.isStaleCrop())
+                    if (this.isStalePlantSelection())
                     {
                         return List.of();
                     }
@@ -228,6 +234,8 @@ public class TFCRegionWorkUnit extends WorkUnit
                     WorkResult treeSpeciesResult = this.plan.treeSpecies() ? newResult(cp, RenderSettings.RenderMode.TFC_TREE_SPECIES.flag) : null;
                     WorkResult soilTypeResult = this.plan.soilType() ? newResult(cp, RenderSettings.RenderMode.TFC_SOIL_TYPE.flag) : null;
                     WorkResult cropResult = this.plan.cropSuitability() ? newResult(cp, RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag) : null;
+                    WorkResult perennialResult = this.plan.perennialSuitability()
+                        ? newResult(cp, RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag) : null;
 
                     PreviewSection structureSection = this.plan.features() ? this.storage.section4(cp, 0, 1L) : null;
                     boolean detectFeaturesForChunk = this.plan.features()
@@ -269,11 +277,12 @@ public class TFCRegionWorkUnit extends WorkUnit
                             soilHeightNanos += dtH;
                         }
                     }
-                    QuartSurfaceHeights cropSurfaceHeights = null;
-                    if (this.plan.cropSuitability() && cropHasClimateData)
+                    QuartSurfaceHeights plantSurfaceHeights = null;
+                    if ((this.plan.cropSuitability() && cropHasClimateData)
+                        || (this.plan.perennialSuitability() && perennialHasClimateData))
                     {
                         long tH = timeCrop ? System.nanoTime() : 0L;
-                        cropSurfaceHeights = sampleQuartSurfaceHeights(cp);
+                        plantSurfaceHeights = sampleQuartSurfaceHeights(cp);
                         if (timeCrop) cropHeightNanos += System.nanoTime() - tH;
                     }
 
@@ -396,7 +405,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 if (timeSoil) soilBiomeNanos += System.nanoTime() - tB;
                             }
 
-                            short treeMapWater = classifyTreeMapWater(treeMapBiome);
+                            short treeMapWater = TFCSampleUtils.classifyTreeMapWater(treeMapBiome);
                             switch (treeMapWater)
                             {
                                 case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
@@ -455,9 +464,9 @@ public class TFCRegionWorkUnit extends WorkUnit
                     long tCropLoop = timeCrop ? System.nanoTime() : 0L;
                     if (this.plan.cropSuitability() && cropResult != null)
                     {
-                        for (BlockPos pos : this.cropSampler.blocksForChunk(cp, 0))
+                        for (BlockPos pos : this.fullQuartSampler.blocksForChunk(cp, 0))
                         {
-                            if (this.isCanceled() || this.isStaleCrop())
+                            if (this.isCanceled() || this.isStalePlantSelection())
                             {
                                 return List.of();
                             }
@@ -475,7 +484,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 }
                             }
 
-                            short cropWater = classifyTreeMapWater(cropBiome);
+                            short cropWater = TFCSampleUtils.classifyTreeMapWater(cropBiome);
                             switch (cropWater)
                             {
                                 case TFCSampleUtils.VALUE_WATER_OCEAN -> treeMapOceanPoints.incrementAndGet();
@@ -489,13 +498,13 @@ public class TFCRegionWorkUnit extends WorkUnit
                                 cropValue = cropWater;
                             }
                             else if (chunkData != null
-                                && cropSurfaceHeights != null
+                                && plantSurfaceHeights != null
                                 && this.cropContext != null
                                 && this.cropContext.crop() != null
                                 && cropSchedule != null
                                 && this.tfcSampleUtils != null)
                             {
-                                int surfaceY = cropSurfaceHeights.interpolatedSurfaceY(pos.getX(), pos.getZ());
+                                int surfaceY = plantSurfaceHeights.interpolatedSurfaceY(pos.getX(), pos.getZ());
                                 cropValue = TFCCropSuitability.evaluateMapValue(
                                     this.cropContext.crop(), this.tfcSampleUtils.climateSampler(), chunkData,
                                     pos.getX(), pos.getZ(), surfaceY, this.cropContext.waterMode(),
@@ -505,10 +514,66 @@ public class TFCRegionWorkUnit extends WorkUnit
                             {
                                 cropValue = TFCSampleUtils.VALUE_INVALID;
                             }
-                            this.cropSampler.expandRaw(pos, cropValue, cropResult);
+                            this.fullQuartSampler.expandRaw(pos, cropValue, cropResult);
                         }
                     }
                     if (timeCrop) cropLoopNanos += System.nanoTime() - tCropLoop;
+
+                    if (this.plan.perennialSuitability() && perennialResult != null)
+                    {
+                        for (BlockPos pos : this.fullQuartSampler.blocksForChunk(cp, 0))
+                        {
+                            if (this.isCanceled() || this.isStalePlantSelection())
+                            {
+                                return List.of();
+                            }
+                            gridCellsProcessed[0]++;
+                            BiomeExtension perennialBiome = null;
+                            try
+                            {
+                                perennialBiome = this.tfcSampleUtils.sampleBiomeExtension(pos.getX(), pos.getZ());
+                            }
+                            catch (RuntimeException ignored)
+                            {
+                                // A single missing addon biome mapping becomes No Data for this point.
+                            }
+                            short perennialWater = TFCSampleUtils.classifyTreeMapWater(perennialBiome);
+                            short perennialValue;
+                            if (chunkData != null
+                                && plantSurfaceHeights != null
+                                && this.perennialContext != null
+                                && this.perennialContext.perennial() != null)
+                            {
+                                int surfaceY = plantSurfaceHeights.interpolatedSurfaceY(pos.getX(), pos.getZ());
+                                perennialValue = TFCPerennialSuitability.evaluateMapValue(
+                                    this.perennialContext.perennial(), chunkData,
+                                    pos.getX(), pos.getZ(), surfaceY,
+                                    this.perennialContext.waterMode(), perennialWater
+                                );
+                            }
+                            else if (this.perennialContext != null
+                                && this.perennialContext.perennial() != null
+                                && this.perennialContext.perennial().habitat()
+                                    == TFCPerennialRegistry.PerennialHabitat.FRESHWATER_WATERLOGGED
+                                && perennialWater == TFCSampleUtils.VALUE_WATER_OCEAN)
+                            {
+                                perennialValue = TFCPerennialSuitability.PERENNIAL_IMPOSSIBLE;
+                            }
+                            else if (this.perennialContext != null
+                                && this.perennialContext.perennial() != null
+                                && this.perennialContext.perennial().habitat()
+                                    != TFCPerennialRegistry.PerennialHabitat.FRESHWATER_WATERLOGGED
+                                && TFCSampleUtils.isWaterValue(perennialWater))
+                            {
+                                perennialValue = perennialWater;
+                            }
+                            else
+                            {
+                                perennialValue = TFCSampleUtils.VALUE_INVALID;
+                            }
+                            this.fullQuartSampler.expandRaw(pos, perennialValue, perennialResult);
+                        }
+                    }
 
                     addIfPresent(allResults, tempResult);
                     addIfPresent(allResults, rainResult);
@@ -522,11 +587,12 @@ public class TFCRegionWorkUnit extends WorkUnit
                     addIfPresent(allResults, treeSpeciesResult);
                     addIfPresent(allResults, soilTypeResult);
                     addIfPresent(allResults, cropResult);
+                    addIfPresent(allResults, perennialResult);
                     addIfPresent(allResults, hotspotResult);
                 }
             }
 
-            if (this.isStaleCrop())
+            if (this.isStalePlantSelection())
             {
                 return List.of();
             }
@@ -601,7 +667,7 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public void markCompleted()
     {
-        if (this.isStaleCrop())
+        if (this.isStalePlantSelection())
         {
             return;
         }
@@ -621,12 +687,22 @@ public class TFCRegionWorkUnit extends WorkUnit
     @Override
     public boolean isResultValid()
     {
-        return super.isResultValid() && !this.isStaleCrop();
+        return super.isResultValid() && !this.isStalePlantSelection();
     }
 
     private boolean isStaleCrop()
     {
         return this.cropContext != null && this.cropContext.isStale();
+    }
+
+    private boolean isStalePerennial()
+    {
+        return this.perennialContext != null && this.perennialContext.isStale();
+    }
+
+    private boolean isStalePlantSelection()
+    {
+        return this.isStaleCrop() || this.isStalePerennial();
     }
 
     private WorkResult newResult(ChunkPos cp, long flag)
@@ -654,23 +730,6 @@ public class TFCRegionWorkUnit extends WorkUnit
         if (point.shore()) return LAND_WATER_SHORE;
         if (!point.land()) return LAND_WATER_OCEAN;
         return LAND_WATER_LAND;
-    }
-
-    private short classifyTreeMapWater(@Nullable BiomeExtension biome)
-    {
-        if (!TFCSampleUtils.isTreeMapWaterBiome(biome))
-        {
-            return -1;
-        }
-        if (biome.biomeBlendType() == BiomeBlendType.OCEAN)
-        {
-            return TFCSampleUtils.VALUE_WATER_OCEAN;
-        }
-        if (biome.key().location().getPath().equals("river"))
-        {
-            return TFCSampleUtils.VALUE_WATER_RIVER;
-        }
-        return TFCSampleUtils.VALUE_WATER_LAKE;
     }
 
     private QuartSurfaceHeights sampleQuartSurfaceHeights(ChunkPos chunk)

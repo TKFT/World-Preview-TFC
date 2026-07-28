@@ -40,6 +40,9 @@ import com.rustysnail.world.preview.tfc.backend.worker.tfc.QuartSurfaceHeights;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropContext;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialContext;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialSuitability;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
@@ -81,7 +84,7 @@ public class WorkManager
     @Nullable private DimensionType dimensionType;
     @Nullable private ChunkGenerator chunkGenerator;
     private ChunkSampler chunkSampler;
-    private final ChunkSampler cropSampler = new FullQuartSampler();
+    private final ChunkSampler plantSampler = new FullQuartSampler();
     @Nullable private SampleUtils sampleUtils;
     private PreviewData previewData;
     @Nullable private PreviewStorage previewStorage;
@@ -107,6 +110,14 @@ public class WorkManager
     // Bounded hover caches (crop suitability breakdown, and ChunkData+four-height grid). Keyed to
     // include everything a crop result depends on, so a stale entry can never be served.
     private final CropHoverCache cropHoverCache = new CropHoverCache(256, 16);
+    private TFCPerennialRegistry perennialRegistry = TFCPerennialRegistry.active();
+    @Nullable
+    private ResourceLocation selectedPerennialId;
+    private TFCPerennialSuitability.PerennialWaterMode perennialWaterMode =
+        TFCPerennialSuitability.PerennialWaterMode.RAIN_FED;
+    private final java.util.concurrent.atomic.AtomicInteger perennialRevision =
+        new java.util.concurrent.atomic.AtomicInteger(0);
+    private final PerennialHoverCache perennialHoverCache = new PerennialHoverCache(256, 16);
     private final ChunkDataCache chunkDataHoverCache = new ChunkDataCache(64);
 
     @Nullable
@@ -191,6 +202,7 @@ public class WorkManager
             ? TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings())
             : null;
         this.rebuildCropRegistry();
+        this.rebuildPerennialRegistry();
 
         synchronized (this.previewStorageSynchro)
         {
@@ -317,6 +329,7 @@ public class WorkManager
         this.cancel();
         // Invalidates any async hover computation that captured the previous world-gen state.
         this.cropRevision.incrementAndGet();
+        this.perennialRevision.incrementAndGet();
         this.worldGenerationRevision.incrementAndGet();
         this.activeServer = server;
         this.worldOptions = _worldOptions;
@@ -369,6 +382,7 @@ public class WorkManager
                 this.kaolinRules.rebuild(this.sampleUtils.resourceManager());
                 this.tfcTreeResolver = TFCTreeResolver.create(this.sampleUtils.registryAccess(), this.tfcSampleUtils.settings());
                 this.rebuildCropRegistry();
+                this.rebuildPerennialRegistry();
                 WorldPreview.LOGGER.info("TFC-compatible chunk generator detected, TFC sampling enabled");
             }
             else
@@ -389,8 +403,10 @@ public class WorkManager
         // modifier - none of which are stored beside flag 16 - so a loaded section could belong to a
         // different crop/calendar. Always drop flag 16 on load; crop data is session-only for now.
         this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
+        this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag);
         this.capturedCropCalendar = null; // force a fresh calendar resolve + regenerate on next crop pass
         this.cropHoverCache.clear();
+        this.perennialHoverCache.clear();
         this.chunkDataHoverCache.clear();
         this.executorService = Executors.newFixedThreadPool(this.config.numThreads());
         this.queueChunksService = Executors.newSingleThreadExecutor();
@@ -400,6 +416,7 @@ public class WorkManager
     private void shutdownExecutors()
     {
         this.cropHoverCache.clear();
+        this.perennialHoverCache.clear();
         if (this.cropHoverExecutor != null)
         {
             this.cropHoverExecutor.shutdownNow();
@@ -645,6 +662,8 @@ public class WorkManager
             // two: unit origins are aligned to numChunks so the units tile the range without gaps.
             // Crop suitability uses even smaller 8x8 units - its per-point cost is higher (48 annual
             // samples), so smaller units cancel faster on crop/pan changes and stream partial results.
+            // Perennial evaluation is one annual-average check per quart, so 16x16 keeps scheduling
+            // overhead low while retaining the same cancellation granularity as other TFC modes.
             final int numChunks = tfcPlan.cropSuitability() ? TFC_CROP_UNIT_CHUNKS : TFC_UNIT_CHUNKS;
             final int alignBits = Integer.numberOfTrailingZeros(numChunks);
 
@@ -665,13 +684,15 @@ public class WorkManager
             // Snapshot the crop selection for this queue pass. Units capture the crop revision so that
             // a later crop/water-mode change makes them stale (results discarded); see TFCCropContext.
             final TFCCropContext cropContext = tfcPlan.cropSuitability() ? this.buildCropContext() : null;
+            final TFCPerennialContext perennialContext =
+                tfcPlan.perennialSuitability() ? this.buildPerennialContext() : null;
             units += this.queueForLevel(
                 tfcChunks,
                 0,
                 1,
                 (pos, yx) -> new TFCRegionWorkUnit(
                     this.chunkSampler,
-                    this.cropSampler,
+                    this.plantSampler,
                     this.sampleUtils,
                     pos,
                     numChunks,
@@ -682,6 +703,7 @@ public class WorkManager
                     this.kaolinRules,
                     tfcPlan,
                     cropContext,
+                    perennialContext,
                     worldSeed
                 )
             );
@@ -907,34 +929,32 @@ public class WorkManager
 
     private CropCalendarSettings resolveCropCalendarSettings()
     {
-        int daysInMonth;
-        try
-        {
-            if (this.activeServer != null)
-            {
-                daysInMonth = Calendars.get(this.activeServer.overworld()).getCalendarDaysInMonth();
-            }
-            else
-            {
-                daysInMonth = TFCConfig.COMMON.defaultMonthLength.get();
-            }
-        }
-        catch (Throwable t)
-        {
-            daysInMonth = Calendar.DEFAULT_MONTH_LENGTH;
-        }
-
+        int daysInMonth = this.resolveDaysInMonth();
         float growthModifier;
         try
         {
             growthModifier = TFCConfig.SERVER.cropGrowthModifier.get().floatValue();
         }
-        catch (Throwable t)
+        catch (RuntimeException | LinkageError ignored)
         {
             growthModifier = 1f;
         }
 
         return CropCalendarSettings.build(daysInMonth, growthModifier);
+    }
+
+    private int resolveDaysInMonth()
+    {
+        try
+        {
+            return this.activeServer != null
+                ? Calendars.get(this.activeServer.overworld()).getCalendarDaysInMonth()
+                : TFCConfig.COMMON.defaultMonthLength.get();
+        }
+        catch (RuntimeException | LinkageError ignored)
+        {
+            return Calendar.DEFAULT_MONTH_LENGTH;
+        }
     }
 
     private synchronized CropCalendarSettings ensureCropCalendarCurrent()
@@ -1143,6 +1163,239 @@ public class WorkManager
         }
     }
 
+    // -------------------------- Perennial suitability ---------------------------
+
+    private void rebuildPerennialRegistry()
+    {
+        TFCPerennialRegistry previous = this.perennialRegistry;
+        if (this.tfcSampleUtils != null && this.sampleUtils != null)
+        {
+            this.perennialRegistry = TFCPerennialRegistry.build(this.sampleUtils.resourceManager());
+        }
+        TFCPerennialRegistry.setActive(this.perennialRegistry);
+        if (this.selectedPerennialId == null || this.perennialRegistry.get(this.selectedPerennialId) == null)
+        {
+            TFCPerennialRegistry.PerennialEntry first = this.perennialRegistry.first();
+            this.selectedPerennialId = first != null ? first.id() : null;
+        }
+        if (this.previewStorage != null && !previous.entries().equals(this.perennialRegistry.entries()))
+        {
+            this.perennialRevision.incrementAndGet();
+            this.invalidatePerennialMapState();
+        }
+    }
+
+    public TFCPerennialRegistry perennialRegistry()
+    {
+        return this.perennialRegistry;
+    }
+
+    @Nullable
+    public ResourceLocation selectedPerennialId()
+    {
+        return this.selectedPerennialId;
+    }
+
+    public TFCPerennialSuitability.PerennialWaterMode perennialWaterMode()
+    {
+        return this.perennialWaterMode;
+    }
+
+    public int perennialRevision()
+    {
+        return this.perennialRevision.get();
+    }
+
+    public int perennialDaysInMonth()
+    {
+        return this.resolveDaysInMonth();
+    }
+
+    public int perennialBerryGrowthTicks()
+    {
+        return perennialConfigValue(TFCConfig.SERVER.berryBushGrowthTicks, -1);
+    }
+
+    public int perennialBloomDelayTicks()
+    {
+        return perennialConfigValue(TFCConfig.SERVER.fruitPickBloomDelayTicks, -1);
+    }
+
+    private synchronized TFCPerennialContext buildPerennialContext()
+    {
+        TFCPerennialRegistry.PerennialEntry entry = this.selectedPerennialId != null
+            ? this.perennialRegistry.get(this.selectedPerennialId) : null;
+        return new TFCPerennialContext(
+            this.selectedPerennialId, entry, this.perennialWaterMode,
+            this.perennialRevision.get(), this.perennialRevision::get
+        );
+    }
+
+    public synchronized void setSelectedPerennial(@Nullable ResourceLocation perennialId)
+    {
+        if (java.util.Objects.equals(perennialId, this.selectedPerennialId))
+        {
+            return;
+        }
+        this.selectedPerennialId = perennialId;
+        this.regeneratePerennialMap();
+    }
+
+    public synchronized void setPerennialWaterMode(TFCPerennialSuitability.PerennialWaterMode mode)
+    {
+        if (mode == null || mode == this.perennialWaterMode)
+        {
+            return;
+        }
+        this.perennialWaterMode = mode;
+        this.regeneratePerennialMap();
+    }
+
+    private void regeneratePerennialMap()
+    {
+        this.perennialRevision.incrementAndGet();
+        this.invalidatePerennialMapState();
+    }
+
+    private void invalidatePerennialMapState()
+    {
+        this.perennialHoverCache.clear();
+        if (this.previewStorage == null)
+        {
+            return;
+        }
+        synchronized (this.previewStorageSynchro)
+        {
+            this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag);
+        }
+        synchronized (this.currentBatches)
+        {
+            this.currentBatches.forEach(WorkBatch::cancel);
+            this.currentBatches.clear();
+        }
+        this.lastQueuedTopLeft = null;
+        this.lastQueuedBotRight = null;
+        this.lastQueuedWasTfc = false;
+        this.lastQueuedModeFlag = Long.MIN_VALUE;
+        this.bumpDataRevision();
+    }
+
+    @Nullable
+    public synchronized TFCPerennialSuitability.PerennialSuitabilityResult requestPerennialDetailsAt(
+        int blockX,
+        int blockZ
+    )
+    {
+        TFCSampleUtils tfc = this.tfcSampleUtils;
+        SampleUtils samples = this.sampleUtils;
+        ExecutorService hoverExecutor = this.cropHoverExecutor;
+        ResourceLocation perennialId = this.selectedPerennialId;
+        if (tfc == null || samples == null || hoverExecutor == null || perennialId == null)
+        {
+            return null;
+        }
+        TFCPerennialRegistry.PerennialEntry entry = this.perennialRegistry.get(perennialId);
+        if (entry == null)
+        {
+            return null;
+        }
+
+        int quartX = blockX >> 2;
+        int quartZ = blockZ >> 2;
+        int revision = this.perennialRevision.get();
+        int worldRevision = this.worldGenerationRevision.get();
+        int daysInMonth = this.resolveDaysInMonth();
+        int berryGrowthTicks = perennialConfigValue(TFCConfig.SERVER.berryBushGrowthTicks, -1);
+        int bloomDelayTicks = perennialConfigValue(TFCConfig.SERVER.fruitPickBloomDelayTicks, -1);
+        PerennialHoverCache.Key key = new PerennialHoverCache.Key(
+            quartX, quartZ, perennialId, this.perennialWaterMode, revision,
+            daysInMonth, berryGrowthTicks, bloomDelayTicks
+        );
+        TFCPerennialSuitability.PerennialSuitabilityResult cached = this.perennialHoverCache.get(key);
+        if (cached != null || !this.perennialHoverCache.reserve(key))
+        {
+            return cached;
+        }
+
+        int canonicalX = quartX << 2;
+        int canonicalZ = quartZ << 2;
+        TFCPerennialSuitability.PerennialWaterMode waterMode = this.perennialWaterMode;
+        try
+        {
+            Future<?> future = hoverExecutor.submit(() -> {
+                TFCPerennialSuitability.PerennialSuitabilityResult result = this.computePerennialAt(
+                    entry, canonicalX, canonicalZ, waterMode, worldRevision, tfc, samples);
+                if (result != null
+                    && this.perennialRevision.get() == revision
+                    && this.worldGenerationRevision.get() == worldRevision)
+                {
+                    this.perennialHoverCache.complete(key, result);
+                }
+                else
+                {
+                    this.perennialHoverCache.discard(key);
+                }
+            });
+            this.perennialHoverCache.attach(key, future);
+        }
+        catch (java.util.concurrent.RejectedExecutionException ignored)
+        {
+            this.perennialHoverCache.discard(key);
+        }
+        return null;
+    }
+
+    @Nullable
+    private TFCPerennialSuitability.PerennialSuitabilityResult computePerennialAt(
+        TFCPerennialRegistry.PerennialEntry entry,
+        int blockX,
+        int blockZ,
+        TFCPerennialSuitability.PerennialWaterMode waterMode,
+        int worldRevision,
+        TFCSampleUtils tfc,
+        SampleUtils samples
+    )
+    {
+        try
+        {
+            BiomeExtension biome = tfc.sampleBiomeExtension(blockX, blockZ);
+            short mapWater = TFCSampleUtils.classifyTreeMapWater(biome);
+            ChunkPos chunk = new ChunkPos(blockX >> 4, blockZ >> 4);
+            ChunkDataCache.Key cacheKey = new ChunkDataCache.Key(chunk.toLong(), worldRevision);
+            ChunkDataCache.Entry cached = this.chunkDataHoverCache.get(cacheKey);
+            if (cached == null)
+            {
+                cached = new ChunkDataCache.Entry(
+                    tfc.sampleChunkData(chunk),
+                    sampleQuartSurfaceHeights(samples, chunk)
+                );
+                this.chunkDataHoverCache.put(cacheKey, cached);
+            }
+            int surfaceY = cached.surfaceHeights().interpolatedSurfaceY(blockX, blockZ);
+            return TFCPerennialSuitability.evaluateDetailed(
+                entry, cached.chunkData(), blockX, blockZ, surfaceY,
+                tfc.settings().temperatureScale(), waterMode, mapWater
+            );
+        }
+        catch (RuntimeException | LinkageError ignored)
+        {
+            return null;
+        }
+    }
+
+    private static int perennialConfigValue(java.util.function.Supplier<Integer> supplier, int fallback)
+    {
+        try
+        {
+            Integer value = supplier.get();
+            return value == null ? fallback : value;
+        }
+        catch (RuntimeException | LinkageError ignored)
+        {
+            return fallback;
+        }
+    }
+
     /**
      * Bounded result LRU plus a separately bounded/cancelable set of in-flight calculations.
      */
@@ -1205,6 +1458,99 @@ public class WorkManager
         }
 
         synchronized void complete(Key key, TFCCropSuitability.CropSuitabilityResult value)
+        {
+            if (this.pending.containsKey(key))
+            {
+                this.pending.remove(key);
+                this.results.put(key, value);
+            }
+        }
+
+        synchronized void discard(Key key)
+        {
+            Future<?> future = this.pending.remove(key);
+            if (future != null && !future.isDone()) future.cancel(true);
+        }
+
+        synchronized void clear()
+        {
+            for (Future<?> future : this.pending.values())
+            {
+                if (future != null) future.cancel(true);
+            }
+            this.pending.clear();
+            this.results.clear();
+        }
+    }
+
+    private static final class PerennialHoverCache
+    {
+        record Key(
+            int quartX,
+            int quartZ,
+            ResourceLocation perennialId,
+            TFCPerennialSuitability.PerennialWaterMode waterMode,
+            int perennialRevision,
+            int daysInMonth,
+            int berryGrowthTicks,
+            int bloomDelayTicks
+        ) {}
+
+        private final int maxPending;
+        private final java.util.LinkedHashMap<Key, TFCPerennialSuitability.PerennialSuitabilityResult> results;
+        private final java.util.LinkedHashMap<Key, Future<?>> pending = new java.util.LinkedHashMap<>();
+
+        PerennialHoverCache(int maxEntries, int maxPending)
+        {
+            this.maxPending = maxPending;
+            this.results = new java.util.LinkedHashMap<>(16, 0.75f, true)
+            {
+                @Override
+                protected boolean removeEldestEntry(
+                    java.util.Map.Entry<Key, TFCPerennialSuitability.PerennialSuitabilityResult> eldest
+                )
+                {
+                    return size() > maxEntries;
+                }
+            };
+        }
+
+        @Nullable
+        synchronized TFCPerennialSuitability.PerennialSuitabilityResult get(Key key)
+        {
+            return this.results.get(key);
+        }
+
+        synchronized boolean reserve(Key key)
+        {
+            if (this.results.containsKey(key) || this.pending.containsKey(key))
+            {
+                return false;
+            }
+            while (this.pending.size() >= this.maxPending)
+            {
+                var iterator = this.pending.entrySet().iterator();
+                var eldest = iterator.next();
+                if (eldest.getValue() != null) eldest.getValue().cancel(true);
+                iterator.remove();
+            }
+            this.pending.put(key, null);
+            return true;
+        }
+
+        synchronized void attach(Key key, Future<?> future)
+        {
+            if (this.pending.containsKey(key))
+            {
+                this.pending.put(key, future);
+            }
+            else
+            {
+                future.cancel(true);
+            }
+        }
+
+        synchronized void complete(Key key, TFCPerennialSuitability.PerennialSuitabilityResult value)
         {
             if (this.pending.containsKey(key))
             {

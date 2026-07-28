@@ -45,6 +45,8 @@ import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialRegistry;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialSuitability;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewComponents;
 import com.rustysnail.world.preview.tfc.client.gui.PreviewContainerDataProvider;
@@ -59,6 +61,7 @@ import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.SeedsList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.StructuresList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.TFCCropList;
 import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.TFCMapValueList;
+import com.rustysnail.world.preview.tfc.client.gui.widgets.lists.TFCPerennialList;
 import com.rustysnail.world.preview.tfc.mixin.client.ScreenAccessor;
 import it.unimi.dsi.fastutil.shorts.Short2LongMap;
 import it.unimi.dsi.fastutil.shorts.Short2LongMap.Entry;
@@ -143,6 +146,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final ToggleButton toggleTFCSoilType;
     private final ToggleButton toggleTFCCropSuitability;
     private final Button toggleCropWaterMode;
+    private final ToggleButton toggleTFCPerennialSuitability;
+    private final Button togglePerennialWaterMode;
     private final ToggleButton toggleTFCHotspot;
     private final Button cycleResolutionButton;
     private final Button resetDefaultStructureVisibility;
@@ -164,6 +169,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     // (tfcMapValueList) shown compact at the bottom, and a Rain-Fed / Irrigated toggle.
     private final TFCCropList cropList;
     private final List<TFCMapValueList.ValueEntry> suitabilityEntries;
+    private final TFCPerennialList perennialList;
+    private final List<TFCMapValueList.ValueEntry> perennialSuitabilityEntries;
     // Rebuilt from the runtime tree-species registry each time Tree Species mode is entered, so
     // addon species that only appear once a world is loaded are included.
     private List<TFCMapValueList.ValueEntry> treeSpeciesEntries = new ArrayList<>();
@@ -326,11 +333,31 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             TFCSampleUtils.VALUE_INVALID, TFCCropSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
             TFCCropSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID)));
 
+        this.perennialSuitabilityEntries = new ArrayList<>();
+        for (short value = 0; value < TFCPerennialSuitability.suitabilityCount(); value++)
+        {
+            this.perennialSuitabilityEntries.add(this.tfcMapValueList.createEntry(
+                value,
+                TFCPerennialSuitability.getSuitabilityName(value),
+                TFCPerennialSuitability.getSuitabilityColor(value)
+            ));
+        }
+        this.perennialSuitabilityEntries.add(this.tfcMapValueList.createEntry(
+            TFCSampleUtils.VALUE_WATER, "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER)));
+        this.perennialSuitabilityEntries.add(this.tfcMapValueList.createEntry(
+            TFCSampleUtils.VALUE_INVALID,
+            TFCPerennialSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
+            TFCPerennialSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID)));
+
         // Crop selector list (main list in crop mode).
         this.cropList = new TFCCropList(this.minecraft, 200, 300, 4, 100);
         this.cropList.visible = false;
         this.cropList.active = false;
         this.toRender.add(this.cropList);
+        this.perennialList = new TFCPerennialList(this.minecraft, 200, 300, 4, 100);
+        this.perennialList.visible = false;
+        this.perennialList.active = false;
+        this.toRender.add(this.perennialList);
 
         this.structuresList = new StructuresList(this.minecraft, 200, 300, 4, 100);
         this.toRender.add(this.structuresList);
@@ -470,6 +497,27 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleCropWaterMode.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_CROP_WATER_MODE));
         this.toRender.add(this.toggleCropWaterMode);
 
+        // Temporary fruit/berry button reuses the crop glyph while remaining a separate render mode.
+        this.toggleTFCPerennialSuitability = new ToggleButton(
+            0, 0, 20, 20, 880, 20, 20, 20, BUTTONS_TEXTURE, 920, 60,
+            x -> this.selectViewMode(RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY)
+        );
+        this.toggleTFCPerennialSuitability.visible = false;
+        this.toggleTFCPerennialSuitability.active = false;
+        this.toggleTFCPerennialSuitability.setTooltip(
+            Tooltip.create(WorldPreviewComponents.BTN_TFC_PERENNIAL_SUITABILITY));
+        this.toRender.add(this.toggleTFCPerennialSuitability);
+
+        this.togglePerennialWaterMode = Button.builder(
+            this.getPerennialWaterModeLabel(), x -> this.cyclePerennialWaterMode())
+            .size(70, 20)
+            .build();
+        this.togglePerennialWaterMode.visible = false;
+        this.togglePerennialWaterMode.active = false;
+        this.togglePerennialWaterMode.setTooltip(
+            Tooltip.create(WorldPreviewComponents.BTN_PERENNIAL_WATER_MODE));
+        this.toRender.add(this.togglePerennialWaterMode);
+
         this.toggleTFCHotspot = new ToggleButton(0, 0, 20, 20, 720, 20, 20, 20, BUTTONS_TEXTURE, 920, 60, x -> this.selectViewMode(RenderSettings.RenderMode.TFC_HOTSPOT));
         this.toggleTFCHotspot.visible = false;
         this.toggleTFCHotspot.active = false;
@@ -498,6 +546,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCTreeSpecies.visible = expanded && isTFC;
             this.toggleTFCSoilType.visible = expanded && isTFC;
             this.toggleTFCCropSuitability.visible = expanded && isTFC;
+            this.toggleTFCPerennialSuitability.visible = expanded && isTFC;
             this.toggleTFCHotspot.visible = expanded && isTFC;
             this.doLayout(this.lastScreenRectangle);
         });
@@ -514,6 +563,12 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             if (x != null)
             {
                 this.workManager.setSelectedCrop(x.cropId());
+            }
+        });
+        this.perennialList.setChangeListener(x -> {
+            if (x != null)
+            {
+                this.workManager.setSelectedPerennial(x.id());
             }
         });
         this.dataProvider.registerSettingsChangeListener(this::updateSettings);
@@ -566,6 +621,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleTFCTreeSpecies.selected = false;
         this.toggleTFCSoilType.selected = false;
         this.toggleTFCCropSuitability.selected = false;
+        this.toggleTFCPerennialSuitability.selected = false;
         this.toggleTFCHotspot.selected = false;
         synchronized (this.renderSettings)
         {
@@ -613,6 +669,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                 case TFC_CROP_SUITABILITY:
                     this.toggleTFCCropSuitability.selected = true;
                     break;
+                case TFC_PERENNIAL_SUITABILITY:
+                    this.toggleTFCPerennialSuitability.selected = true;
+                    break;
                 case TFC_HOTSPOT:
                     this.toggleTFCHotspot.selected = true;
                     break;
@@ -640,8 +699,9 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         boolean isSpeciesMode = mode == RenderSettings.RenderMode.TFC_TREE_SPECIES;
         boolean isSoilMode = mode == RenderSettings.RenderMode.TFC_SOIL_TYPE;
         boolean isCropMode = mode == RenderSettings.RenderMode.TFC_CROP_SUITABILITY;
+        boolean isPerennialMode = mode == RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY;
         // Modes backed by the shared tfcMapValueList side legend (crop uses it as its fixed legend).
-        boolean isMapValueMode = isForestMode || isSpeciesMode || isSoilMode || isCropMode;
+        boolean isMapValueMode = isForestMode || isSpeciesMode || isSoilMode || isCropMode || isPerennialMode;
 
         // Update entry sets while the lists are still hidden (visibility is applied last). Deactivate
         // the tree list before swapping entries so the old ValueEntry can't be re-selected.
@@ -680,6 +740,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             {
                 entries = this.soilTypeEntries;
             }
+            else if (isPerennialMode)
+            {
+                entries = this.perennialSuitabilityEntries;
+            }
             else
             {
                 entries = this.suitabilityEntries;
@@ -696,6 +760,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         if (isCropMode)
         {
             this.refreshCropList();
+        }
+        if (isPerennialMode)
+        {
+            this.refreshPerennialList();
         }
 
         // Apply the single-active-list visibility for the new mode (also runs doLayout/moveList).
@@ -1227,6 +1295,10 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCCropSuitability.active = true;
             this.toggleTFCCropSuitability.visible = expanded;
             this.toggleTFCCropSuitability.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_CROP_SUITABILITY));
+            this.toggleTFCPerennialSuitability.active = true;
+            this.toggleTFCPerennialSuitability.visible = expanded;
+            this.toggleTFCPerennialSuitability.setTooltip(
+                Tooltip.create(WorldPreviewComponents.BTN_TFC_PERENNIAL_SUITABILITY));
             this.toggleTFCHotspot.active = true;
             this.toggleTFCHotspot.visible = expanded;
             this.toggleTFCHotspot.setTooltip(Tooltip.create(WorldPreviewComponents.BTN_TFC_HOTSPOT));
@@ -1257,6 +1329,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.toggleTFCSoilType.visible = false;
             this.toggleTFCCropSuitability.active = false;
             this.toggleTFCCropSuitability.visible = false;
+            this.toggleTFCPerennialSuitability.active = false;
+            this.toggleTFCPerennialSuitability.visible = false;
             this.toggleTFCHotspot.active = false;
             this.toggleTFCHotspot.visible = false;
             if (this.renderSettings.mode.isTFC())
@@ -1427,8 +1501,12 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.tfcMapValueList.active = false;
         this.cropList.visible = false;
         this.cropList.active = false;
+        this.perennialList.visible = false;
+        this.perennialList.active = false;
         this.toggleCropWaterMode.visible = false;
         this.toggleCropWaterMode.active = false;
+        this.togglePerennialWaterMode.visible = false;
+        this.togglePerennialWaterMode.active = false;
         this.structuresList.visible = false;
         this.structuresList.active = false;
         this.seedsList.visible = false;
@@ -1447,6 +1525,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                     || mode == RenderSettings.RenderMode.TFC_TREE_SPECIES
                     || mode == RenderSettings.RenderMode.TFC_SOIL_TYPE;
                 boolean isCropMode = mode == RenderSettings.RenderMode.TFC_CROP_SUITABILITY;
+                boolean isPerennialMode = mode == RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY;
                 boolean isRockMode = mode == RenderSettings.RenderMode.TFC_ROCK_TOP
                     || mode == RenderSettings.RenderMode.TFC_ROCK_MID
                     || mode == RenderSettings.RenderMode.TFC_ROCK_BOT
@@ -1460,6 +1539,15 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
                     this.tfcMapValueList.active = true;
                     this.toggleCropWaterMode.visible = true;
                     this.toggleCropWaterMode.active = true;
+                }
+                else if (isPerennialMode)
+                {
+                    this.perennialList.visible = true;
+                    this.perennialList.active = true;
+                    this.tfcMapValueList.visible = true;
+                    this.tfcMapValueList.active = true;
+                    this.togglePerennialWaterMode.visible = true;
+                    this.togglePerennialWaterMode.active = true;
                 }
                 else if (isTreeMode)
                 {
@@ -1599,7 +1687,8 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.toggleTFCTreeSpecies.setPosition(previewLeft + width * 9, top);
         this.toggleTFCSoilType.setPosition(previewLeft + width * 10, top);
         this.toggleTFCCropSuitability.setPosition(previewLeft + width * 11, top);
-        this.toggleTFCHotspot.setPosition(previewLeft + width * 12, top);
+        this.toggleTFCPerennialSuitability.setPosition(previewLeft + width * 12, top);
+        this.toggleTFCHotspot.setPosition(previewLeft + width * 13, top);
         int resolutionBtnRight = screenRectangle.right() - 8;
         this.cycleResolutionButton.setPosition(resolutionBtnRight - 50, top);
         top += 24;
@@ -1637,24 +1726,40 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         // Rain-Fed/Irrigated toggle pinned at the bottom. Non-crop modes leave the crop widgets sized
         // but hidden (moveList parks inactive lists off-screen).
         boolean cropModeLayout = this.renderSettings.mode == RenderSettings.RenderMode.TFC_CROP_SUITABILITY;
-        if (cropModeLayout)
+        boolean perennialModeLayout =
+            this.renderSettings.mode == RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY;
+        if (cropModeLayout || perennialModeLayout)
         {
             int waterBtnH = 20;
             int available = bottom - top;
-            int legendH = Math.min(this.suitabilityEntries.size() * 16 + 4, Math.max(48, available / 2));
+            int legendCount = perennialModeLayout
+                ? this.perennialSuitabilityEntries.size() : this.suitabilityEntries.size();
+            int legendH = Math.min(legendCount * 16 + 4, Math.max(48, available / 2));
             int waterY = bottom - waterBtnH;
             int legendTop = waterY - 4 - legendH;
-            this.toggleCropWaterMode.setPosition(left, waterY);
-            this.toggleCropWaterMode.setWidth(leftWidth);
+            Button waterButton = perennialModeLayout
+                ? this.togglePerennialWaterMode : this.toggleCropWaterMode;
+            waterButton.setPosition(left, waterY);
+            waterButton.setWidth(leftWidth);
             this.tfcMapValueList.setPosition(left, legendTop);
             this.tfcMapValueList.setSize(leftWidth, legendH);
-            this.cropList.setPosition(left, top);
-            this.cropList.setSize(leftWidth, Math.max(16, legendTop - 4 - top - 4));
+            if (perennialModeLayout)
+            {
+                this.perennialList.setPosition(left, top);
+                this.perennialList.setSize(leftWidth, Math.max(16, legendTop - 4 - top - 4));
+            }
+            else
+            {
+                this.cropList.setPosition(left, top);
+                this.cropList.setSize(leftWidth, Math.max(16, legendTop - 4 - top - 4));
+            }
         }
         else
         {
             this.cropList.setPosition(left, top);
             this.cropList.setSize(leftWidth, bottom - top - 4);
+            this.perennialList.setPosition(left, top);
+            this.perennialList.setSize(leftWidth, bottom - top - 4);
         }
         this.seedsList.setPosition(left, top);
         this.seedsList.setSize(leftWidth, bottom - top - 4);
@@ -2044,6 +2149,17 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.suitabilityEntries.get(TFCCropSuitability.suitabilityCount() + 1).update(
             TFCCropSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
             TFCCropSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID));
+        for (short i = 0; i < TFCPerennialSuitability.suitabilityCount(); i++)
+        {
+            this.perennialSuitabilityEntries.get(i).update(
+                TFCPerennialSuitability.getSuitabilityName(i),
+                TFCPerennialSuitability.getSuitabilityColor(i));
+        }
+        this.perennialSuitabilityEntries.get(TFCPerennialSuitability.suitabilityCount()).update(
+            "Water", TFCSampleUtils.getWaterTypeColor(TFCSampleUtils.VALUE_WATER));
+        this.perennialSuitabilityEntries.get(TFCPerennialSuitability.suitabilityCount() + 1).update(
+            TFCPerennialSuitability.getSuitabilityName(TFCSampleUtils.VALUE_INVALID),
+            TFCPerennialSuitability.getSuitabilityColor(TFCSampleUtils.VALUE_INVALID));
 
         if (this.renderSettings.mode == RenderSettings.RenderMode.TFC_TREE_SPECIES)
         {
@@ -2361,5 +2477,42 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             this.cropList.setSelected(selected, true);
         }
         this.toggleCropWaterMode.setMessage(this.getCropWaterModeLabel());
+    }
+
+    private Component getPerennialWaterModeLabel()
+    {
+        return this.workManager.perennialWaterMode() == TFCPerennialSuitability.PerennialWaterMode.IRRIGATED
+            ? WorldPreviewComponents.BTN_PERENNIAL_IRRIGATED
+            : WorldPreviewComponents.BTN_PERENNIAL_RAIN_FED;
+    }
+
+    private void cyclePerennialWaterMode()
+    {
+        TFCPerennialSuitability.PerennialWaterMode next =
+            this.workManager.perennialWaterMode() == TFCPerennialSuitability.PerennialWaterMode.RAIN_FED
+                ? TFCPerennialSuitability.PerennialWaterMode.IRRIGATED
+                : TFCPerennialSuitability.PerennialWaterMode.RAIN_FED;
+        this.workManager.setPerennialWaterMode(next);
+        this.togglePerennialWaterMode.setMessage(this.getPerennialWaterModeLabel());
+    }
+
+    private void refreshPerennialList()
+    {
+        List<TFCPerennialList.PerennialEntry> entries = new ArrayList<>();
+        for (TFCPerennialRegistry.PerennialEntry perennial : this.workManager.perennialRegistry().entries())
+        {
+            entries.add(this.perennialList.createEntry(
+                perennial.id(), perennial.displayName(), perennial.type()));
+        }
+        this.perennialList.replaceEntries(entries);
+        this.perennialList.setScrollAmount(0.0);
+        ResourceLocation selectedId = this.workManager.selectedPerennialId();
+        TFCPerennialList.PerennialEntry selected =
+            selectedId != null ? this.perennialList.getEntryById(selectedId) : null;
+        if (selected != null)
+        {
+            this.perennialList.setSelected(selected, true);
+        }
+        this.togglePerennialWaterMode.setMessage(this.getPerennialWaterModeLabel());
     }
 }
