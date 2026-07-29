@@ -68,4 +68,18 @@ class TFCCropRegistryTest
         assertEquals(Float.POSITIVE_INFINITY, defaults.maxTemperature());
         assertEquals(0f, defaults.temperatureWiggleRange());
     }
+
+    @Test
+    void harvestBehaviorDetectionUsesSpreadingThenPickableThenReplant()
+    {
+        assertEquals(
+            CropHarvestBehavior.SPREADING,
+            TFCCropRegistry.detectHarvestBehavior(true, true));
+        assertEquals(
+            CropHarvestBehavior.PICKABLE,
+            TFCCropRegistry.detectHarvestBehavior(false, true));
+        assertEquals(
+            CropHarvestBehavior.REPLANT,
+            TFCCropRegistry.detectHarvestBehavior(false, false));
+    }
 }

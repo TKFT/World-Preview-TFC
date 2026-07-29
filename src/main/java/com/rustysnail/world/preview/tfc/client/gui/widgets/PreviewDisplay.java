@@ -22,9 +22,9 @@ import com.rustysnail.world.preview.tfc.backend.storage.PreviewSection;
 import com.rustysnail.world.preview.tfc.backend.storage.PreviewStorage;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropRegistry;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCCropSuitability;
+import com.rustysnail.world.preview.tfc.backend.worker.tfc.CropHarvestBehavior;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialRegistry;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPerennialSuitability;
-import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCPreviewClimateSampler;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCRegionWorkUnit;
 import com.rustysnail.world.preview.tfc.backend.worker.tfc.TFCSampleUtils;
 import com.rustysnail.world.preview.tfc.client.WorldPreviewClient;
@@ -1884,11 +1884,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
     }
 
     /**
-     * Builds the crop-suitability hover text. Basic lines (crop, stored suitability category, water
-     * mode) show immediately from the map's stored value - no computation. Detailed climate lines are
-     * only requested after the cursor has settled on the same quart for {@link #CROP_HOVER_DETAIL_MS};
-     * the WorkManager then serves them from a bounded LRU cache, so the same quart is never recomputed
-     * every frame.
+     * Builds annual harvest-potential hover text. The stored category is immediate; the daily
+     * two-year simulation is debounced, cached, and performed off the render thread.
      */
     private void appendCropTooltip(StringBuilder tfcInfo, HoverInfo hoverInfo)
     {
@@ -1904,20 +1901,31 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         short raw = this.readCropRawAt(hoverInfo.blockX, hoverInfo.blockZ);
         if (TFCSampleUtils.isWaterValue(raw))
         {
-            tfcInfo.append("\n§7Suitability: None — open water§r");
+            tfcInfo.append("\n§7Harvest Potential: None — open water§r");
             return;
         }
 
-        String waterMode = this.workManager.cropWaterMode() == TFCCropSuitability.CropWaterMode.IRRIGATED ? "Irrigated" : "Rain-Fed";
+        String waterMode = this.workManager.cropWaterMode()
+            == TFCCropSuitability.CropWaterMode.IRRIGATED ? "Irrigated" : "Rain-Fed";
 
-        // Basic lines from the stored map value (always available, no compute).
         if (TFCCropSuitability.isSuitabilityValue(raw))
         {
-            tfcInfo.append("\n§3Suitability:§r §b%s§r".formatted(TFCCropSuitability.getSuitabilityName(raw)));
+            tfcInfo.append("\n§3Category:§r §b%s§r"
+                .formatted(TFCCropSuitability.getSuitabilityName(raw)));
         }
         else
         {
-            tfcInfo.append("\n§3Suitability:§r §bNo Data§r");
+            tfcInfo.append("\n§3Category:§r §bNo Data§r");
+        }
+        tfcInfo.append("\n§3Harvest Behavior:§r §b%s§r"
+            .formatted(cropHarvestBehaviorName(entry.harvestBehavior())));
+        if (entry.harvestBehavior() == CropHarvestBehavior.PICKABLE)
+        {
+            tfcInfo.append("\n§3Mature-Pick Reset:§r §bApproximately 55% growth§r");
+        }
+        else if (entry.harvestBehavior() == CropHarvestBehavior.SPREADING)
+        {
+            tfcInfo.append("\n§3Fruit-Production Reset:§r §bApproximately 66% growth§r");
         }
         tfcInfo.append("\n§3Water Mode:§r §b%s§r".formatted(waterMode));
         if (entry.flooded())
@@ -1949,11 +1957,12 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
                 tfcInfo.append(formatted);
             }
-            tfcInfo.append("\n§8Hold to show growing details…§r");
+            tfcInfo.append("\n§8Hold to show harvest details…§r");
             return;
         }
 
-        TFCCropSuitability.CropSuitabilityResult result = this.workManager.requestCropDetailsAt(hoverInfo.blockX, hoverInfo.blockZ);
+        TFCCropSuitability.CropHarvestResult result =
+            this.workManager.requestCropDetailsAt(hoverInfo.blockX, hoverInfo.blockZ);
         if (result == null)
         {
             if (entry.hasClimateData())
@@ -1962,14 +1971,28 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 tfcInfo.append("\n§3Core Range:§r §b%s, %d–%d hydration§r".formatted(cropTempRange(cr), cr.minHydration(), cr.maxHydration()));
             }
             tfcInfo.append(formatted);
-            tfcInfo.append("\n§8Calculating daily growing details…§r");
+            tfcInfo.append("\n§8Calculating daily harvest details…§r");
             return;
         }
-        if (TFCCropSuitability.isSuitabilityValue(result.suitability()))
+        if (TFCCropSuitability.isSuitabilityValue(result.category()))
         {
-            tfcInfo.append("\n§3Growing Window:§r §b~%d days§r".formatted(result.growingWindowDays()));
-            tfcInfo.append("\n§3Temperature:§r §b%s§r".formatted(cropAxisStatus(result.tooColdSamples(), result.tooHotSamples(), result.samplesPerYear(), "Cold", "Hot")));
-            tfcInfo.append("\n§3Hydration:§r §b%s§r".formatted(cropAxisStatus(result.tooDrySamples(), result.tooWetSamples(), result.samplesPerYear(), "Dry", "Wet")));
+            tfcInfo.append("\n§3Harvest Potential:§r §b%d complete mature %s§r"
+                .formatted(result.completedHarvests(),
+                    result.completedHarvests() == 1 ? "harvest" : "harvests"));
+            tfcInfo.append("\n§3Active Growth:§r §b%.0f days§r"
+                .formatted(result.activeGrowthDays()));
+            tfcInfo.append("\n§3Healthy-Only Pause:§r §b%.0f days§r"
+                .formatted(result.healthyOnlyDays()));
+            tfcInfo.append("\n§3Lethal Conditions:§r §b%.0f days§r"
+                .formatted(result.lethalDays()));
+            tfcInfo.append("\n§3Longest Growing Window:§r §b%.0f days§r"
+                .formatted(result.longestCoreWindowDays()));
+            tfcInfo.append("\n§3Longest Survivable Window:§r §b%.0f days§r"
+                .formatted(result.longestSurvivableWindowDays()));
+            tfcInfo.append("\n§3Climate-Limited Maturity:§r §b%.0f days§r"
+                .formatted(result.requiredGrowthDays()));
+            tfcInfo.append("\n§3Year-Round Growth:§r §b%s§r"
+                .formatted(result.yearRoundCoreGrowth() ? "Yes" : "No"));
             tfcInfo.append("\n§3Limiting Factor:§r §b%s§r".formatted(cropLimitingName(result.limitingFactor())));
         }
 
@@ -1981,8 +2004,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         tfcInfo.append(formatted);
         if (result.daysInMonth() > 0)
         {
-            tfcInfo.append("\n§8Calendar: %d days/month§r".formatted(result.daysInMonth()));
+            tfcInfo.append("\n§3Calendar:§r §b%d days/month§r".formatted(result.daysInMonth()));
         }
+        tfcInfo.append("\n§8Assumption: Climate-limited growth; nutrient speed bonuses are not included.§r");
     }
 
     private void appendPerennialTooltip(StringBuilder text, HoverInfo hoverInfo)
@@ -1999,7 +2023,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         short raw = this.readPerennialRawAt(hoverInfo.blockX, hoverInfo.blockZ);
         text.append("\n\u00A73Plant:\u00A7r \u00A7b").append(entry.displayName()).append("\u00A7r");
         text.append("\n\u00A73Type:\u00A7r \u00A7b").append(perennialTypeName(entry.type())).append("\u00A7r");
-        text.append("\n\u00A73Suitability:\u00A7r \u00A7b")
+        text.append("\n\u00A73Production Potential:\u00A7r \u00A7b")
             .append(TFCPerennialSuitability.getSuitabilityName(raw)).append("\u00A7r");
         text.append("\n\u00A73Water Mode:\u00A7r \u00A7b")
             .append(this.workManager.perennialWaterMode()
@@ -2024,13 +2048,31 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             return;
         }
 
-        TFCPerennialSuitability.PerennialSuitabilityResult result =
+        TFCPerennialSuitability.PerennialProductionResult result =
             this.workManager.requestPerennialDetailsAt(hoverInfo.blockX, hoverInfo.blockZ);
         if (result == null)
         {
             text.append("\n\u00A78Calculating perennial details\u2026\u00A7r");
             return;
         }
+
+        if (result.hasLifecycleData())
+        {
+            text.append("\n\u00A73Estimated Harvests:\u00A7r \u00A7b")
+                .append(result.estimatedHarvests()).append("\u00A7r");
+            text.append("\n\u00A73Fruiting Days:\u00A7r \u00A7b")
+                .append(result.fruitingDays()).append("\u00A7r");
+            text.append("\n\u00A73Fruiting Windows:\u00A7r \u00A7b")
+                .append(result.distinctFruitingWindows()).append("\u00A7r");
+        }
+        else
+        {
+            text.append("\n\u00A73Estimated Harvests:\u00A7r \u00A7bNo Data\u00A7r");
+        }
+        text.append("\n\u00A73Bloom Delay:\u00A7r \u00A7b")
+            .append(result.repeatDelayDays()).append(" days\u00A7r");
+        text.append("\n\u00A73Hemisphere:\u00A7r \u00A7b")
+            .append(result.northernHemisphere() ? "Northern" : "Southern").append("\u00A7r");
 
         text.append("\n\n\u00A73Average Temperature:\u00A7r \u00A7b")
             .append("%.1f\u00B0C".formatted(result.averageTemperature())).append("\u00A7r");
@@ -2051,7 +2093,8 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         }
         text.append("\n\u00A73Limiting Factor:\u00A7r \u00A7b")
             .append(perennialLimitingName(result.limitingFactor())).append("\u00A7r");
-        text.append("\n\u00A78Borderline through Ideal are preview safety margins; TFC's core check is binary.\u00A7r");
+        text.append("\n\u00A73Climate Fit:\u00A7r \u00A7b")
+            .append(result.climateFit().displayName()).append("\u00A7r");
 
         if (result.hasLifecycleData())
         {
@@ -2061,8 +2104,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                 .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 1)).append("\u00A7r");
             text.append("\n\u00A73Fruiting Months:\u00A7r \u00A7b")
                 .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 2)).append("\u00A7r");
-            text.append("\n\u00A73Fruiting Windows:\u00A7r \u00A7b")
-                .append(result.distinctFruitingWindows()).append("\u00A7r");
             text.append("\n\u00A73Dormant Months:\u00A7r \u00A7b")
                 .append(formatLifecycleMonths(entry.lifecycle(), result.northernHemisphere(), 3)).append("\u00A7r");
         }
@@ -2092,8 +2133,7 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         {
             appendApproximateTicks(text, "Growth Time", entry.growthTicks());
         }
-        appendApproximateTicks(text, "Repeat Bloom Delay", this.workManager.perennialBloomDelayTicks());
-        text.append("\n\u00A78Calendar: ").append(this.workManager.perennialDaysInMonth())
+        text.append("\n\u00A73Calendar:\u00A7r \u00A7b").append(result.daysInMonth())
             .append(" days/month\u00A7r");
 
         text.append("\n\u00A73Habitat:\u00A7r \u00A7b").append(perennialHabitatName(entry.habitat())).append("\u00A7r");
@@ -2112,8 +2152,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             text.append("\n\u00A73Ocean Result:\u00A7r \u00A7bSaltwater is not valid\u00A7r");
         }
         text.append("\n\u00A73Source:\u00A7r \u00A7b").append(entry.plantedBlockId()).append("\u00A7r");
-        text.append("\n\u00A78Actual root hydration may also include nearby freshwater and block-below modifiers.\u00A7r");
-        text.append("\n\u00A78Exact harvest counts also depend on lifecycle advancement and random ticks.\u00A7r");
     }
 
     private static void appendApproximateTicks(StringBuilder text, String label, int ticks)
@@ -2215,12 +2253,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         };
     }
 
-    private static String cropAxisStatus(int lowCount, int highCount, int samplesPerYear, String lowWord, String highWord)
+    private static String cropHarvestBehaviorName(CropHarvestBehavior behavior)
     {
-        int n = samplesPerYear > 0 ? samplesPerYear : TFCPreviewClimateSampler.SAMPLES_PER_YEAR;
-        if (lowCount == 0 && highCount == 0) return "Suitable";
-        if (lowCount >= highCount) return lowCount > n / 2 ? "Too " + lowWord : "Marginal (" + lowWord.toLowerCase() + ")";
-        return highCount > n / 2 ? "Too " + highWord : "Marginal (" + highWord.toLowerCase() + ")";
+        return switch (behavior)
+        {
+            case REPLANT -> "Harvest and Replant";
+            case PICKABLE -> "Regrows After Picking";
+            case SPREADING -> "Continues Producing Fruit";
+        };
     }
 
     private static String cropLimitingName(TFCCropSuitability.LimitingFactor lf)
@@ -2228,9 +2268,11 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
         return switch (lf)
         {
             case NONE -> "None";
-            case TOO_COLD, TOO_HOT -> "Temperature";
-            case TOO_DRY, TOO_WET -> "Hydration";
-            case SHORT_SEASON -> "Season Length";
+            case TOO_COLD -> "Winter Temperature";
+            case TOO_HOT -> "Summer Temperature";
+            case TOO_DRY -> "Dry-Season Hydration";
+            case TOO_WET -> "Excess Hydration";
+            case SHORT_SEASON -> "Short Growing Season";
             case NO_DATA -> "No Data";
             case WATER -> "Water";
         };

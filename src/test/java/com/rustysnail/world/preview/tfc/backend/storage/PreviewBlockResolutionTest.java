@@ -8,12 +8,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class PreviewBlockResolutionTest
 {
     @Test
-    void cropStorageAlwaysUsesFullQuartStride()
+    void bothPlantMapsAlwaysUseFullQuartStride()
     {
         long crop = RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag;
+        long perennial = RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag;
+        assertEquals(16L, crop);
+        assertEquals(17L, perennial);
         assertEquals(1, PreviewBlock.sectionQuartStride(crop, 1));
         assertEquals(1, PreviewBlock.sectionQuartStride(crop, 2));
         assertEquals(1, PreviewBlock.sectionQuartStride(crop, 4));
+        assertEquals(1, PreviewBlock.sectionQuartStride(perennial, 1));
+        assertEquals(1, PreviewBlock.sectionQuartStride(perennial, 2));
+        assertEquals(1, PreviewBlock.sectionQuartStride(perennial, 4));
     }
 
     @Test

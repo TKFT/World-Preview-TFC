@@ -3,9 +3,11 @@ package com.rustysnail.world.preview.tfc.backend.color;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -28,15 +30,35 @@ public abstract class BaseMultiJsonResourceReloadListener extends SimplePreparab
 
     protected Map<ResourceLocation, List<JsonElement>> prepare(ResourceManager resourceManager, ProfilerFiller profiler)
     {
-        Map<ResourceLocation, List<JsonElement>> res = new HashMap<>();
+        Map<ResourceLocation, List<JsonElement>> res = new LinkedHashMap<>();
 
-        for (String namespace : resourceManager.getNamespaces())
+        for (ResourceLocation location : resourceLocations(resourceManager.getNamespaces(), this.filename))
         {
-            this.loadAllForLocation(resourceManager, res, ResourceLocation.fromNamespaceAndPath(namespace, this.filename));
+            this.loadAllForLocation(resourceManager, res, location);
         }
-
-        this.loadAllForLocation(resourceManager, res, ResourceLocation.fromNamespaceAndPath("c", "worldgen/" + this.filename));
         return res;
+    }
+
+    static List<ResourceLocation> resourceLocations(Set<String> namespaces, String filename)
+    {
+        List<ResourceLocation> locations = new ArrayList<>();
+        ResourceLocation commonLocation = ResourceLocation.fromNamespaceAndPath("c", "worldgen/" + filename);
+        locations.add(commonLocation);
+
+        namespaces.stream().sorted(Comparator.naturalOrder()).forEach(namespace -> {
+            ResourceLocation legacyLocation = ResourceLocation.fromNamespaceAndPath(namespace, filename);
+            if (!legacyLocation.equals(commonLocation))
+            {
+                locations.add(legacyLocation);
+            }
+
+            ResourceLocation worldgenLocation = ResourceLocation.fromNamespaceAndPath(namespace, "worldgen/" + filename);
+            if (!worldgenLocation.equals(commonLocation))
+            {
+                locations.add(worldgenLocation);
+            }
+        });
+        return locations;
     }
 
     private void loadAllForLocation(ResourceManager resourceManager, Map<ResourceLocation, List<JsonElement>> res, ResourceLocation rl)

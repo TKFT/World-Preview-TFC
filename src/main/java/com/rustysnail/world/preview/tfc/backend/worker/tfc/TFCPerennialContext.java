@@ -8,6 +8,7 @@ public record TFCPerennialContext(
     @Nullable ResourceLocation perennialId,
     @Nullable TFCPerennialRegistry.PerennialEntry perennial,
     TFCPerennialSuitability.PerennialWaterMode waterMode,
+    TFCPerennialSuitability.ProductionProfile production,
     int revision,
     IntSupplier currentRevision
 )

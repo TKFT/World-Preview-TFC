@@ -93,7 +93,16 @@ class CategoricalColorPaletteTest
     @Test
     void bundledDefaultsContainEveryCorePalette()
     {
-        for (String palette : List.of("forest_types", "tree_species", "soil_types", "water", "suitability", "rock_types", "rocks"))
+        for (String palette : List.of(
+            "forest_types",
+            "tree_species",
+            "soil_types",
+            "water",
+            "crop_harvest_potential",
+            "perennial_production_potential",
+            "rock_types",
+            "rocks"
+        ))
         {
             String path = "/data/world_preview_tfc/world_preview_tfc/colors/" + palette + ".json";
             try (var stream = Objects.requireNonNull(getClass().getResourceAsStream(path));
@@ -108,6 +117,26 @@ class CategoricalColorPaletteTest
                 fail("Could not read " + path, e);
             }
         }
+    }
+
+    @Test
+    void annualPaletteContainsOnlyHarvestPotentialCategories()
+    {
+        var values = readResource(
+            "/data/world_preview_tfc/world_preview_tfc/colors/crop_harvest_potential.json")
+            .getAsJsonObject();
+        assertEquals(7, values.size());
+        assertTrue(values.has("world_preview_tfc:impossible"));
+        assertTrue(values.has("world_preview_tfc:one_harvest"));
+        assertTrue(values.has("world_preview_tfc:two_harvests"));
+        assertTrue(values.has("world_preview_tfc:three_harvests"));
+        assertTrue(values.has("world_preview_tfc:four_plus_harvests"));
+        assertTrue(values.has("world_preview_tfc:year_round"));
+        assertTrue(values.has("world_preview_tfc:no_data"));
+        assertFalse(values.has("world_preview_tfc:poor"));
+        assertFalse(values.has("world_preview_tfc:marginal"));
+        assertFalse(values.has("world_preview_tfc:good"));
+        assertFalse(values.has("world_preview_tfc:ideal"));
     }
 
     @Test

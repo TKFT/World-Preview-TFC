@@ -20,6 +20,8 @@ import org.jetbrains.annotations.Nullable;
 
 import net.dries007.tfc.common.blocks.crop.FloodedCropBlock;
 import net.dries007.tfc.common.blocks.crop.ICropBlock;
+import net.dries007.tfc.common.blocks.crop.IPickableCrop;
+import net.dries007.tfc.common.blocks.crop.SpreadingCropBlock;
 import net.dries007.tfc.common.items.PlantableInfo;
 import net.dries007.tfc.util.climate.ClimateRange;
 
@@ -63,7 +65,7 @@ public final class TFCCropRegistry
             found.add(new Entry(
                 id, crop, range,
                 crop.getNForGrowth(), crop.getPForGrowth(), crop.getKForGrowth(),
-                flooded, deriveName(id)
+                flooded, detectHarvestBehavior(block), deriveName(id)
             ));
         }
 
@@ -209,6 +211,26 @@ public final class TFCCropRegistry
         return title;
     }
 
+    static CropHarvestBehavior detectHarvestBehavior(Block block)
+    {
+        return detectHarvestBehavior(
+            block instanceof SpreadingCropBlock,
+            block instanceof IPickableCrop);
+    }
+
+    static CropHarvestBehavior detectHarvestBehavior(boolean spreading, boolean pickable)
+    {
+        if (spreading)
+        {
+            return CropHarvestBehavior.SPREADING;
+        }
+        if (pickable)
+        {
+            return CropHarvestBehavior.PICKABLE;
+        }
+        return CropHarvestBehavior.REPLANT;
+    }
+
     private final List<Entry> entries;
     private final Map<ResourceLocation, Entry> byId;
 
@@ -252,6 +274,7 @@ public final class TFCCropRegistry
         float phosphorus,
         float potassium,
         boolean flooded,
+        CropHarvestBehavior harvestBehavior,
         String displayName
     )
     {

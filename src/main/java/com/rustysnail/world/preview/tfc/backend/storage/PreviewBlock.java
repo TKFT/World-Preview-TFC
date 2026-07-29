@@ -12,7 +12,12 @@ public class PreviewBlock implements Serializable
 
     static int sectionQuartStride(long flags, int visualQuartStride)
     {
-        return flags == RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag ? 1 : visualQuartStride;
+        if (flags == RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag
+            || flags == RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag)
+        {
+            return 1;
+        }
+        return visualQuartStride;
     }
 
     private final long flags;
@@ -43,8 +48,8 @@ public class PreviewBlock implements Serializable
         }
         else
         {
-            // Crop suitability is always generated and stored at true quart resolution, independent
-            // of the current visual sampler/zoom. Other flags retain the existing global stride.
+            // Both plant-production maps are always generated and stored at true quart resolution,
+            // independent of the current visual sampler/zoom.
             int quartStride = sectionQuartStride(this.flags, WorldPreview.get().renderSettings().quartStride());
             if (WorldPreview.get().cfg().enableCompression)
             {

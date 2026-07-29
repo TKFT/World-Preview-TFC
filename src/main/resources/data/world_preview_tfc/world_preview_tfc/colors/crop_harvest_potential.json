@@ -1,0 +1,44 @@
+{
+  "world_preview_tfc:impossible": {
+    "r": 92,
+    "g": 38,
+    "b": 38,
+    "name": "Impossible"
+  },
+  "world_preview_tfc:one_harvest": {
+    "r": 181,
+    "g": 75,
+    "b": 45,
+    "name": "One Harvest"
+  },
+  "world_preview_tfc:two_harvests": {
+    "r": 211,
+    "g": 145,
+    "b": 54,
+    "name": "Two Harvests"
+  },
+  "world_preview_tfc:three_harvests": {
+    "r": 163,
+    "g": 180,
+    "b": 65,
+    "name": "Three Harvests"
+  },
+  "world_preview_tfc:four_plus_harvests": {
+    "r": 86,
+    "g": 158,
+    "b": 69,
+    "name": "Four or More Harvests"
+  },
+  "world_preview_tfc:year_round": {
+    "r": 39,
+    "g": 176,
+    "b": 111,
+    "name": "Year-Round Growth"
+  },
+  "world_preview_tfc:no_data": {
+    "r": 90,
+    "g": 90,
+    "b": 90,
+    "name": "No Data"
+  }
+}

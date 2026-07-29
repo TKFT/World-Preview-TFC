@@ -193,7 +193,9 @@ public class TFCRegionWorkUnit extends WorkUnit
         final boolean cropHasClimateData = this.cropContext != null
             && this.cropContext.crop() != null && this.cropContext.crop().hasClimateData();
         final boolean perennialHasClimateData = this.perennialContext != null
-            && this.perennialContext.perennial() != null && this.perennialContext.perennial().hasClimateData();
+            && this.perennialContext.perennial() != null
+            && this.perennialContext.perennial().hasClimateData()
+            && this.perennialContext.production().lifecycleAvailable();
         final boolean needsChunkData = this.plan.forestType() || this.plan.treeSpecies() || this.plan.soilType()
             || (this.plan.cropSuitability() && cropHasClimateData)
             || (this.plan.perennialSuitability() && perennialHasClimateData);
@@ -546,7 +548,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                             {
                                 int surfaceY = plantSurfaceHeights.interpolatedSurfaceY(pos.getX(), pos.getZ());
                                 perennialValue = TFCPerennialSuitability.evaluateMapValue(
-                                    this.perennialContext.perennial(), chunkData,
+                                    this.perennialContext.perennial(), this.perennialContext.production(), chunkData,
                                     pos.getX(), pos.getZ(), surfaceY,
                                     this.perennialContext.waterMode(), perennialWater
                                 );
@@ -557,7 +559,7 @@ public class TFCRegionWorkUnit extends WorkUnit
                                     == TFCPerennialRegistry.PerennialHabitat.FRESHWATER_WATERLOGGED
                                 && perennialWater == TFCSampleUtils.VALUE_WATER_OCEAN)
                             {
-                                perennialValue = TFCPerennialSuitability.PERENNIAL_IMPOSSIBLE;
+                                perennialValue = TFCPerennialSuitability.PERENNIAL_NO_PRODUCTION;
                             }
                             else if (this.perennialContext != null
                                 && this.perennialContext.perennial() != null

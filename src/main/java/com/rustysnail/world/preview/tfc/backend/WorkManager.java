@@ -69,6 +69,7 @@ import org.jetbrains.annotations.Nullable;
 import net.dries007.tfc.config.TFCConfig;
 import net.dries007.tfc.util.calendar.Calendar;
 import net.dries007.tfc.util.calendar.Calendars;
+import net.dries007.tfc.util.calendar.ICalendar;
 import net.dries007.tfc.world.ChunkGeneratorExtension;
 import net.dries007.tfc.world.biome.BiomeExtension;
 import net.dries007.tfc.world.chunkdata.ChunkData;
@@ -103,8 +104,7 @@ public class WorkManager
     // create-world screen). Used to read the world's live calendar month length.
     @Nullable
     private MinecraftServer activeServer;
-    // The calendar/growth-modifier settings the currently-generated crop data assumes. Compared each
-    // queue pass so a changed month length or growth modifier regenerates flag 16 exactly once.
+    // The calendar/growth/expiry settings the currently-generated crop data assumes.
     @Nullable
     private CropCalendarSettings capturedCropCalendar;
     // Bounded hover caches (crop suitability breakdown, and ChunkData+four-height grid). Keyed to
@@ -117,6 +117,8 @@ public class WorkManager
         TFCPerennialSuitability.PerennialWaterMode.RAIN_FED;
     private final java.util.concurrent.atomic.AtomicInteger perennialRevision =
         new java.util.concurrent.atomic.AtomicInteger(0);
+    @Nullable
+    private PerennialConfigSnapshot capturedPerennialConfig;
     private final PerennialHoverCache perennialHoverCache = new PerennialHoverCache(256, 16);
     private final ChunkDataCache chunkDataHoverCache = new ChunkDataCache(64);
 
@@ -399,12 +401,13 @@ public class WorkManager
     public void postChangeWorldGenState()
     {
         this.previewStorage = this.previewStorageCacheManager.loadPreviewStorage(this.worldOptions.seed(), this.yMin(), this.yMax());
-        // Crop-suitability sections depend on the selected crop, water mode, month length and growth
-        // modifier - none of which are stored beside flag 16 - so a loaded section could belong to a
-        // different crop/calendar. Always drop flag 16 on load; crop data is session-only for now.
+        // Plant-production sections depend on selections and live calendar/config values that are
+        // not stored beside flags 16/17. Their value meanings also replaced the legacy suitability
+        // bands, so both flags are always session-only and invalidated after storage load.
         this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_CROP_SUITABILITY.flag);
         this.previewStorage.invalidateFlags(RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY.flag);
         this.capturedCropCalendar = null; // force a fresh calendar resolve + regenerate on next crop pass
+        this.capturedPerennialConfig = null;
         this.cropHoverCache.clear();
         this.perennialHoverCache.clear();
         this.chunkDataHoverCache.clear();
@@ -550,6 +553,11 @@ public class WorkManager
             && this.tfcSampleUtils != null && this.previewStorage != null)
         {
             this.ensureCropCalendarCurrent();
+        }
+        else if (mode == RenderSettings.RenderMode.TFC_PERENNIAL_SUITABILITY
+            && this.tfcSampleUtils != null && this.previewStorage != null)
+        {
+            this.ensurePerennialProductionCurrent();
         }
 
         if (this.executorService != null
@@ -931,16 +939,19 @@ public class WorkManager
     {
         int daysInMonth = this.resolveDaysInMonth();
         float growthModifier;
+        float expiryModifier;
         try
         {
             growthModifier = TFCConfig.SERVER.cropGrowthModifier.get().floatValue();
+            expiryModifier = TFCConfig.SERVER.cropExpiryModifier.get().floatValue();
         }
         catch (RuntimeException | LinkageError ignored)
         {
             growthModifier = 1f;
+            expiryModifier = 1f;
         }
 
-        return CropCalendarSettings.build(daysInMonth, growthModifier);
+        return CropCalendarSettings.build(daysInMonth, growthModifier, expiryModifier);
     }
 
     private int resolveDaysInMonth()
@@ -967,10 +978,11 @@ public class WorkManager
             this.cropRevision.incrementAndGet();
             this.invalidateCropMapState();
             WorldPreview.LOGGER.debug(
-                "[TFC Crop] Crop calendar: daysInMonth={}, mapSamples={}, daysPerMapSample={}, growthModifier={}, requiredGrowthDays={}{}",
+                "[TFC Crop] Harvest calendar: daysInMonth={}, mapSamples={}, daysPerMapSample={}, "
+                    + "growthModifier={}, expiryModifier={}, requiredGrowthDays={}, localExpiryLimit={}{}",
                 resolved.daysInMonth(), TFCPreviewClimateSampler.MAP_SAMPLES_PER_YEAR,
                 resolved.daysPerSample(TFCPreviewClimateSampler.MAP_SAMPLES_PER_YEAR), resolved.cropGrowthModifier(),
-                resolved.requiredGrowthDays(),
+                resolved.cropExpiryModifier(), resolved.requiredGrowthDays(), resolved.localExpiryLimit(),
                 firstTime ? " (initial)" : " (changed -> regenerating)");
         }
         return resolved;
@@ -1036,7 +1048,7 @@ public class WorkManager
     }
 
     @Nullable
-    public synchronized TFCCropSuitability.CropSuitabilityResult requestCropDetailsAt(int blockX, int blockZ)
+    public synchronized TFCCropSuitability.CropHarvestResult requestCropDetailsAt(int blockX, int blockZ)
     {
         TFCSampleUtils tfc = this.tfcSampleUtils;
         SampleUtils samples = this.sampleUtils;
@@ -1060,9 +1072,10 @@ public class WorkManager
         int worldRevision = this.worldGenerationRevision.get();
         CropHoverCache.Key key = new CropHoverCache.Key(
             quartX, quartZ, cropId, this.cropWaterMode,
-            calendar.daysInMonth(), calendar.cropGrowthModifier(), revision);
+            calendar.daysInMonth(), calendar.cropGrowthModifier(),
+            calendar.cropExpiryModifier(), revision);
 
-        TFCCropSuitability.CropSuitabilityResult cached = this.cropHoverCache.get(key);
+        TFCCropSuitability.CropHarvestResult cached = this.cropHoverCache.get(key);
         if (cached != null || !this.cropHoverCache.reserve(key))
         {
             return cached;
@@ -1076,7 +1089,7 @@ public class WorkManager
         try
         {
             Future<?> future = cropHoverExecutor.submit(() -> {
-                TFCCropSuitability.CropSuitabilityResult result = this.computeCropAt(
+                TFCCropSuitability.CropHarvestResult result = this.computeCropAt(
                     entry, canonicalX, canonicalZ, calendar, waterMode, worldRevision, tfc, samples);
                 if (this.cropRevision.get() == revision)
                 {
@@ -1096,7 +1109,7 @@ public class WorkManager
         return null;
     }
 
-    private TFCCropSuitability.CropSuitabilityResult computeCropAt(
+    private TFCCropSuitability.CropHarvestResult computeCropAt(
         TFCCropRegistry.Entry entry,
         int blockX,
         int blockZ,
@@ -1206,27 +1219,43 @@ public class WorkManager
         return this.perennialRevision.get();
     }
 
-    public int perennialDaysInMonth()
-    {
-        return this.resolveDaysInMonth();
-    }
-
     public int perennialBerryGrowthTicks()
     {
         return perennialConfigValue(TFCConfig.SERVER.berryBushGrowthTicks, -1);
     }
 
-    public int perennialBloomDelayTicks()
+    private synchronized TFCPerennialSuitability.ProductionProfile ensurePerennialProductionCurrent()
     {
-        return perennialConfigValue(TFCConfig.SERVER.fruitPickBloomDelayTicks, -1);
+        int daysInMonth = this.resolveDaysInMonth();
+        int bloomDelayTicks = perennialConfigValue(
+            TFCConfig.SERVER.fruitPickBloomDelayTicks, ICalendar.TICKS_IN_DAY);
+        PerennialConfigSnapshot resolved =
+            new PerennialConfigSnapshot(daysInMonth, bloomDelayTicks);
+        if (!resolved.equals(this.capturedPerennialConfig))
+        {
+            boolean firstTime = this.capturedPerennialConfig == null;
+            this.capturedPerennialConfig = resolved;
+            this.perennialRevision.incrementAndGet();
+            this.invalidatePerennialMapState();
+            WorldPreview.LOGGER.debug(
+                "[TFC Perennial] Production calendar: daysInMonth={}, bloomDelayTicks={}{}",
+                daysInMonth, bloomDelayTicks,
+                firstTime ? " (initial)" : " (changed -> regenerating)");
+        }
+        TFCPerennialRegistry.PerennialEntry entry = this.selectedPerennialId != null
+            ? this.perennialRegistry.get(this.selectedPerennialId) : null;
+        return TFCPerennialSuitability.prepareProduction(
+            entry != null ? entry.lifecycle() : null, daysInMonth, bloomDelayTicks);
     }
 
     private synchronized TFCPerennialContext buildPerennialContext()
     {
         TFCPerennialRegistry.PerennialEntry entry = this.selectedPerennialId != null
             ? this.perennialRegistry.get(this.selectedPerennialId) : null;
+        TFCPerennialSuitability.ProductionProfile production =
+            this.ensurePerennialProductionCurrent();
         return new TFCPerennialContext(
-            this.selectedPerennialId, entry, this.perennialWaterMode,
+            this.selectedPerennialId, entry, this.perennialWaterMode, production,
             this.perennialRevision.get(), this.perennialRevision::get
         );
     }
@@ -1281,7 +1310,7 @@ public class WorkManager
     }
 
     @Nullable
-    public synchronized TFCPerennialSuitability.PerennialSuitabilityResult requestPerennialDetailsAt(
+    public synchronized TFCPerennialSuitability.PerennialProductionResult requestPerennialDetailsAt(
         int blockX,
         int blockZ
     )
@@ -1299,19 +1328,21 @@ public class WorkManager
         {
             return null;
         }
+        TFCPerennialSuitability.ProductionProfile production =
+            this.ensurePerennialProductionCurrent();
 
         int quartX = blockX >> 2;
         int quartZ = blockZ >> 2;
         int revision = this.perennialRevision.get();
         int worldRevision = this.worldGenerationRevision.get();
-        int daysInMonth = this.resolveDaysInMonth();
+        int daysInMonth = production.daysInMonth();
         int berryGrowthTicks = perennialConfigValue(TFCConfig.SERVER.berryBushGrowthTicks, -1);
-        int bloomDelayTicks = perennialConfigValue(TFCConfig.SERVER.fruitPickBloomDelayTicks, -1);
+        int bloomDelayTicks = production.bloomDelayTicks();
         PerennialHoverCache.Key key = new PerennialHoverCache.Key(
             quartX, quartZ, perennialId, this.perennialWaterMode, revision,
             daysInMonth, berryGrowthTicks, bloomDelayTicks
         );
-        TFCPerennialSuitability.PerennialSuitabilityResult cached = this.perennialHoverCache.get(key);
+        TFCPerennialSuitability.PerennialProductionResult cached = this.perennialHoverCache.get(key);
         if (cached != null || !this.perennialHoverCache.reserve(key))
         {
             return cached;
@@ -1323,8 +1354,8 @@ public class WorkManager
         try
         {
             Future<?> future = hoverExecutor.submit(() -> {
-                TFCPerennialSuitability.PerennialSuitabilityResult result = this.computePerennialAt(
-                    entry, canonicalX, canonicalZ, waterMode, worldRevision, tfc, samples);
+                TFCPerennialSuitability.PerennialProductionResult result = this.computePerennialAt(
+                    entry, production, canonicalX, canonicalZ, waterMode, worldRevision, tfc, samples);
                 if (result != null
                     && this.perennialRevision.get() == revision
                     && this.worldGenerationRevision.get() == worldRevision)
@@ -1346,8 +1377,9 @@ public class WorkManager
     }
 
     @Nullable
-    private TFCPerennialSuitability.PerennialSuitabilityResult computePerennialAt(
+    private TFCPerennialSuitability.PerennialProductionResult computePerennialAt(
         TFCPerennialRegistry.PerennialEntry entry,
+        TFCPerennialSuitability.ProductionProfile production,
         int blockX,
         int blockZ,
         TFCPerennialSuitability.PerennialWaterMode waterMode,
@@ -1373,7 +1405,7 @@ public class WorkManager
             }
             int surfaceY = cached.surfaceHeights().interpolatedSurfaceY(blockX, blockZ);
             return TFCPerennialSuitability.evaluateDetailed(
-                entry, cached.chunkData(), blockX, blockZ, surfaceY,
+                entry, production, cached.chunkData(), blockX, blockZ, surfaceY,
                 tfc.settings().temperatureScale(), waterMode, mapWater
             );
         }
@@ -1396,6 +1428,10 @@ public class WorkManager
         }
     }
 
+    private record PerennialConfigSnapshot(int daysInMonth, int bloomDelayTicks)
+    {
+    }
+
     /**
      * Bounded result LRU plus a separately bounded/cancelable set of in-flight calculations.
      */
@@ -1403,10 +1439,10 @@ public class WorkManager
     {
         record Key(int quartX, int quartZ, ResourceLocation cropId,
                    TFCCropSuitability.CropWaterMode waterMode, int daysInMonth,
-                   float growthModifier, int revision) {}
+                   float growthModifier, float expiryModifier, int revision) {}
 
         private final int maxPending;
-        private final java.util.LinkedHashMap<Key, TFCCropSuitability.CropSuitabilityResult> results;
+        private final java.util.LinkedHashMap<Key, TFCCropSuitability.CropHarvestResult> results;
         private final java.util.LinkedHashMap<Key, Future<?>> pending = new java.util.LinkedHashMap<>();
 
         CropHoverCache(int maxEntries, int maxPending)
@@ -1415,7 +1451,8 @@ public class WorkManager
             this.results = new java.util.LinkedHashMap<>(16, 0.75f, true)
             {
                 @Override
-                protected boolean removeEldestEntry(java.util.Map.Entry<Key, TFCCropSuitability.CropSuitabilityResult> eldest)
+                protected boolean removeEldestEntry(
+                    java.util.Map.Entry<Key, TFCCropSuitability.CropHarvestResult> eldest)
                 {
                     return size() > maxEntries;
                 }
@@ -1423,7 +1460,7 @@ public class WorkManager
         }
 
         @Nullable
-        synchronized TFCCropSuitability.CropSuitabilityResult get(Key key)
+        synchronized TFCCropSuitability.CropHarvestResult get(Key key)
         {
             return this.results.get(key);
         }
@@ -1457,7 +1494,7 @@ public class WorkManager
             }
         }
 
-        synchronized void complete(Key key, TFCCropSuitability.CropSuitabilityResult value)
+        synchronized void complete(Key key, TFCCropSuitability.CropHarvestResult value)
         {
             if (this.pending.containsKey(key))
             {
@@ -1497,7 +1534,7 @@ public class WorkManager
         ) {}
 
         private final int maxPending;
-        private final java.util.LinkedHashMap<Key, TFCPerennialSuitability.PerennialSuitabilityResult> results;
+        private final java.util.LinkedHashMap<Key, TFCPerennialSuitability.PerennialProductionResult> results;
         private final java.util.LinkedHashMap<Key, Future<?>> pending = new java.util.LinkedHashMap<>();
 
         PerennialHoverCache(int maxEntries, int maxPending)
@@ -1507,7 +1544,7 @@ public class WorkManager
             {
                 @Override
                 protected boolean removeEldestEntry(
-                    java.util.Map.Entry<Key, TFCPerennialSuitability.PerennialSuitabilityResult> eldest
+                    java.util.Map.Entry<Key, TFCPerennialSuitability.PerennialProductionResult> eldest
                 )
                 {
                     return size() > maxEntries;
@@ -1516,7 +1553,7 @@ public class WorkManager
         }
 
         @Nullable
-        synchronized TFCPerennialSuitability.PerennialSuitabilityResult get(Key key)
+        synchronized TFCPerennialSuitability.PerennialProductionResult get(Key key)
         {
             return this.results.get(key);
         }
@@ -1550,7 +1587,7 @@ public class WorkManager
             }
         }
 
-        synchronized void complete(Key key, TFCPerennialSuitability.PerennialSuitabilityResult value)
+        synchronized void complete(Key key, TFCPerennialSuitability.PerennialProductionResult value)
         {
             if (this.pending.containsKey(key))
             {

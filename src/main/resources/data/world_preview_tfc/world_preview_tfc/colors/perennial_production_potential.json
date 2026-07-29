@@ -1,0 +1,50 @@
+{
+  "world_preview_tfc:no_production": {
+    "r": 92,
+    "g": 38,
+    "b": 38,
+    "name": "No Production"
+  },
+  "world_preview_tfc:one_harvest": {
+    "r": 181,
+    "g": 75,
+    "b": 45,
+    "name": "One Estimated Harvest"
+  },
+  "world_preview_tfc:two_harvests": {
+    "r": 211,
+    "g": 145,
+    "b": 54,
+    "name": "Two Estimated Harvests"
+  },
+  "world_preview_tfc:three_harvests": {
+    "r": 163,
+    "g": 180,
+    "b": 65,
+    "name": "Three Estimated Harvests"
+  },
+  "world_preview_tfc:four_plus_harvests": {
+    "r": 86,
+    "g": 158,
+    "b": 69,
+    "name": "Four or More Estimated Harvests"
+  },
+  "world_preview_tfc:year_round": {
+    "r": 39,
+    "g": 176,
+    "b": 111,
+    "name": "Year-Round Production"
+  },
+  "world_preview_tfc:freshwater_required": {
+    "r": 73,
+    "g": 137,
+    "b": 183,
+    "name": "Freshwater Required"
+  },
+  "world_preview_tfc:no_data": {
+    "r": 90,
+    "g": 90,
+    "b": 90,
+    "name": "No Data"
+  }
+}
