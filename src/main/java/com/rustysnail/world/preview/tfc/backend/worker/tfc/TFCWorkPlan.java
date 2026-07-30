@@ -33,7 +33,8 @@ public record TFCWorkPlan(
             case TFC_TEMPERATURE -> new TFCWorkPlan(true, false, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
             case TFC_RAINFALL -> new TFCWorkPlan(false, true, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
             case TFC_LAND_WATER -> new TFCWorkPlan(false, false, true, false, false, false, false, false, false, false, false, featureOverlay, mode);
-            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT, TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_ROCK_TOP, TFC_ROCK_MID, TFC_ROCK_BOT -> new TFCWorkPlan(false, false, true, true, false, false, false, false, false, false, false, featureOverlay, mode);
+            case TFC_ROCK_TYPE -> new TFCWorkPlan(false, false, false, true, false, false, false, false, false, false, false, featureOverlay, mode);
             case TFC_KAOLINITE -> new TFCWorkPlan(false, false, true, false, true, false, false, false, false, false, false, featureOverlay, mode);
             // Forest/Tree water uses classifyTreeMapWater, not the river-fractal land/water map.
             case TFC_FOREST_TYPE -> new TFCWorkPlan(false, false, false, false, false, true, false, false, false, false, false, featureOverlay, mode);

@@ -289,11 +289,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             || mode == RenderSettings.RenderMode.TFC_HOTSPOT;
     }
 
-    private static boolean shouldOverlayRegionWater(short terrain)
+    static boolean shouldOverlayOcean(short terrain)
     {
-        return terrain != TFCRegionWorkUnit.LAND_WATER_LAND
-            && terrain != TFCRegionWorkUnit.LAND_WATER_LAKE
-            && terrain != TFCRegionWorkUnit.LAND_WATER_RIVER;
+        return terrain == TFCRegionWorkUnit.LAND_WATER_OCEAN;
     }
 
     private static int packTex(int r, int g, int b)
@@ -797,9 +795,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             if (rawData > -32768 && this.tfcTemperatureColorMap != null)
                             {
                                 short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                                if (shouldOverlayRegionWater(terrain))
+                                if (shouldOverlayOcean(terrain))
                                 {
-                                    color = this.regionWaterTexture(terrain);
+                                    color = this.tfcOceanTex;
                                 }
                                 else
                                 {
@@ -813,9 +811,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             if (rawData > -32768 && this.tfcRainfallColorMap != null)
                             {
                                 short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                                if (shouldOverlayRegionWater(terrain))
+                                if (shouldOverlayOcean(terrain))
                                 {
-                                    color = this.regionWaterTexture(terrain);
+                                    color = this.tfcOceanTex;
                                 }
                                 else
                                 {
@@ -843,9 +841,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                         case TFC_ROCK_MID:
                         case TFC_ROCK_BOT:
                             short terrain = r.landWaterSection != null ? r.landWaterSection.get(x, z) : TFCRegionWorkUnit.LAND_WATER_LAND;
-                            if (shouldOverlayRegionWater(terrain))
+                            if (shouldOverlayOcean(terrain))
                             {
-                                color = this.regionWaterTexture(terrain);
+                                color = this.tfcOceanTex;
                             }
                             else if (rawData >= 0 && rawData < this.rockTexPalette[rockLayer].length)
                             {
@@ -1004,9 +1002,9 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                                     {
                                         case TFCRegionWorkUnit.LAND_WATER_OCEAN -> this.tfcOceanTex;
                                         case TFCRegionWorkUnit.LAND_WATER_LAND,
+                                             TFCRegionWorkUnit.LAND_WATER_SHORE,
                                              TFCRegionWorkUnit.LAND_WATER_LAKE,
                                              TFCRegionWorkUnit.LAND_WATER_RIVER -> this.tfcLandTex;
-                                        case TFCRegionWorkUnit.LAND_WATER_SHORE -> this.tfcShoreTex;
                                         default -> this.tfcUnknownTex;
                                     };
                                 }
@@ -1513,10 +1511,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             {
                                 tfcInfo.append("\n§3Rainfall:§r §b%.0fmm§r".formatted(hoverInfo.tfcRainfall));
                             }
-                            if (hoverInfo.tfcLandWater > -32768)
-                            {
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
-                            }
                             break;
                         case TFC_LAND_WATER:
                             if (hoverInfo.tfcLandWater > -32768)
@@ -1557,26 +1551,14 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
                             {
                                 tfcInfo.append("\n§3Rock Type:§r §b%s§r".formatted(hoverInfo.getTfcRockTypeName()));
                             }
-                            if (hoverInfo.tfcLandWater > -32768)
-                            {
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
-                            }
                             break;
                         case TFC_ROCK_TYPE:
                             if (hoverInfo.tfcRockType >= 0)
                             {
                                 tfcInfo.append("\n§3Rock Type:§r §b%s§r".formatted(hoverInfo.getTfcRockTypeName()));
                             }
-                            if (hoverInfo.tfcLandWater > -32768)
-                            {
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
-                            }
                             break;
                         case TFC_HOTSPOT:
-                            if (hoverInfo.tfcLandWater > -32768)
-                            {
-                                tfcInfo.append("\n§3Terrain:§r §b%s§r".formatted(hoverInfo.getTfcLandWaterName()));
-                            }
                             if (hoverInfo.tfcHotspotAge > 0)
                             {
                                 tfcInfo.append("\n§3Hotspot Age:§r §b%d§r".formatted((int) hoverInfo.tfcHotspotAge));
@@ -2364,19 +2346,6 @@ public class PreviewDisplay extends AbstractWidget implements AutoCloseable
             case TFCSampleUtils.VALUE_WATER_LAKE -> highlighted ? this.tfcLakeTex : this.tfcLakeTexGray;
             case TFCSampleUtils.VALUE_WATER_RIVER -> highlighted ? this.tfcRiverTex : this.tfcRiverTexGray;
             default -> highlighted ? this.tfcOceanTex : this.tfcOceanTexGray;
-        };
-    }
-
-    private int regionWaterTexture(short value)
-    {
-        return switch (value)
-        {
-            case TFCRegionWorkUnit.LAND_WATER_OCEAN -> this.tfcOceanTex;
-            case TFCRegionWorkUnit.LAND_WATER_SHORE -> this.tfcShoreTex;
-            case TFCRegionWorkUnit.LAND_WATER_LAKE -> this.tfcLakeTex;
-            case TFCRegionWorkUnit.LAND_WATER_RIVER -> this.tfcRiverTex;
-            case TFCRegionWorkUnit.LAND_WATER_LAND -> this.tfcLandTex;
-            default -> this.tfcUnknownTex;
         };
     }
 
