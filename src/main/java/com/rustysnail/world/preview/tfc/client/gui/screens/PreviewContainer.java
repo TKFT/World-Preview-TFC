@@ -35,11 +35,12 @@ import com.rustysnail.world.preview.tfc.backend.WorkManager;
 import com.rustysnail.world.preview.tfc.backend.color.ColorMap;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewData;
 import com.rustysnail.world.preview.tfc.backend.color.PreviewMappingData;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportController;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.Context;
-import com.rustysnail.world.preview.tfc.backend.export.TFCLandWaterClassifier;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportController;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportLayer;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportLayerFactory;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportPlan;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportPreset;
+import com.rustysnail.world.preview.tfc.backend.export.MapExporter.Context;
 import com.rustysnail.world.preview.tfc.backend.search.FeatureDetectors;
 import com.rustysnail.world.preview.tfc.backend.search.SearchableFeature;
 import com.rustysnail.world.preview.tfc.backend.worker.SampleUtils;
@@ -194,7 +195,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     private final Button searchBiomeButton;
     private final Checkbox islandCheckbox;
     private final ExecutorService biomeSearchExecutor = Executors.newSingleThreadExecutor();
-    private final LandWaterExportController landWaterExporter;
+    private final MapExportController mapExporter;
     @Nullable private BiomeSearchTask currentSearchTask = null;
     private boolean isSearching = false;
 
@@ -210,7 +211,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         this.previewMappingData = this.worldPreview.biomeColorMap();
         this.renderSettings = this.worldPreview.renderSettings();
         this.serverThreadPoolExecutor = this.worldPreview.serverThreadPoolExecutor();
-        this.landWaterExporter = new LandWaterExportController(this.cfg.numThreads());
+        this.mapExporter = new MapExportController(this.cfg.numThreads());
         this.seedEdit = new EditBox(font, 0, 0, 100, 18, WorldPreviewComponents.SEED_FIELD);
         this.seedEdit.setHint(WorldPreviewComponents.SEED_FIELD);
         this.seedEdit.setValue(this.dataProvider.seed());
@@ -1779,7 +1780,7 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
     @Override
     public void close()
     {
-        this.landWaterExporter.close();
+        this.mapExporter.close();
         this.cancelBiomeSearch();
         this.biomeSearchExecutor.shutdownNow();
         this.reloadExecutor.shutdownNow();
@@ -2279,7 +2280,12 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         return 0;
     }
 
-    public @Nullable String startLandWaterExport(List<LandWaterExportPreset> presets, int centerX, int centerZ)
+    public @Nullable String startMapExport(
+        List<MapExportLayer> layers,
+        List<MapExportPreset> presets,
+        int centerX,
+        int centerZ
+    )
     {
         if (this.isUpdating || this.workManager.hasWorldSeed())
         {
@@ -2290,12 +2296,16 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
         SampleUtils samples = this.workManager.sampleUtils();
         if (tfc == null || samples == null)
         {
-            return "The selected generator does not expose TFC land/water data.";
+            return "The selected generator does not expose TFC map data.";
+        }
+        if (layers == null || layers.isEmpty())
+        {
+            return "Select at least one map layer.";
         }
 
         try
         {
-            for (LandWaterExportPreset preset : presets)
+            for (MapExportPreset preset : presets)
             {
                 preset.spec().bounds(centerX, centerZ);
             }
@@ -2312,37 +2322,45 @@ public class PreviewContainer implements AutoCloseable, PreviewDisplayDataProvid
             enteredSeed = Long.toString(numericSeed);
         }
         Path outputDirectory = this.minecraft.gameDirectory.toPath().resolve("world-preview-exports");
-        Context context = new LandWaterMapExporter.Context(
+        Context context = new Context(
             enteredSeed,
             numericSeed,
             samples.dimension().location().toString(),
             centerX,
             centerZ,
             outputDirectory,
-            this.cfg.landWaterExportLandColor,
-            this.cfg.landWaterExportWaterColor,
+            tfc.settings().temperatureScale(),
+            tfc.settings().rainfallScale(),
             modVersion("world_preview_tfc", "unknown"),
             true,
             modVersion("tfc", null),
             modVersion("tfc_large_biomes", null)
         );
-        TFCLandWaterClassifier classifier = new TFCLandWaterClassifier();
-        boolean started = this.landWaterExporter.start(
-            presets,
-            context,
-            (quartX, quartZ) -> classifier.classify(tfc.sampleBiomeExtensionQuart(quartX, quartZ))
+        List<MapExportPlan> plans = MapExportLayerFactory.create(
+            layers,
+            tfc,
+            this.previewMappingData,
+            this.cfg.temperatureColorMap,
+            this.cfg.rainfallColorMap,
+            this.cfg.landWaterExportLandColor,
+            this.cfg.landWaterExportWaterColor
         );
-        return started ? null : "A land/water export is already running.";
+        boolean started = this.mapExporter.start(
+            plans,
+            presets,
+            context
+        );
+        return started ? null : "A map export is already running.";
     }
 
-    public void cancelLandWaterExport()
+    public void cancelMapExport()
     {
-        this.landWaterExporter.cancel();
+        this.mapExporter.cancel();
     }
 
-    public LandWaterExportController.Status landWaterExportStatus()
+    public MapExportController.Status mapExportStatus()
     {
-        return this.landWaterExporter.status();
+        return this.mapExporter.status();
     }
 
     private static @Nullable String modVersion(String modId, @Nullable String fallback)

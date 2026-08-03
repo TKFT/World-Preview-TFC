@@ -1,25 +1,32 @@
 package com.rustysnail.world.preview.tfc.backend.export;
 
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterExportPreset.Bounds;
+import com.rustysnail.world.preview.tfc.backend.export.MapExportPreset.Bounds;
 import org.jetbrains.annotations.Nullable;
 
-public record LandWaterExportMetadata(
+public record MapExportMetadata(
     String seedEntered,
     long resolvedNumericSeed,
     String dimension,
     int centerX,
     int centerZ,
-    Bounds blockBounds,
+    Bounds bounds,
+    String layer,
+    String preset,
     int blocksPerPixel,
+    int quartSamplesPerAxis,
     int imageWidth,
     int imageHeight,
+    int paletteEntries,
+    String paletteMode,
+    boolean continentCellWaterShading,
+    int waterShadeCount,
+    double effectiveTemperatureScale,
+    double effectiveRainfallScale,
     String exporterVersion,
-    String timestamp,
-    String classificationMode,
+    String generatedAtUtc,
     boolean tfcDetected,
     @Nullable String tfcVersion,
     @Nullable String tfcLargeBiomesVersion
 )
 {
-    public static final String CLASSIFICATION_MODE = "final_tfc_biome_two_color_land_water";
 }

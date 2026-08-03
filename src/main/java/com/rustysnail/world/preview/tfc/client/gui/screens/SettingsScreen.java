@@ -14,7 +14,7 @@ import com.rustysnail.world.preview.tfc.client.gui.screens.settings.CacheTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.DimensionsTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.GeneralTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.HeightmapTab;
-import com.rustysnail.world.preview.tfc.client.gui.screens.settings.LandWaterExportTab;
+import com.rustysnail.world.preview.tfc.client.gui.screens.settings.MapExportTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.SamplingTab;
 import com.rustysnail.world.preview.tfc.client.gui.screens.settings.TFCTab;
 import javax.annotation.Nullable;
@@ -46,7 +46,7 @@ public class SettingsScreen extends Screen
     private final boolean tfcReadOnly;
     private TabNavigationBar tabNavigationBar;
     private GridLayout bottomButtons;
-    private LandWaterExportTab landWaterExportTab;
+    private MapExportTab mapExportTab;
 
 
     public SettingsScreen(Screen lastScreen, PreviewContainer previewContainer, @Nullable ChunkGeneratorExtension tfcExtension)
@@ -69,9 +69,9 @@ public class SettingsScreen extends Screen
     public void tick()
     {
         super.tick();
-        if (this.landWaterExportTab != null)
+        if (this.mapExportTab != null)
         {
-            this.landWaterExportTab.tick();
+            this.mapExportTab.tick();
         }
     }
 
@@ -115,8 +115,8 @@ public class SettingsScreen extends Screen
             tfcTabIndex = tabs.size();
             tabs.add(new TFCTab(minecraft, this.previewContainer, tfcExtension, this::onClose, this.tfcReadOnly));
         }
-        this.landWaterExportTab = new LandWaterExportTab(minecraft, this.previewContainer);
-        tabs.add(this.landWaterExportTab);
+        this.mapExportTab = new MapExportTab(minecraft, this.previewContainer);
+        tabs.add(this.mapExportTab);
 
 
         this.tabNavigationBar = TabNavigationBar.builder(this.tabManager, this.width)

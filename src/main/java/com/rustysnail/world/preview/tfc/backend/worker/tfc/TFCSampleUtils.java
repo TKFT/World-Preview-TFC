@@ -692,6 +692,19 @@ public class TFCSampleUtils
         return regionGenerator.getOrCreateRegionPoint(gridX, gridZ);
     }
 
+    public Region.Point samplePointQuart(int quartX, int quartZ)
+    {
+        return regionGenerator.getOrCreateRegionPoint(Units.quartToGrid(quartX), Units.quartToGrid(quartZ));
+    }
+
+    /**
+     * Samples the deterministic continent-cell value without creating a TFC region.
+     */
+    public double sampleContinentCellNoiseQuart(int quartX, int quartZ)
+    {
+        return regionGenerator.sampleCell(Units.quartToGrid(quartX), Units.quartToGrid(quartZ)).noise();
+    }
+
     public RockSettings sampleRockAtLayer(int pointRock, int layer)
     {
         return rockLayerSettings.sampleAtLayer(pointRock, layer);

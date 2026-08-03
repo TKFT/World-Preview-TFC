@@ -1,6 +1,7 @@
 package com.rustysnail.world.preview.tfc.backend.export;
 
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
@@ -8,13 +9,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import com.rustysnail.world.preview.tfc.WorldPreview;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.Context;
-import com.rustysnail.world.preview.tfc.backend.export.LandWaterMapExporter.QuartSampler;
+import com.rustysnail.world.preview.tfc.backend.export.MapExporter.Context;
 import org.jetbrains.annotations.Nullable;
 
-public final class LandWaterExportController implements AutoCloseable
+public final class MapExportController implements AutoCloseable
 {
-    private final LandWaterMapExporter exporter;
+    private final MapExporter exporter;
     private final ExecutorService coordinator;
     private final AtomicBoolean cancelRequested = new AtomicBoolean();
     private final AtomicLong completedWork = new AtomicLong();
@@ -22,49 +22,60 @@ public final class LandWaterExportController implements AutoCloseable
     private volatile long startedNanos;
     private volatile long finishedNanos;
     private volatile Phase phase = Phase.IDLE;
+    private volatile String layer = "";
     private volatile String preset = "";
     private volatile String error = "";
     @Nullable private volatile Path outputDirectory;
 
-    public LandWaterExportController(int workerThreads)
+    public MapExportController(int workerThreads)
     {
-        this.exporter = new LandWaterMapExporter(workerThreads);
+        this.exporter = new MapExporter(workerThreads);
         this.coordinator = Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "world-preview-land-water-export");
+            Thread thread = new Thread(runnable, "world-preview-map-export");
             thread.setDaemon(true);
             return thread;
         });
     }
 
-    public synchronized boolean start(@Nullable List<LandWaterExportPreset> presets, Context context, QuartSampler sampler)
+    public synchronized boolean start(
+        @Nullable List<MapExportPlan> plans,
+        @Nullable List<MapExportPreset> presets,
+        Context context
+    )
     {
-        if (this.phase.running() || presets == null || presets.isEmpty())
+        if (this.phase.running() || plans == null || plans.isEmpty() || presets == null || presets.isEmpty())
         {
             return false;
         }
 
-        List<LandWaterExportPreset> batch = List.copyOf(presets);
+        List<MapExportPlan> layerBatch = plans.stream()
+            .sorted(Comparator.comparingInt(plan -> plan.layer().ordinal()))
+            .toList();
+        List<MapExportPreset> presetBatch = presets.stream()
+            .sorted(Comparator.comparingInt(Enum::ordinal))
+            .toList();
         this.cancelRequested.set(false);
         this.completedWork.set(0L);
-        this.totalWork = batch.stream().mapToLong(value -> value.spec().samplingWork()).sum();
+        long presetWork = presetBatch.stream().mapToLong(value -> value.spec().samplingWork()).sum();
+        this.totalWork = Math.multiplyExact(presetWork, layerBatch.size());
         this.startedNanos = System.nanoTime();
         this.finishedNanos = 0L;
         this.phase = Phase.EXPORTING;
-        this.preset = batch.size() == 1 ? batch.getFirst().spec().id() : "batch";
+        this.layer = layerBatch.size() == 1 ? layerBatch.getFirst().layer().id() : "batch";
+        this.preset = presetBatch.size() == 1 ? presetBatch.getFirst().spec().id() : "batch";
         this.error = "";
         this.outputDirectory = context.outputDirectory();
-        this.coordinator.submit(() -> runBatch(batch, context, sampler));
+        this.coordinator.submit(() -> runBatch(layerBatch, presetBatch, context));
         return true;
     }
 
     public synchronized void cancel()
     {
-        if (!this.phase.running())
+        if (this.phase.running())
         {
-            return;
+            this.cancelRequested.set(true);
+            this.phase = Phase.CANCELLING;
         }
-        this.cancelRequested.set(true);
-        this.phase = Phase.CANCELLING;
     }
 
     public Status status()
@@ -77,7 +88,9 @@ public final class LandWaterExportController implements AutoCloseable
         {
             remaining = (long) ((double) elapsed * (this.totalWork - completed) / completed);
         }
-        return new Status(this.phase, this.preset, completed, this.totalWork, elapsed, remaining, this.outputDirectory, this.error);
+        return new Status(
+            this.phase, this.layer, this.preset, completed, this.totalWork, elapsed, remaining,
+            this.outputDirectory, this.error);
     }
 
     @Override
@@ -87,15 +100,20 @@ public final class LandWaterExportController implements AutoCloseable
         this.coordinator.shutdownNow();
     }
 
-    private void runBatch(List<LandWaterExportPreset> presets, Context context, QuartSampler sampler)
+    private void runBatch(List<MapExportPlan> plans, List<MapExportPreset> presets, Context context)
     {
         try
         {
-            for (LandWaterExportPreset value : presets)
+            for (MapExportPlan plan : plans)
             {
-                this.preset = value.spec().id();
-                this.phase = Phase.EXPORTING;
-                this.exporter.export(value.spec(), context, sampler, this.cancelRequested::get, this.completedWork::addAndGet);
+                this.layer = plan.layer().id();
+                for (MapExportPreset value : presets)
+                {
+                    this.preset = value.spec().id();
+                    this.phase = Phase.EXPORTING;
+                    this.exporter.export(
+                        value.spec(), plan, context, this.cancelRequested::get, this.completedWork::addAndGet);
+                }
             }
             this.phase = Phase.COMPLETED;
         }
@@ -107,7 +125,7 @@ public final class LandWaterExportController implements AutoCloseable
         {
             this.error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             this.phase = Phase.FAILED;
-            WorldPreview.LOGGER.error("Land/water map export failed", e);
+            WorldPreview.LOGGER.error("Map export failed", e);
         }
         finally
         {
@@ -132,6 +150,7 @@ public final class LandWaterExportController implements AutoCloseable
 
     public record Status(
         Phase phase,
+        String layer,
         String preset,
         long completedWork,
         long totalWork,
